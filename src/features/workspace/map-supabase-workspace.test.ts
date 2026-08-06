@@ -23,6 +23,7 @@ describe('mapSupabaseWorkspace', () => {
     expect(workspace.shell.currentExperiment).toBeNull()
     expect(workspace.shell.dataMode).toBe('supabase')
     expect(workspace.shell.market.state).toBe('offline')
+    expect(workspace.shell.spend).toEqual({ state: 'not_connected' })
   })
 
   it('keeps lifecycle and execution mode separate', () => {
@@ -63,7 +64,6 @@ describe('mapSupabaseWorkspace', () => {
           agent_enabled: false,
           emergency_paused: false,
           pause_reason: null,
-          state_version: 1,
         },
       ],
       { email: 'owner@example.com' },

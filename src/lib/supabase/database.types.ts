@@ -3781,6 +3781,62 @@ export type Database = {
       }
     }
     Views: {
+      experiment_detail_read_view: {
+        Row: {
+          agent_enabled: boolean | null
+          agent_prompt_version_id: string | null
+          base_currency: string | null
+          budget_policy_id: string | null
+          control_created_at: string | null
+          control_pause_reason: string | null
+          control_state_version: string | null
+          control_updated_at: string | null
+          created_at: string | null
+          data_source_config_version_id: string | null
+          emergency_paused: boolean | null
+          ends_at: string | null
+          execution_mode: string | null
+          id: string | null
+          initial_capital: string | null
+          knowledge_corpus_version_id: string | null
+          lifecycle_pause_reason: string | null
+          lifecycle_status: string | null
+          locked_at: string | null
+          locked_base_currency: string | null
+          locked_initial_capital: string | null
+          locked_objective: string | null
+          locked_version: number | null
+          locked_version_content_hash: string | null
+          locked_version_created_at: string | null
+          locked_version_id: string | null
+          market_universe_id: string | null
+          model_routing_version_id: string | null
+          name: string | null
+          objective: string | null
+          owner_id: string | null
+          risk_config_version_id: string | null
+          scheduler_enabled: boolean | null
+          simulator_config_version_id: string | null
+          starts_at: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'experiments_locked_version_fk'
+            columns: ['locked_version_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiment_versions'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'experiments_owner_id_fkey'
+            columns: ['owner_id']
+            isOneToOne: false
+            referencedRelation: 'app_users'
+            referencedColumns: ['user_id']
+          },
+        ]
+      }
       ai_budget_status_view: {
         Row: {
           budget_policy_id: string | null

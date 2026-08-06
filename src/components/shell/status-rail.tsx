@@ -44,8 +44,17 @@ export function StatusRail({ shell }: { shell: ShellViewModel }) {
       <div className="status-rail__item status-rail__item--spend">
         <DollarSign size={14} aria-hidden="true" />
         <span>
-          <strong>{shell.spend.daily} today</strong>
-          {shell.spend.monthly} month · {shell.spend.lifetime} lifetime
+          {shell.spend.state === 'connected' ? (
+            <>
+              <strong>{shell.spend.daily} today</strong>
+              {shell.spend.monthly} month · {shell.spend.lifetime} lifetime
+            </>
+          ) : (
+            <>
+              <strong>Spend not connected</strong>
+              No hosted budget read model
+            </>
+          )}
         </span>
       </div>
     </div>

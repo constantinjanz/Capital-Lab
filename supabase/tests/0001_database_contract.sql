@@ -69,7 +69,10 @@ select ok(
 from pg_class as c
 join pg_namespace as n on n.oid = c.relnamespace
 where n.nspname = 'public'
-  and c.relname in ('cash_ledger_view','ai_budget_status_view','ai_usage_view','scheduler_health_view','audit_log_view');
+  and c.relname in (
+    'cash_ledger_view','ai_budget_status_view','ai_usage_view','scheduler_health_view',
+    'audit_log_view','experiment_detail_read_view'
+  );
 
 select ok(
   not exists (
@@ -116,6 +119,27 @@ select has_index('public', 'knowledge_chunks', 'knowledge_chunks_pit_idx', 'know
 select has_index('private', 'ai_budget_reservations', 'ai_budget_reservations_status_idx', 'active reservations are indexed');
 select has_index('public', 'orders', 'orders_pending_idx', 'pending orders are indexed');
 select has_index('public', 'app_users', 'app_users_singleton_idx', 'the application enforces one permanent owner');
+select has_index('public', 'experiments', 'experiments_owner_updated_idx', 'hosted experiment recency reads are indexed');
+
+select is(
+  (select data_type from information_schema.columns where table_schema = 'public' and table_name = 'experiment_detail_read_view' and column_name = 'initial_capital'),
+  'text',
+  'experiment detail exposes initial capital as exact text'
+);
+select is(
+  (select data_type from information_schema.columns where table_schema = 'public' and table_name = 'experiment_detail_read_view' and column_name = 'locked_initial_capital'),
+  'text',
+  'experiment detail exposes locked initial capital as exact text'
+);
+select is(
+  (select data_type from information_schema.columns where table_schema = 'public' and table_name = 'experiment_detail_read_view' and column_name = 'control_state_version'),
+  'text',
+  'experiment detail exposes bigint control versions as exact text'
+);
+select ok(
+  has_table_privilege('authenticated', 'public.experiment_detail_read_view', 'SELECT'),
+  'authenticated owners may select the experiment detail view'
+);
 
 select ok(
   has_function_privilege('authenticated', 'public.bootstrap_first_owner()', 'EXECUTE'),
@@ -149,12 +173,24 @@ select throws_ok(
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
 select is((select count(*) from public.experiments), 2::bigint, 'owner can read owned experiments');
+select is((select count(*) from public.experiment_detail_read_view), 2::bigint, 'owner can read owned experiment details');
+select is(
+  (select initial_capital from public.experiment_detail_read_view where id = '70000000-0000-0000-0000-000000000002'),
+  '100000.00000000',
+  'experiment detail preserves exact initial capital scale'
+);
+select is(
+  (select control_state_version from public.experiment_detail_read_view where id = '70000000-0000-0000-0000-000000000002'),
+  '0',
+  'experiment detail preserves the exact control state version'
+);
 select is((select count(*) from public.cash_ledger_view), 5::bigint, 'owner can read sanitized private ledger view');
 reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000002","role":"authenticated"}', true);
 select is((select count(*) from public.experiments), 0::bigint, 'second authenticated user cannot read owner experiments');
+select is((select count(*) from public.experiment_detail_read_view), 0::bigint, 'second authenticated user cannot read experiment details');
 select is((select count(*) from public.instruments), 0::bigint, 'second authenticated user cannot read global reference data');
 select is((select count(*) from public.cash_ledger_view), 0::bigint, 'second authenticated user cannot read ledger view');
 reset role;

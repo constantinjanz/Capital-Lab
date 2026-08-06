@@ -189,18 +189,26 @@ export function HostedExperimentsView({
                 <div>
                   <dt>Scheduler</dt>
                   <dd>
-                    {experiment.controls?.schedulerEnabled ? 'Enabled' : 'Off'}
+                    {experiment.controls
+                      ? experiment.controls.schedulerEnabled
+                        ? 'Enabled'
+                        : 'Off'
+                      : 'Not created'}
                   </dd>
                 </div>
                 <div>
                   <dt>Agent</dt>
                   <dd>
-                    {experiment.controls?.agentEnabled ? 'Enabled' : 'Off'}
+                    {experiment.controls
+                      ? experiment.controls.agentEnabled
+                        ? 'Enabled'
+                        : 'Off'
+                      : 'Not created'}
                   </dd>
                 </div>
                 <div>
                   <dt>Control version</dt>
-                  <dd>{experiment.controls?.stateVersion ?? 'Not created'}</dd>
+                  <dd>{experiment.controls ? 'Created' : 'Not created'}</dd>
                 </div>
               </dl>
               <div className="experiment-card__footer">
@@ -208,6 +216,12 @@ export function HostedExperimentsView({
                   <LockKeyhole size={14} aria-hidden="true" /> Hosted writes
                   locked
                 </span>
+                <Link
+                  href={`/experiments/${experiment.id}`}
+                  className="text-link"
+                >
+                  Inspect <ArrowRight size={14} aria-hidden="true" />
+                </Link>
               </div>
             </article>
           ))}

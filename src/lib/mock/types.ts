@@ -17,7 +17,14 @@ export interface ShellViewModel {
   dataMode: 'mock' | 'supabase'
   agentMode: 'shadow' | 'disabled'
   scheduler: { state: 'healthy' | 'delayed' | 'disabled'; detail: string }
-  spend: { daily: string; monthly: string; lifetime: string }
+  spend:
+    | {
+        state: 'connected'
+        daily: string
+        monthly: string
+        lifetime: string
+      }
+    | { state: 'not_connected' }
 }
 
 export interface Metric {

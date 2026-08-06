@@ -17,7 +17,6 @@ export interface WorkspaceControlRow {
   agent_enabled: boolean
   emergency_paused: boolean
   pause_reason: string | null
-  state_version: number
 }
 
 const lifecycleStatuses = new Set([
@@ -56,7 +55,6 @@ function mapExperiment(
           agentEnabled: control.agent_enabled,
           emergencyPaused: control.emergency_paused,
           pauseReason: control.pause_reason,
-          stateVersion: control.state_version,
         }
       : null,
   }
@@ -134,7 +132,7 @@ export function mapSupabaseWorkspace(
           ? 'Enabled in database controls'
           : 'Remote cycles are off',
       },
-      spend: { daily: '$0.00', monthly: '$0.00', lifetime: '$0.00' },
+      spend: { state: 'not_connected' },
     },
   }
 }

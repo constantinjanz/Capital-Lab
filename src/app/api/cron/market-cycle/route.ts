@@ -1,4 +1,5 @@
 import { getServerEnvironment } from '@/lib/env/server'
+import { isSupabasePubliclyConfigured } from '@/lib/env/public'
 import { log } from '@/lib/logging/logger'
 import { runMockSafeMarketCycle } from '@/features/scheduler/market-cycle'
 
@@ -17,6 +18,12 @@ export async function GET(request: Request) {
     return Response.json({
       status: 'skipped',
       reason: 'scheduler_provider_not_vercel',
+    })
+  }
+  if (isSupabasePubliclyConfigured()) {
+    return Response.json({
+      status: 'skipped',
+      reason: 'hosted_market_cycle_not_implemented',
     })
   }
 

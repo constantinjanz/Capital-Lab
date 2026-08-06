@@ -19,7 +19,6 @@ export interface HostedExperiment {
     agentEnabled: boolean
     emergencyPaused: boolean
     pauseReason: string | null
-    stateVersion: number
   } | null
 }
 
