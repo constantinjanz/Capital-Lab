@@ -14,7 +14,8 @@ const decimalCurrency = z
 const serverEnvironmentSchema = z
   .object({
     SUPABASE_SECRET_KEY: z.string().min(1).optional(),
-    OWNER_EMAIL: z.email().default('owner@example.com'),
+    OWNER_EMAIL: z.email().optional(),
+    OWNER_BOOTSTRAP_ENABLED: booleanString,
     OPENAI_API_KEY: z.string().min(1).optional(),
     ALPACA_API_KEY_ID: z.string().min(1).optional(),
     ALPACA_API_SECRET_KEY: z.string().min(1).optional(),
@@ -38,6 +39,12 @@ const serverEnvironmentSchema = z
     BUDGET_TIMEZONE: z.literal('America/New_York').default('America/New_York'),
   })
   .superRefine((value, context) => {
+    if (value.OWNER_BOOTSTRAP_ENABLED && !value.OWNER_EMAIL) {
+      context.addIssue({
+        code: 'custom',
+        message: 'OWNER_EMAIL is required when owner bootstrap is enabled',
+      })
+    }
     const alpacaCredentials = [
       value.ALPACA_API_KEY_ID,
       value.ALPACA_API_SECRET_KEY,

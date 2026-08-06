@@ -13,11 +13,19 @@ export function StatusRail({ shell }: { shell: ShellViewModel }) {
           {shell.market.detail}
         </span>
       </div>
-      <div className="status-rail__item status-rail__item--mock">
+      <div
+        className={`status-rail__item${
+          shell.dataMode === 'mock' ? 'status-rail__item--mock' : ''
+        }`}
+      >
         <Database size={14} aria-hidden="true" />
         <span>
-          <strong>Synthetic mock</strong>
-          {formatUtc(shell.market.asOf)}
+          <strong>
+            {shell.dataMode === 'mock' ? 'Synthetic mock' : 'Hosted Supabase'}
+          </strong>
+          {shell.dataMode === 'mock'
+            ? formatUtc(shell.market.asOf)
+            : 'Owner-scoped reads'}
         </span>
       </div>
       <div className="status-rail__item">

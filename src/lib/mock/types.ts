@@ -11,12 +11,12 @@ export interface MoneyValue {
 
 export interface ShellViewModel {
   owner: { name: string; email: string; initials: string }
-  experiments: Array<{ id: string; name: string; status: ExperimentStatus }>
-  currentExperiment: { id: string; name: string; status: ExperimentStatus }
-  market: { state: 'open' | 'closed'; detail: string; asOf: string }
-  dataMode: 'mock'
-  agentMode: 'shadow'
-  scheduler: { state: 'healthy' | 'delayed'; detail: string }
+  experiments: Array<{ id: string; name: string; status: string }>
+  currentExperiment: { id: string; name: string; status: string } | null
+  market: { state: 'open' | 'closed' | 'offline'; detail: string; asOf: string }
+  dataMode: 'mock' | 'supabase'
+  agentMode: 'shadow' | 'disabled'
+  scheduler: { state: 'healthy' | 'delayed' | 'disabled'; detail: string }
   spend: { daily: string; monthly: string; lifetime: string }
 }
 

@@ -3,6 +3,7 @@ import {
   ArrowRight,
   CheckCircle2,
   CircleDollarSign,
+  Database,
   Radio,
   ShieldCheck,
 } from 'lucide-react'
@@ -16,6 +17,7 @@ import { Panel } from '@/components/ui/panel'
 import { ProgressMeter } from '@/components/ui/progress-meter'
 import { StatusPill } from '@/components/ui/status-pill'
 import { TableShell } from '@/components/ui/table-shell'
+import type { WorkspaceReadModel } from '@/features/workspace/types'
 import type { DashboardViewModel, Tone } from '@/lib/mock/types'
 
 function decisionTone(status: 'accepted' | 'rejected' | 'abstained'): Tone {
@@ -291,6 +293,51 @@ export function DashboardView({ data }: { data: DashboardViewModel }) {
           </p>
         </Panel>
       </div>
+    </div>
+  )
+}
+
+export function HostedDashboardView({
+  workspace,
+}: {
+  workspace: Extract<WorkspaceReadModel, { source: 'supabase' }>
+}) {
+  const current = workspace.experiments.find(
+    (experiment) => experiment.id === workspace.currentExperimentId,
+  )
+  return (
+    <div className="page-stack">
+      <PageHeader
+        eyebrow="Hosted workspace"
+        title="Research dashboard"
+        description="Owner-scoped experiment and control state from Supabase. Financial metrics stay hidden until precision-safe read views are connected."
+        actions={
+          <Link className="button button--secondary" href="/experiments">
+            Open experiments <ArrowRight size={15} aria-hidden="true" />
+          </Link>
+        }
+      />
+      <DataModeNotice mode="supabase" />
+      <Panel eyebrow="Database state" title="Workspace connection">
+        <div className="health-card__lead">
+          <Database size={19} aria-hidden="true" />
+          <div>
+            <strong>Owner-scoped Supabase reads are active</strong>
+            <span>
+              {current
+                ? `${current.name} is ${current.lifecycleStatus}; execution mode is ${current.executionMode ?? 'not selected'}.`
+                : 'No experiment has been initialized for this owner.'}
+            </span>
+          </div>
+        </div>
+      </Panel>
+      <Panel eyebrow="Safe next step" title="No synthetic portfolio shown">
+        <p className="safe-note">
+          <ShieldCheck size={14} aria-hidden="true" /> Portfolio, position,
+          fill, market, and cost cards remain absent until database views return
+          financial numerics as exact decimal strings.
+        </p>
+      </Panel>
     </div>
   )
 }

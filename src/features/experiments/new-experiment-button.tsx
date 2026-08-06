@@ -3,7 +3,11 @@
 import { FlaskConical, Plus, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 
-export function NewExperimentButton() {
+export function NewExperimentButton({
+  mode = 'mock',
+}: {
+  mode?: 'mock' | 'supabase'
+}) {
   const dialog = useRef<HTMLDialogElement>(null)
   const [message, setMessage] = useState('')
 
@@ -16,10 +20,16 @@ export function NewExperimentButton() {
       <button
         type="button"
         className="button button--primary"
+        disabled={mode === 'supabase'}
+        title={
+          mode === 'supabase'
+            ? 'Hosted experiment writes remain disabled during read-only review'
+            : undefined
+        }
         onClick={() => dialog.current?.showModal()}
       >
         <Plus size={15} aria-hidden="true" />
-        New draft
+        {mode === 'supabase' ? 'Draft creation locked' : 'New draft'}
       </button>
       <span className="sr-only" aria-live="polite">
         {message}

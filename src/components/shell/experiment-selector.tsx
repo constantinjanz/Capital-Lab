@@ -2,14 +2,12 @@
 
 import { useRouter } from 'next/navigation'
 
-import type { ExperimentStatus } from '@/lib/mock/types'
-
 export function ExperimentSelector({
   currentId,
   experiments,
 }: {
-  currentId: string
-  experiments: Array<{ id: string; name: string; status: ExperimentStatus }>
+  currentId: string | null
+  experiments: Array<{ id: string; name: string; status: string }>
 }) {
   const router = useRouter()
 
@@ -17,10 +15,12 @@ export function ExperimentSelector({
     <label className="experiment-selector">
       <span>Current experiment</span>
       <select
-        value={currentId}
+        value={currentId ?? ''}
+        disabled={!currentId}
         onChange={(event) => router.push(`/experiments/${event.target.value}`)}
         aria-label="Select current experiment"
       >
+        {!currentId ? <option value="">No experiment</option> : null}
         {experiments.map((experiment) => (
           <option value={experiment.id} key={experiment.id}>
             {experiment.name} · {experiment.status}

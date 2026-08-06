@@ -31,7 +31,8 @@ from (values
   ('public','trade_outcomes'), ('public','pattern_hypotheses'), ('public','pattern_evidence'),
   ('public','strategy_versions'), ('public','strategy_assignments'), ('public','memory_summaries'),
   ('private','audit_log'), ('private','system_health_events'), ('private','ingestion_runs'),
-  ('private','dead_letter_events'), ('private','application_settings')
+  ('private','dead_letter_events'), ('private','application_settings'),
+  ('private','owner_bootstrap_config')
 ) as expected(schema_name, table_name);
 
 select ok(c.relrowsecurity, format('RLS enabled on %I.%I', n.nspname, c.relname))
@@ -114,6 +115,36 @@ select has_index('public', 'event_revisions', 'event_revisions_event_pit_idx', '
 select has_index('public', 'knowledge_chunks', 'knowledge_chunks_pit_idx', 'knowledge chunks have a PIT index');
 select has_index('private', 'ai_budget_reservations', 'ai_budget_reservations_status_idx', 'active reservations are indexed');
 select has_index('public', 'orders', 'orders_pending_idx', 'pending orders are indexed');
+select has_index('public', 'app_users', 'app_users_singleton_idx', 'the application enforces one permanent owner');
+
+select ok(
+  has_function_privilege('authenticated', 'public.bootstrap_first_owner()', 'EXECUTE'),
+  'authenticated users may request the guarded first-owner bootstrap'
+);
+
+insert into private.owner_bootstrap_config(expected_email)
+values ('owner@capital-lab.local')
+on conflict (singleton) do update
+set expected_email = excluded.expected_email,
+    consumed_by = null,
+    consumed_at = null,
+    configured_at = statement_timestamp();
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
+select is(
+  public.bootstrap_first_owner() ->> 'status',
+  'already_bound',
+  'the existing confirmed owner may call bootstrap idempotently'
+);
+reset role;
+
+select throws_ok(
+  $$insert into public.app_users(user_id, email) values ('00000000-0000-0000-0000-000000000002', 'nonowner@capital-lab.local')$$,
+  '23505',
+  null,
+  'a second owner row is rejected by the singleton invariant'
+);
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}', true);

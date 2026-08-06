@@ -55,7 +55,7 @@ pnpm test:e2e
 
 See `.env.example`. Never expose server credentials through `NEXT_PUBLIC_` variables.
 
-Live Supabase auth requires the public URL/publishable key pair. A secret key is only for reviewed server-side administrative/database adapters and must never be exposed through a `NEXT_PUBLIC_` variable. Provision the single Auth user and matching `app_users` owner row explicitly; ongoing authorization comes from that server-controlled table, never editable user metadata.
+Live Supabase auth requires the public URL/publishable key pair. The first-owner flow uses server-only `OWNER_EMAIL` plus `OWNER_BOOTSTRAP_ENABLED=true`: the pre-authorized person creates an email/password account, confirms the email, and signs in. A guarded database RPC then atomically binds that confirmed Auth identity to the singleton `app_users` row. Set the expected email separately in `private.owner_bootstrap_config`, and turn the bootstrap flag off after the first successful sign-in. Ongoing authorization comes from `app_users`, never editable user metadata. The Supabase secret key is not required by this flow and must never be exposed through a `NEXT_PUBLIC_` variable.
 
 Alpaca live data uses only `https://data.alpaca.markets` through a direct data-only adapter. Set the data credential pair and `MARKET_DATA_PROVIDER=alpaca`; there is no brokerage client or order-forwarding endpoint.
 

@@ -3,7 +3,13 @@
 import { PauseCircle, ShieldAlert, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 
-export function EmergencyPauseButton() {
+export function EmergencyPauseButton({
+  mode = 'mock',
+  experimentName = 'Northstar Event Lab',
+}: {
+  mode?: 'mock' | 'supabase'
+  experimentName?: string | null
+}) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const [paused, setPaused] = useState(false)
 
@@ -21,15 +27,24 @@ export function EmergencyPauseButton() {
       <button
         type="button"
         className="emergency-button"
-        disabled={paused}
+        disabled={paused || mode === 'supabase' || !experimentName}
         onClick={() => dialogRef.current?.showModal()}
+        title={
+          mode === 'supabase'
+            ? 'Hosted lifecycle writes remain disabled during read-only review'
+            : undefined
+        }
       >
         {paused ? (
           <PauseCircle size={16} aria-hidden="true" />
         ) : (
           <ShieldAlert size={16} aria-hidden="true" />
         )}
-        {paused ? 'Paused locally' : 'Emergency pause'}
+        {paused
+          ? 'Paused locally'
+          : mode === 'supabase'
+            ? 'Pause locked'
+            : 'Emergency pause'}
       </button>
       <span className="sr-only" aria-live="polite">
         {paused ? 'The mock experiment is paused in this interface.' : ''}
@@ -49,7 +64,7 @@ export function EmergencyPauseButton() {
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <h2>Pause Northstar Event Lab?</h2>
+        <h2>Pause {experimentName ?? 'experiment'}?</h2>
         <p>
           This mock control demonstrates the production safety action. It stops
           new model calls and simulated orders while preserving positions and

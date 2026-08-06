@@ -3968,6 +3968,7 @@ export type Database = {
         }
         Returns: Json
       }
+      bootstrap_first_owner: { Args: never; Returns: Json }
       event_revisions_as_of: {
         Args: { p_as_of: string }
         Returns: {
