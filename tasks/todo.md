@@ -28,6 +28,7 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 - [x] Phase 9: application quality gates, security/docs review, and handoff.
 - [ ] Infrastructure follow-up: execute the same reset/pgTAP path locally when Docker/Supabase CLI is available (the hosted rollback-only contract passed 686 assertions).
 - [ ] Integration follow-up: wire live database use cases after owner provisioning; generated Supabase TypeScript types are already connected to the auth clients.
+- [ ] Approve the initial GitHub Actions workflow through an authenticated GitHub web session; GitHub's public-repository workflow protection held the Codex-authored run before any job steps executed.
 
 ## Review
 
@@ -42,3 +43,4 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 - Hosted database contract: passed `1..686` against rollback-only seed fixtures; the run left zero Auth users, owner rows, experiments, or pgTAP extension state behind.
 - Hosted database audit: 12 transaction-framed migrations, 78 tables, RLS on all 63 public tables, zero security advisor findings, and no unindexed foreign-key findings. The contract run exposed and verified a forward fix for ambiguous quota-counter updates.
 - Vercel preview: READY as Next.js; health reports paper-only/mock/agent-disabled, login renders, protected content emits its unauthorized redirect, cron rejects requests, and runtime errors are empty. Automatic Git deployments remain disabled pending deliberate production approval.
+- GitHub CI: repository Actions are enabled, but the initial public-repository run was held in the queue and canceled before any steps; GitHub requires a collaborator to approve this protected workflow in an authenticated web session.
