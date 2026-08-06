@@ -2472,6 +2472,28 @@ textarea {
   color: var(--red);
   font-size: 10px;
 }
+.form-success {
+  margin: 0 0 10px;
+  color: #86efac;
+  font-size: 10px;
+}
+.owner-bootstrap {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+.owner-bootstrap summary {
+  cursor: pointer;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 650;
+}
+.owner-bootstrap > p {
+  margin: 10px 0 2px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
 .login-card__footer {
   margin: 0;
   border-top: 1px solid var(--border);

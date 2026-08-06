@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 import { AppShell } from '@/components/shell/app-shell'
 import { requireOwner } from '@/lib/auth/require-owner'
-import { mockRepository } from '@/lib/mock/repository'
+import { readWorkspace } from '@/lib/supabase/workspace-read-repository'
 
 export default async function ProtectedLayout({
   children,
@@ -13,10 +13,14 @@ export default async function ProtectedLayout({
   const owner = {
     displayName: identity.mode === 'mock' ? 'Research Owner' : identity.email,
   }
-  const shell = mockRepository.getShell()
+  const workspace = await readWorkspace(
+    identity.mode,
+    identity.id,
+    identity.email,
+  )
 
   return (
-    <AppShell owner={owner} shell={shell}>
+    <AppShell owner={owner} shell={workspace.shell}>
       {children}
     </AppShell>
   )

@@ -5,6 +5,7 @@ import { DataModeNotice } from '@/components/ui/data-mode-notice'
 import { MockLoginForm } from '@/features/auth/mock-login-form'
 import { OwnerLoginForm } from '@/features/auth/owner-login-form'
 import { isSupabasePubliclyConfigured } from '@/lib/env/public'
+import { getServerEnvironment } from '@/lib/env/server'
 
 export const metadata: Metadata = { title: 'Owner login' }
 
@@ -14,6 +15,9 @@ export default async function LoginPage({
   searchParams: Promise<{ reason?: string }>
 }) {
   const liveAuth = isSupabasePubliclyConfigured()
+  const bootstrapEnabled = liveAuth
+    ? getServerEnvironment().OWNER_BOOTSTRAP_ENABLED
+    : false
   const { reason } = await searchParams
   return (
     <main className="login-page">
@@ -66,12 +70,17 @@ export default async function LoginPage({
           <p className="eyebrow">Owner access</p>
           <h2 id="login-heading">Open the laboratory</h2>
           <p>
-            Use the deterministic local owner profile. Supabase Auth replaces
-            this boundary when configured.
+            {liveAuth
+              ? 'Use the authorized Supabase owner account.'
+              : 'Use the deterministic local owner profile. Supabase Auth replaces this boundary when configured.'}
           </p>
         </div>
         {liveAuth ? null : <DataModeNotice compact />}
-        {liveAuth ? <OwnerLoginForm reason={reason} /> : <MockLoginForm />}
+        {liveAuth ? (
+          <OwnerLoginForm reason={reason} bootstrapEnabled={bootstrapEnabled} />
+        ) : (
+          <MockLoginForm />
+        )}
         <p className="login-card__footer">
           Scientific and entertainment use only. Not financial advice.
         </p>

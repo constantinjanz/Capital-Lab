@@ -2,6 +2,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock3,
+  Database,
   FlaskConical,
   LockKeyhole,
   ShieldCheck,
@@ -9,6 +10,7 @@ import {
 import Link from 'next/link'
 
 import { DataModeNotice } from '@/components/ui/data-mode-notice'
+import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
 import { Panel } from '@/components/ui/panel'
 import { StatusPill } from '@/components/ui/status-pill'
@@ -18,6 +20,7 @@ import type {
   ExperimentSummary,
   Tone,
 } from '@/lib/mock/types'
+import type { HostedExperiment } from '@/features/workspace/types'
 
 import { ExperimentControls } from './experiment-controls'
 import { NewExperimentButton } from './new-experiment-button'
@@ -128,6 +131,94 @@ export function ExperimentsView({
             </span>
           </div>
         </div>
+      </Panel>
+    </div>
+  )
+}
+
+export function HostedExperimentsView({
+  experiments,
+}: {
+  experiments: HostedExperiment[]
+}) {
+  return (
+    <div className="page-stack">
+      <PageHeader
+        eyebrow="Hosted control plane"
+        title="Experiments"
+        description="Read-only owner-scoped lifecycle and control state from Supabase."
+        actions={<NewExperimentButton mode="supabase" />}
+      />
+      <DataModeNotice compact mode="supabase" />
+      {experiments.length === 0 ? (
+        <EmptyState
+          icon={Database}
+          title="No hosted experiments yet"
+          description="The owner workspace is connected. Draft creation remains locked until the reviewed write use case is added."
+        />
+      ) : (
+        <div className="experiment-cards">
+          {experiments.map((experiment) => (
+            <article className="experiment-card" key={experiment.id}>
+              <div className="experiment-card__header">
+                <span className="experiment-card__icon">
+                  <FlaskConical size={18} aria-hidden="true" />
+                </span>
+                <StatusPill
+                  tone={
+                    experiment.lifecycleStatus === 'failed'
+                      ? 'negative'
+                      : experiment.lifecycleStatus === 'paused'
+                        ? 'warning'
+                        : 'info'
+                  }
+                  dot
+                >
+                  {experiment.lifecycleStatus}
+                </StatusPill>
+              </div>
+              <div>
+                <p className="eyebrow">
+                  {experiment.executionMode?.replace('_', '-') ??
+                    'execution mode not selected'}
+                </p>
+                <h2>{experiment.name}</h2>
+                <p>{experiment.objective}</p>
+              </div>
+              <dl className="experiment-card__metrics">
+                <div>
+                  <dt>Scheduler</dt>
+                  <dd>
+                    {experiment.controls?.schedulerEnabled ? 'Enabled' : 'Off'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Agent</dt>
+                  <dd>
+                    {experiment.controls?.agentEnabled ? 'Enabled' : 'Off'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Control version</dt>
+                  <dd>{experiment.controls?.stateVersion ?? 'Not created'}</dd>
+                </div>
+              </dl>
+              <div className="experiment-card__footer">
+                <span>
+                  <LockKeyhole size={14} aria-hidden="true" /> Hosted writes
+                  locked
+                </span>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+      <Panel eyebrow="Read boundary" title="Financial precision preserved">
+        <p className="safe-note">
+          <ShieldCheck size={14} aria-hidden="true" /> Financial fields are not
+          read through generated JavaScript number types. Exact decimal-string
+          views will be added before portfolio data is shown.
+        </p>
       </Panel>
     </div>
   )

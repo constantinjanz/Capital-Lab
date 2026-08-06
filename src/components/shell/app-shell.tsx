@@ -76,14 +76,17 @@ export function AppShell({
             <strong>Capital Lab</strong>
           </div>
           <ExperimentSelector
-            currentId={shell.currentExperiment.id}
+            currentId={shell.currentExperiment?.id ?? null}
             experiments={shell.experiments}
           />
           <div className="topbar__actions">
-            <StatusPill tone="info" dot>
-              {shell.currentExperiment.status}
+            <StatusPill tone={shell.currentExperiment ? 'info' : 'neutral'} dot>
+              {shell.currentExperiment?.status ?? 'not configured'}
             </StatusPill>
-            <EmergencyPauseButton />
+            <EmergencyPauseButton
+              mode={shell.dataMode}
+              experimentName={shell.currentExperiment?.name ?? null}
+            />
           </div>
         </header>
         <Suspense fallback={null}>
