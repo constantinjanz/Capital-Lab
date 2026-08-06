@@ -8,4 +8,6 @@
 6. Keep remote scheduling disabled until the durable database cycle passes runtime review. Then choose exactly one scheduler. Vercel's 15-minute schedule requires a plan that supports frequent cron; Hobby is daily-only. Supabase Cron is the fallback.
 7. Keep the agent disabled through database/security/reconciliation review. Enable shadow mode before any live-paper simulation.
 
+Automatic Vercel Git deployments are disabled in `vercel.json` while the hosted owner and live database adapters are incomplete. Continue using protected previews for review; deliberately re-enable the desired branch mapping only when production promotion is approved.
+
 Required initial hosted configuration: Supabase URL and publishable key plus an explicitly provisioned owner identity. A random 16+ character cron secret becomes required only when a remote scheduler is deliberately enabled. Supabase secret, OpenAI, and Alpaca data keys remain optional until reviewed server-side features that need them are deliberately enabled.
