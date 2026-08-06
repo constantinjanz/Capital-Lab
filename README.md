@@ -1,0 +1,86 @@
+# Capital Lab
+
+> **PAPER TRADING ONLY — scientific and entertainment use, not financial advice.**
+
+Capital Lab is a private, single-owner AI paper-trading research laboratory. It combines deterministic simulated execution, point-in-time market/event evidence, strict risk and OpenAI budget controls, persistent research/memory, and a dense observability dashboard. It contains no broker execution path and is safe-by-default in synthetic mock mode.
+
+## Safe local start
+
+Requirements: Node.js 22+ and pnpm 10. Docker is optional unless you want the local Supabase stack.
+
+```powershell
+Copy-Item .env.example .env.local
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). With the example defaults, Supabase, Alpaca, and OpenAI credentials are not required. The interface is visibly labeled `SYNTHETIC MOCK DATA`, the agent is disabled, and no paid call is made.
+
+## Quality gates
+
+```powershell
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm test:safety
+pnpm build
+```
+
+Database verification additionally requires Docker Desktop and the Supabase CLI:
+
+```powershell
+supabase start
+pnpm test:db
+```
+
+Playwright requires a browser binary:
+
+```powershell
+pnpm exec playwright install chromium
+pnpm test:e2e
+```
+
+## Architecture at a glance
+
+- `src/domain` — pure deterministic finance, simulation, risk, budget, agent-schema, point-in-time, and memory rules.
+- `src/features` — application use cases and orchestration.
+- `src/providers` — mock/live ports for market data, events, embeddings, and the single OpenAI gateway.
+- `src/app` — Next.js App Router pages, authenticated actions, health/manual/cron handlers.
+- `supabase` — forward-only migrations, explicit grants/RLS, seed fixtures, and pgTAP assertions.
+- `research` — import templates; external text remains untrusted evidence.
+- `docs` — architecture, rules, security, point-in-time, cost, deployment, and operations details.
+
+## Environment configuration
+
+See `.env.example`. Never expose server credentials through `NEXT_PUBLIC_` variables.
+
+Live Supabase auth requires the public URL/publishable key pair. A secret key is only for reviewed server-side administrative/database adapters and must never be exposed through a `NEXT_PUBLIC_` variable. Provision the single Auth user and matching `app_users` owner row explicitly; ongoing authorization comes from that server-controlled table, never editable user metadata.
+
+Alpaca live data uses only `https://data.alpaca.markets` through a direct data-only adapter. Set the data credential pair and `MARKET_DATA_PROVIDER=alpaca`; there is no brokerage client or order-forwarding endpoint.
+
+OpenAI remains off until all of the following are deliberately configured:
+
+```dotenv
+OPENAI_API_KEY=...
+AGENT_ENABLED=true
+AGENT_EXECUTION_MODE=shadow
+```
+
+Keep `AGENT_EXECUTION_MODE=shadow`, `SOL_ENABLED=false`, and `OPENAI_WEB_SEARCH_ENABLED=false` during initial review. All model calls reserve worst-case cost before leaving the database and settle actual usage afterward.
+
+## Research imports
+
+- Markdown research documents use `research/templates/research-note.md`.
+- Strategy cards use `research/templates/strategy-card.json`.
+- Source allowlists use `research/templates/source-registry.csv`.
+
+Imports support preview before commit, content hashes, deterministic chunks, duplicate detection, provenance, corpus versions, and `available_at` filtering. Synthetic fixtures are never displayed as live evidence.
+
+## Scheduler
+
+Exactly one provider may be active: `manual`, `vercel`, or `supabase`. The checked-in deployment keeps remote scheduling disabled while the durable database cycle is still under review. When that integration is ready, a 15-minute weekday Vercel schedule can call the secured handler, which then checks the US regular session in `America/New_York`; frequent Vercel schedules require a paid plan because Hobby is daily-only. Supabase Cron is the documented fallback. Never enable both.
+
+## Important limitations
+
+The initial build is deliberately review-first: no remote deployment, no remote database mutation, no paid AI call, no live broker integration, and no complex asset trading. See `docs/KNOWN_LIMITATIONS.md` for the complete list.

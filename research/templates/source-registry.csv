@@ -1,0 +1,2 @@
+source_id,name,canonical_url,source_type,licensing,retention_policy,enabled
+sec-edgar,SEC EDGAR,https://www.sec.gov,sec,public-record,metadata-and-permitted-content,true

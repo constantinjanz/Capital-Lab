@@ -1,0 +1,12 @@
+{
+  "id": "replace-me",
+  "name": "Shadow strategy hypothesis",
+  "version": 1,
+  "hypothesis": "State a falsifiable hypothesis.",
+  "eligibleUniverse": ["SPY"],
+  "entryConditions": ["Deterministic condition"],
+  "exitConditions": ["Deterministic condition"],
+  "invalidationConditions": ["Evidence that rejects the thesis"],
+  "maximumHoldingPeriod": "1_trading_day",
+  "sourceIds": ["replace-me"]
+}
