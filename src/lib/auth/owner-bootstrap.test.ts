@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { isExpectedOwnerEmail } from './owner-bootstrap'
+import {
+  getOwnerConfirmationRedirectUrl,
+  isExpectedOwnerEmail,
+} from './owner-bootstrap'
 
 describe('isExpectedOwnerEmail', () => {
   it('matches the configured owner without trusting casing or padding', () => {
@@ -14,5 +17,13 @@ describe('isExpectedOwnerEmail', () => {
       false,
     )
     expect(isExpectedOwnerEmail('owner@example.com', undefined)).toBe(false)
+  })
+})
+
+describe('getOwnerConfirmationRedirectUrl', () => {
+  it('returns to the hosted login route after email confirmation', () => {
+    expect(
+      getOwnerConfirmationRedirectUrl('https://capital-lab.example/app'),
+    ).toBe('https://capital-lab.example/login?reason=email-confirmed')
   })
 })

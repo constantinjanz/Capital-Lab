@@ -3,7 +3,10 @@
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
-import { isExpectedOwnerEmail } from '@/lib/auth/owner-bootstrap'
+import {
+  getOwnerConfirmationRedirectUrl,
+  isExpectedOwnerEmail,
+} from '@/lib/auth/owner-bootstrap'
 import { createSupabaseServerClient } from '@/lib/auth/supabase/server'
 import { getServerEnvironment } from '@/lib/env/server'
 
@@ -69,6 +72,11 @@ export async function registerOwner(formData: FormData): Promise<void> {
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email.trim().toLocaleLowerCase('en-US'),
     password: parsed.data.password,
+    options: {
+      emailRedirectTo: getOwnerConfirmationRedirectUrl(
+        environment.APP_BASE_URL,
+      ),
+    },
   })
   if (error) redirect('/login?reason=registration-unavailable')
 

@@ -8,3 +8,9 @@ export function isExpectedOwnerEmail(
     expectedEmail.trim().toLocaleLowerCase('en-US')
   )
 }
+
+export function getOwnerConfirmationRedirectUrl(appBaseUrl: string): string {
+  const redirectUrl = new URL('/login', appBaseUrl)
+  redirectUrl.searchParams.set('reason', 'email-confirmed')
+  return redirectUrl.toString()
+}

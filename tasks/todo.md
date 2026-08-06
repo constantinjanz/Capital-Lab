@@ -47,7 +47,7 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 - Available: Node.js 24, corepack, pnpm 10, npm 11, Git.
 - Unavailable: Docker and Supabase CLI; local database test execution will require installation.
 - External mutations: 14 hosted Supabase migrations, one GitHub root commit on `main`, one Vercel project/Git connection, scoped public environment variables, a preview-only non-secret owner email/bootstrap flag, and two READY previews. No privileged Supabase key, broker, live-market-data, paid OpenAI, agent, scheduler, or production deployment was enabled.
-- `pnpm verify`: passed after owner bootstrap and hosted workspace reads were wired (Prettier, ESLint with zero warnings, strict TypeScript, 21 Vitest files / 64 tests, safety and secret scan, Next.js production build with all required routes).
+- `pnpm verify`: passed after owner bootstrap, the explicit hosted confirmation return URL, and workspace reads were wired (Prettier, ESLint with zero warnings, strict TypeScript, 21 Vitest files / 65 tests, safety and secret scan, Next.js production build with all required routes).
 - `pnpm test:e2e`: passed (4 Chromium critical-flow tests).
 - `pnpm audit --prod`: passed with no known production vulnerabilities.
 - Hosted database contract: passed `1..700` against rollback-only seed fixtures; the run verified singleton owner binding, exact confirmed-email enforcement, and RLS, then left zero Auth users, owner rows, experiments, or pgTAP extension state behind.

@@ -25,7 +25,9 @@ export function OwnerLoginForm({
   const success =
     reason === 'check-email'
       ? 'Check your inbox, confirm the account, then return here to sign in.'
-      : null
+      : reason === 'email-confirmed'
+        ? 'Email confirmed. Sign in to bind this account as the Capital Lab owner.'
+        : null
 
   return (
     <>
