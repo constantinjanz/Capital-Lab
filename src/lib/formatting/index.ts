@@ -31,6 +31,6 @@ export function formatUtc(isoTimestamp: string) {
 
 export function formatStatus(value: string) {
   return value
-    .replaceAll('-', ' ')
+    .replaceAll(/[-_]/g, ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }

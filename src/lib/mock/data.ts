@@ -75,7 +75,12 @@ export const shell: ShellViewModel = {
   dataMode: 'mock',
   agentMode: 'shadow',
   scheduler: { state: 'healthy', detail: 'Last cycle 3m ago' },
-  spend: { daily: '$0.14', monthly: '$5.82', lifetime: '$12.41' },
+  spend: {
+    state: 'connected',
+    daily: '$0.14',
+    monthly: '$5.82',
+    lifetime: '$12.41',
+  },
 }
 
 const events: MarketEvent[] = [

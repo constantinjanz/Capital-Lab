@@ -1434,6 +1434,9 @@ textarea {
 .timeline__marker--warning {
   background: var(--amber);
 }
+.timeline__marker--negative {
+  background: var(--red);
+}
 .timeline__marker--info {
   background: var(--cyan);
 }

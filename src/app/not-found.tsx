@@ -11,8 +11,8 @@ export default function NotFound() {
         <p className="eyebrow">404 · Experiment boundary</p>
         <h1>Research state not found</h1>
         <p>
-          The requested route or experiment does not exist in this deterministic
-          mock dataset.
+          The requested route or experiment is unavailable in the current owner
+          workspace.
         </p>
         <Link className="button button--primary" href="/dashboard">
           <ArrowLeft size={15} aria-hidden="true" />

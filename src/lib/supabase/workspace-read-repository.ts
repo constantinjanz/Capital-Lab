@@ -31,7 +31,7 @@ export const readWorkspace = cache(
       supabase
         .from('experiment_controls')
         .select(
-          'experiment_id,scheduler_enabled,agent_enabled,emergency_paused,pause_reason,state_version',
+          'experiment_id,scheduler_enabled,agent_enabled,emergency_paused,pause_reason',
         )
         .eq('owner_id', ownerId),
     ])

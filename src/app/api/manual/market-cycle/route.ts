@@ -6,6 +6,12 @@ import { runMockSafeMarketCycle } from '@/features/scheduler/market-cycle'
 export async function POST() {
   const owner = await getOwnerIdentity()
   if (!owner) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  if (owner.mode === 'supabase') {
+    return Response.json(
+      { error: 'hosted_market_cycle_not_implemented' },
+      { status: 409 },
+    )
+  }
 
   const environment = getServerEnvironment()
   if (environment.SCHEDULER_PROVIDER !== 'manual') {
