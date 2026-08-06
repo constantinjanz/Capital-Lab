@@ -36,13 +36,15 @@ async function bindSignedInOwner(
 }
 
 export async function signIn(formData: FormData): Promise<void> {
-  const credentials = credentialsSchema.parse({
+  const parsed = credentialsSchema.safeParse({
     email: formData.get('email'),
     password: formData.get('password'),
   })
+  if (!parsed.success) redirect('/login?reason=invalid-credentials')
+
   const supabase = await createSupabaseServerClient()
   if (!supabase) redirect('/dashboard')
-  const { error } = await supabase.auth.signInWithPassword(credentials)
+  const { error } = await supabase.auth.signInWithPassword(parsed.data)
   if (error) redirect('/login?reason=invalid-credentials')
   if (!(await bindSignedInOwner(supabase))) {
     redirect('/login?reason=unauthorized')

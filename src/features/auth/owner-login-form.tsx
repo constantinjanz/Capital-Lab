@@ -50,6 +50,7 @@ export function OwnerLoginForm({
           name="password"
           type="password"
           autoComplete="current-password"
+          minLength={8}
           required
         />
         {error ? (
