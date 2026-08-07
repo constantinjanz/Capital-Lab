@@ -139,6 +139,7 @@ const sessionRow = {
 const snapshotRow = {
   ...scopeRow,
   instrument_rows: [instrumentRow],
+  feature_bar_rows: [],
   session_rows: [sessionRow],
   health_rows: [healthRow],
 }
@@ -206,6 +207,7 @@ describe('readHostedMarketSnapshotWithClient', () => {
             member_rows: [],
             source_ids: [],
             instrument_rows: [],
+            feature_bar_rows: [],
             session_rows: [],
             health_rows: [],
           },

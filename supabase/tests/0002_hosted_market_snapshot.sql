@@ -56,6 +56,22 @@ select ok(
 select ok(
   has_function_privilege(
     'authenticated',
+    'public.market_feature_bars_at(uuid[],uuid[],text,timestamptz,integer)',
+    'EXECUTE'
+  ),
+  'authenticated owners may request bounded deterministic feature inputs'
+);
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.market_feature_bars_at(uuid[],uuid[],text,timestamptz,integer)',
+    'EXECUTE'
+  ),
+  'anonymous callers cannot request deterministic feature inputs'
+);
+select ok(
+  has_function_privilege(
+    'authenticated',
     'public.market_sessions_at(uuid[],timestamptz,integer)',
     'EXECUTE'
   ),
@@ -97,6 +113,7 @@ select ok(
         'market_snapshot_scope',
         'market_snapshot_read',
         'market_instrument_snapshot_at',
+        'market_feature_bars_at',
         'market_sessions_at',
         'market_source_health_at'
       )
@@ -118,6 +135,7 @@ where n.nspname = 'public'
     'market_snapshot_scope',
     'market_snapshot_read',
     'market_instrument_snapshot_at',
+    'market_feature_bars_at',
     'market_sessions_at',
     'market_source_health_at'
   );
@@ -133,6 +151,7 @@ where n.nspname = 'public'
     'market_snapshot_scope',
     'market_snapshot_read',
     'market_instrument_snapshot_at',
+    'market_feature_bars_at',
     'market_sessions_at',
     'market_source_health_at'
   );
@@ -148,6 +167,7 @@ where n.nspname = 'public'
     'market_snapshot_scope',
     'market_snapshot_read',
     'market_instrument_snapshot_at',
+    'market_feature_bars_at',
     'market_sessions_at',
     'market_source_health_at'
   );
@@ -721,12 +741,18 @@ select ok(
       and decision_at <= statement_timestamp()
       and jsonb_typeof(member_rows) = 'array'
       and jsonb_typeof(instrument_rows) = 'array'
+      and jsonb_typeof(feature_bar_rows) = 'array'
       and jsonb_typeof(session_rows) = 'array'
       and jsonb_typeof(health_rows) = 'array'
       and not exists (
         select 1
         from jsonb_array_elements(instrument_rows) as instrument(value)
         where (instrument.value ->> 'decision_at')::timestamptz <> decision_at
+      )
+      and not exists (
+        select 1
+        from jsonb_array_elements(feature_bar_rows) as feature_bar(value)
+        where (feature_bar.value ->> 'decision_at')::timestamptz <> decision_at
       )
       and not exists (
         select 1

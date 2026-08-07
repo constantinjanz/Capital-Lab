@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Panel } from '@/components/ui/panel'
 import { StatusPill } from '@/components/ui/status-pill'
 import { TableShell } from '@/components/ui/table-shell'
+import { MARKET_FEATURE_VERSION } from '@/domain/market-data/features'
 import { hasReviewedHostedMarketManifest } from '@/features/markets/hosted-market-configuration-status'
 import { type HostedMarketIngestionReadiness } from '@/features/markets/hosted-market-ingestion'
 import { HostedMarketIngestionControl } from '@/features/markets/hosted-market-ingestion-control'
@@ -287,6 +288,108 @@ export function HostedMarketsView({
           </>
         )}
       </Panel>
+
+      {manifestConfigured ? (
+        <Panel
+          eyebrow="Versioned deterministic code"
+          title="Technical feature vector"
+          action={<span className="as-of">{MARKET_FEATURE_VERSION}</span>}
+        >
+          {quoteRows.length === 0 ? (
+            <EmptyState
+              icon={Radio}
+              title="No configured feeds available"
+              description="Feature values remain unavailable until the reviewed universe has a persisted market-data feed."
+            />
+          ) : (
+            <>
+              <TableShell caption="Point-in-time deterministic market features">
+                <thead>
+                  <tr>
+                    <th scope="col">Instrument / source</th>
+                    <th scope="col" className="numeric">
+                      Spread
+                    </th>
+                    <th scope="col" className="numeric">
+                      Spread bps
+                    </th>
+                    <th scope="col" className="numeric">
+                      Return 1m
+                    </th>
+                    <th scope="col" className="numeric">
+                      Return 5m
+                    </th>
+                    <th scope="col" className="numeric">
+                      Relative volume 20m
+                    </th>
+                    <th scope="col" className="numeric">
+                      Realized vol 5m
+                    </th>
+                    <th scope="col" className="numeric">
+                      Distance SMA5
+                    </th>
+                    <th scope="col" className="numeric">
+                      Distance TP-VWAP20
+                    </th>
+                    <th scope="col" className="numeric">
+                      Contiguous bars
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quoteRows.map(({ instrument, feed, source }) => (
+                    <tr
+                      key={`feature:${instrument.id}:${feed.sourceId ?? 'unconfigured'}`}
+                    >
+                      <th scope="row">
+                        <div className="symbol-cell">
+                          <strong>{instrument.symbol}</strong>
+                          <span>{source?.name ?? 'Not configured'}</span>
+                        </div>
+                      </th>
+                      <td className="numeric mono">
+                        {value(feed.features.spreadAbsolute)}
+                      </td>
+                      <td className="numeric mono">
+                        {value(feed.features.spreadBps)}
+                      </td>
+                      <td className="numeric mono">
+                        {value(feed.features.return1m)}
+                      </td>
+                      <td className="numeric mono">
+                        {value(feed.features.return5m)}
+                      </td>
+                      <td className="numeric mono">
+                        {value(feed.features.relativeVolume20)}
+                      </td>
+                      <td className="numeric mono">
+                        {value(feed.features.realizedVolatility5m)}
+                      </td>
+                      <td className="numeric mono">
+                        {value(feed.features.distanceFromSma5)}
+                      </td>
+                      <td className="numeric mono">
+                        {value(feed.features.distanceFromTypicalPriceVwap20)}
+                      </td>
+                      <td className="numeric mono">
+                        {feed.features.contiguousBarCount}/
+                        {feed.features.observedBarCount}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </TableShell>
+              <p className="safe-note">
+                Returns and distances are decimal ratios; realized volatility is
+                the non-annualized root-sum-square of five contiguous one-minute
+                returns. TP-VWAP20 is the volume-weighted typical price derived
+                from persisted OHLCV bars. A missing minute or insufficient
+                exact history makes the affected feature unavailable.
+              </p>
+            </>
+          )}
+        </Panel>
+      ) : null}
 
       {manifestConfigured ? (
         <Panel

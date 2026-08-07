@@ -3,6 +3,7 @@
 - Docker and the Supabase CLI are required to execute local database/pgTAP tests; application mock mode does not require them.
 - The mock weekday calendar is for local fixtures only. Live scheduling must query versioned official market-session rows, including holidays and shortened sessions.
 - Vercel snapshot polling is bounded to scheduled decision points and is not a low-latency feed.
+- Hosted technical features currently use only the latest 21 eligible completed one-minute bars per feed. They cover spread, short returns, relative volume, five-minute realized volatility, SMA distance, and a documented typical-price VWAP proxy; official-session gap, sector, and broader-market-relative features remain unavailable until the calendar and durable decision-cycle slices exist. Features are derived read-only and are not yet pinned in a persisted decision-context snapshot.
 - Free Alpaca IEX coverage is a single exchange and may not represent the full US market.
 - Official-source adapters are allowlisted foundations; operators must review each source's current terms, licensing, rate limits, retention, and user-agent requirements before activation.
 - Social/political platform adapters, Sol escalation, controlled web research, and weekly AI meta-review are disabled.
