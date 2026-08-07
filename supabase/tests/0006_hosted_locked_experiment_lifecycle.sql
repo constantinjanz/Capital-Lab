@@ -66,6 +66,17 @@ select has_index(
   'clone provenance has a supporting index'
 );
 
+select ok(
+  (
+    select pg_get_indexdef(index_class.oid)
+    from pg_class as index_class
+    join pg_namespace as namespace on namespace.oid = index_class.relnamespace
+    where namespace.nspname = 'public'
+      and index_class.relname = 'experiments_source_experiment_idx'
+  ) like '%(source_experiment_id, owner_id)%',
+  'clone provenance uses a covering owner-scoped index'
+);
+
 select is(
   (
     select data_type

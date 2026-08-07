@@ -4505,6 +4505,26 @@ export type Database = {
           source_type: string
         }[]
       }
+      mutate_locked_experiment_lifecycle: {
+        Args: {
+          p_action: string
+          p_clone_name?: string
+          p_confirmation?: string
+          p_expected_control_state_version: string
+          p_experiment_id: string
+          p_locked_version_id?: string
+          p_operation_id: string
+          p_reason?: string
+        }
+        Returns: {
+          control_state_version: string
+          execution_mode: string
+          experiment_id: string
+          lifecycle_status: string
+          replayed: boolean
+          source_experiment_id: string
+        }[]
+      }
       post_cash_ledger_entry: {
         Args: {
           p_amount: number
@@ -4587,26 +4607,6 @@ export type Database = {
           p_operation_id: string
         }
         Returns: string
-      }
-      mutate_locked_experiment_lifecycle: {
-        Args: {
-          p_action: string
-          p_clone_name?: string
-          p_confirmation?: string
-          p_expected_control_state_version: string
-          p_experiment_id: string
-          p_locked_version_id?: string
-          p_operation_id: string
-          p_reason?: string
-        }
-        Returns: {
-          control_state_version: string
-          execution_mode: string | null
-          experiment_id: string
-          lifecycle_status: string
-          replayed: boolean
-          source_experiment_id: string | null
-        }[]
       }
     }
     Enums: {

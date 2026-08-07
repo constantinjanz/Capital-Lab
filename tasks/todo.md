@@ -18,8 +18,11 @@ Draft-to-replay/shadow start follows in a separate reviewed slice because hosted
 
 #### Review in progress
 
-- The migration and all 42 lifecycle pgTAP assertions passed together against the hosted Capital-Lab schema in one rollback-only transaction; no schema or fixture state was retained. The rehearsal caught and corrected the canonical open-order state set before application.
+- The migration and all 43 lifecycle pgTAP assertions passed against the hosted Capital-Lab schema in rollback-only transactions; no fixture state was retained. The rehearsals caught and corrected the canonical open-order state set, result-column qualification, fixture portability, and owner-scoped provenance index coverage before release.
 - Clean-mirror application gates pass: Prettier, zero-warning ESLint, strict TypeScript, 43 Vitest files / 308 tests, the paper-only safety scan, and the Next.js 16.3 production build.
+- GitHub PR #12 CI run 56 is green: the application, fresh Supabase reset/pgTAP, and Chromium browser jobs all passed.
+- Hosted lifecycle and provenance-index migrations were applied only after CI passed. Hosted-generated TypeScript types were reconciled. The project remains at zero experiments, orders, fills, agent runs, scheduler runs, enabled controls, and enabled Alpaca sources. Authenticated execution is granted only through the narrow lifecycle RPC; anonymous/PUBLIC execution and direct authenticated experiment updates are denied, and both lifecycle functions have fixed search paths.
+- Supabase security advisors report only the known Free-plan leaked-password warning. The new foreign key is fully indexed; performance advisors otherwise report informational unused-index findings on the empty/low-traffic schema.
 
 ### Deterministic point-in-time market features
 
