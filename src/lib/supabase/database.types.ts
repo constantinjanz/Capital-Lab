@@ -4025,6 +4025,14 @@ export type Database = {
         Returns: Json
       }
       bootstrap_first_owner: { Args: never; Returns: Json }
+      create_draft_experiment: {
+        Args: {
+          p_name: string
+          p_objective: string
+          p_operation_id: string
+        }
+        Returns: string
+      }
       event_revisions_as_of: {
         Args: { p_as_of: string }
         Returns: {

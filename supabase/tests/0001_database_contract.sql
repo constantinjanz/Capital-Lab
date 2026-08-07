@@ -32,7 +32,7 @@ from (values
   ('public','strategy_versions'), ('public','strategy_assignments'), ('public','memory_summaries'),
   ('private','audit_log'), ('private','system_health_events'), ('private','ingestion_runs'),
   ('private','dead_letter_events'), ('private','application_settings'),
-  ('private','owner_bootstrap_config')
+  ('private','owner_bootstrap_config'), ('private','idempotency_records')
 ) as expected(schema_name, table_name);
 
 select ok(c.relrowsecurity, format('RLS enabled on %I.%I', n.nspname, c.relname))
@@ -146,6 +146,23 @@ select ok(
   'authenticated users may request the guarded first-owner bootstrap'
 );
 
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.create_draft_experiment(uuid,text,text)',
+    'EXECUTE'
+  ),
+  'authenticated owners may request atomic draft creation'
+);
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.create_draft_experiment(uuid,text,text)',
+    'EXECUTE'
+  ),
+  'anonymous callers cannot request draft creation'
+);
+
 insert into private.owner_bootstrap_config(expected_email)
 values ('owner@capital-lab.local')
 on conflict (singleton) do update
@@ -195,6 +212,284 @@ select is((select count(*) from public.instruments), 0::bigint, 'second authenti
 select is((select count(*) from public.cash_ledger_view), 0::bigint, 'second authenticated user cannot read ledger view');
 reset role;
 select set_config('request.jwt.claims', '{}', true);
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
+select ok(
+  set_config(
+    'capital_lab.test_draft_id',
+    public.create_draft_experiment(
+      'd1000000-0000-4000-8000-000000000001',
+      '  Hosted event study  ',
+      '  Evaluate a point-in-time event hypothesis safely.  '
+    )::text,
+    true
+  )::uuid is not null,
+  'the active owner can create one hosted draft atomically'
+);
+select is(
+  (
+    select name
+    from public.experiments
+    where id = current_setting('capital_lab.test_draft_id')::uuid
+  ),
+  'Hosted event study',
+  'draft creation trims the experiment name'
+);
+select is(
+  (
+    select objective
+    from public.experiments
+    where id = current_setting('capital_lab.test_draft_id')::uuid
+  ),
+  'Evaluate a point-in-time event hypothesis safely.',
+  'draft creation trims the objective'
+);
+select is(
+  (
+    select lifecycle_status
+    from public.experiments
+    where id = current_setting('capital_lab.test_draft_id')::uuid
+  ),
+  'draft',
+  'new experiments remain editable drafts'
+);
+select is(
+  (
+    select initial_capital
+    from public.experiment_detail_read_view
+    where id = current_setting('capital_lab.test_draft_id')::uuid
+  ),
+  '100000.00000000',
+  'the safe initial capital is exposed as an exact decimal string'
+);
+select is(
+  (
+    select base_currency
+    from public.experiments
+    where id = current_setting('capital_lab.test_draft_id')::uuid
+  ),
+  'EUR',
+  'the safe draft base currency is EUR'
+);
+select ok(
+  exists (
+    select 1
+    from public.experiments
+    where id = current_setting('capital_lab.test_draft_id')::uuid
+      and execution_mode is null
+      and starts_at is null
+      and ends_at is null
+      and pause_reason is null
+      and locked_at is null
+      and locked_version_id is null
+  ),
+  'draft creation cannot forge lifecycle, execution, or lock state'
+);
+select ok(
+  exists (
+    select 1
+    from public.experiment_controls
+    where experiment_id = current_setting('capital_lab.test_draft_id')::uuid
+      and not scheduler_enabled
+      and not agent_enabled
+      and not emergency_paused
+      and pause_reason is null
+      and state_version = 0
+  ),
+  'draft controls are initialized in the disabled state'
+);
+select is(
+  (
+    select count(*)
+    from public.experiment_status_events
+    where experiment_id = current_setting('capital_lab.test_draft_id')::uuid
+      and from_status is null
+      and to_status = 'draft'
+      and reason_code = 'draft_created'
+      and actor_type = 'owner'
+      and correlation_id = 'd1000000-0000-4000-8000-000000000001'
+  ),
+  1::bigint,
+  'draft creation adds one persisted lifecycle event'
+);
+select is(
+  public.create_draft_experiment(
+    'd1000000-0000-4000-8000-000000000001',
+    'Hosted event study',
+    'Evaluate a point-in-time event hypothesis safely.'
+  ),
+  current_setting('capital_lab.test_draft_id')::uuid,
+  'repeating the same normalized operation returns the original draft'
+);
+select is(
+  (
+    select count(*)
+    from public.experiments
+    where id = current_setting('capital_lab.test_draft_id')::uuid
+  ),
+  1::bigint,
+  'an idempotent retry does not duplicate the experiment'
+);
+reset role;
+
+select is(
+  (
+    select count(*)
+    from private.audit_log
+    where experiment_id = current_setting('capital_lab.test_draft_id')::uuid
+      and action = 'experiment.draft_created'
+      and correlation_id = 'd1000000-0000-4000-8000-000000000001'
+      and metadata ->> 'initial_capital' = '100000.00000000'
+      and metadata ->> 'paper_only' = 'true'
+  ),
+  1::bigint,
+  'draft creation writes one immutable audit record with safe metadata'
+);
+select ok(
+  exists (
+    select 1
+    from private.idempotency_records
+    where owner_id = '00000000-0000-0000-0000-000000000001'
+      and scope = 'experiment.create_draft.v1'
+      and idempotency_key = 'd1000000-0000-4000-8000-000000000001'
+      and request_hash ~ '^[0-9a-f]{64}$'
+      and status = 'completed'
+      and result_ref_type = 'experiment'
+      and result_ref_id = current_setting('capital_lab.test_draft_id')::uuid
+      and completed_at is not null
+  ),
+  'draft creation finalizes its durable idempotency record'
+);
+select is(
+  (
+    select count(*)
+    from public.experiment_versions
+    where experiment_id = current_setting('capital_lab.test_draft_id')::uuid
+  ),
+  0::bigint,
+  'draft creation does not lock or version configuration'
+);
+select is(
+  (
+    select count(*)
+    from public.simulation_accounts
+    where experiment_id = current_setting('capital_lab.test_draft_id')::uuid
+  ),
+  0::bigint,
+  'draft creation does not open a simulation account'
+);
+select is(
+  (
+    select count(*)
+    from private.cash_ledger_entries
+    where experiment_id = current_setting('capital_lab.test_draft_id')::uuid
+  ),
+  0::bigint,
+  'draft creation does not post cash before validated start'
+);
+
+update public.experiments
+set name = 'Later revised draft',
+    objective = 'The owner legitimately revised this draft after creation.'
+where id = current_setting('capital_lab.test_draft_id')::uuid;
+
+update public.experiment_controls
+set state_version = 1
+where experiment_id = current_setting('capital_lab.test_draft_id')::uuid;
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
+select is(
+  public.create_draft_experiment(
+    'd1000000-0000-4000-8000-000000000001',
+    'Hosted event study',
+    'Evaluate a point-in-time event hypothesis safely.'
+  ),
+  current_setting('capital_lab.test_draft_id')::uuid,
+  'a completed create operation remains idempotent after later draft changes'
+);
+reset role;
+
+select is(
+  (
+    select count(*)
+    from public.experiment_status_events
+    where experiment_id = current_setting('capital_lab.test_draft_id')::uuid
+      and reason_code = 'draft_created'
+      and correlation_id = 'd1000000-0000-4000-8000-000000000001'
+  ),
+  1::bigint,
+  'a replay after later changes does not duplicate the creation event'
+);
+select is(
+  (
+    select count(*)
+    from private.audit_log
+    where experiment_id = current_setting('capital_lab.test_draft_id')::uuid
+      and action = 'experiment.draft_created'
+      and correlation_id = 'd1000000-0000-4000-8000-000000000001'
+  ),
+  1::bigint,
+  'a replay after later changes does not duplicate the creation audit record'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
+select throws_ok(
+  $$select public.create_draft_experiment(
+    'd1000000-0000-4000-8000-000000000001',
+    'Changed request',
+    'Evaluate a point-in-time event hypothesis safely.'
+  )$$,
+  '23505',
+  'draft operation id was reused with different input',
+  'an operation id cannot be replayed with changed input'
+);
+select throws_ok(
+  $$select public.create_draft_experiment(
+    'd1000000-0000-4000-8000-000000000002',
+    ' ',
+    'Evaluate a point-in-time event hypothesis safely.'
+  )$$,
+  '22023',
+  'experiment name must contain between 3 and 100 characters',
+  'blank draft input is rejected atomically'
+);
+reset role;
+select is(
+  (
+    select count(*)
+    from private.idempotency_records
+    where idempotency_key = 'd1000000-0000-4000-8000-000000000002'
+  ),
+  0::bigint,
+  'invalid input leaves no partial idempotency record'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000002","role":"authenticated"}', true);
+select throws_ok(
+  $$select public.create_draft_experiment(
+    'd1000000-0000-4000-8000-000000000003',
+    'Unauthorized draft',
+    'This caller is not the active application owner.'
+  )$$,
+  '42501',
+  'active owner authentication required',
+  'a second authenticated identity cannot create a draft'
+);
+reset role;
+select set_config('request.jwt.claims', '{}', true);
+select is(
+  (
+    select count(*)
+    from private.idempotency_records
+    where idempotency_key = 'd1000000-0000-4000-8000-000000000003'
+  ),
+  0::bigint,
+  'an unauthorized caller leaves no partial write state'
+);
 
 select throws_ok(
   $$update private.cash_ledger_entries set amount = amount + 1 where id = '91000000-0000-0000-0000-000000000001'$$,
