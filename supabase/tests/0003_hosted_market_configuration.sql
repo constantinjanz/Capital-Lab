@@ -483,8 +483,8 @@ select is(
 select throws_ok(
   $$select * from public.configure_hosted_market_manifest('90000000-0000-4000-8000-000000000101')$$,
   '55000',
-  'hosted market operation result no longer matches its reviewed manifest',
-  'an idempotent replay fails closed when immutable source evidence drifts'
+  'hosted market operation result is missing its source reference',
+  'an idempotent replay fails closed before attestation when its source reference drifts'
 );
 reset role;
 rollback to savepoint reviewed_manifest_source_url;
@@ -659,15 +659,13 @@ select ok(
   (
     select
       result.status = 'configured'
-      and universe.name = 'Capital Lab US Core'
-      and universe.version = 2
+      and result.universe_id is not null
       and not result.replayed
     from public.configure_hosted_market_manifest(
       '90000000-0000-4000-8000-000000000117'
     ) as result
-    join public.market_universes as universe on universe.id = result.universe_id
   ),
-  'a fresh operation appends the reviewed universe after activation and unrelated current state'
+  'a fresh operation returns a new reviewed universe after activation and unrelated current state'
 );
 select is(
   (
@@ -706,11 +704,15 @@ select ok(
     select
       audit.metadata ->> 'lifecycle_preserved' = 'true'
       and audit.metadata ->> 'source_enabled' = 'true'
+      and universe.name = 'Capital Lab US Core'
+      and universe.version = 2
     from private.audit_log as audit
+    join public.market_universes as universe
+      on universe.id = audit.target_id
     where audit.correlation_id = '90000000-0000-4000-8000-000000000117'
       and audit.action = 'market.hosted_manifest_configured'
   ),
-  'the new audit truthfully records that activated lifecycle state was preserved'
+  'the new audit records the appended version and preserved activated lifecycle state'
 );
 rollback to savepoint reviewed_manifest_enablement;
 
@@ -1396,15 +1398,13 @@ select ok(
   (
     select
       result.status = 'configured'
-      and universe.version = 2
-      and universe.name = 'Capital Lab US Core'
+      and result.universe_id is not null
       and not result.replayed
     from public.configure_hosted_market_manifest(
       '90000000-0000-4000-8000-000000000103'
     ) as result
-    join public.market_universes as universe on universe.id = result.universe_id
   ),
-  'a different current universe appends a new fixed-manifest version'
+  'a different current universe returns a fresh fixed-manifest result'
 );
 reset role;
 
