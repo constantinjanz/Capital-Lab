@@ -14,6 +14,8 @@ import { Panel } from '@/components/ui/panel'
 import { StatusPill } from '@/components/ui/status-pill'
 import { TableShell } from '@/components/ui/table-shell'
 import { hasReviewedHostedMarketManifest } from '@/features/markets/hosted-market-configuration-status'
+import { type HostedMarketIngestionReadiness } from '@/features/markets/hosted-market-ingestion'
+import { HostedMarketIngestionControl } from '@/features/markets/hosted-market-ingestion-control'
 import {
   deriveHostedMarketSessionState,
   type HostedMarketSession,
@@ -71,14 +73,32 @@ function sessionRowState(
 export function HostedMarketsView({
   snapshot,
   configurationOperationId,
+  sourceLifecycleOperationId,
+  ingestionOperationId,
+  ingestionReadiness,
+  ingestionWindow,
 }: {
   snapshot: HostedMarketSnapshot
   configurationOperationId: string
+  sourceLifecycleOperationId: string
+  ingestionOperationId: string
+  ingestionReadiness: HostedMarketIngestionReadiness
+  ingestionWindow: {
+    windowStart: string
+    windowEnd: string
+  }
 }) {
   const sessionState = deriveHostedMarketSessionState(snapshot)
   const manifestConfigured = hasReviewedHostedMarketManifest(snapshot)
   const sourcesById = new Map(
     snapshot.sources.map((source) => [source.id, source]),
+  )
+  const alpacaIexSource = snapshot.sources.find(
+    (source) =>
+      source.code === 'alpaca_iex' &&
+      source.provider === 'alpaca' &&
+      source.sourceType === 'market_data' &&
+      !source.isMock,
   )
   const quoteRows = snapshot.instruments.flatMap((instrument) =>
     instrument.feeds.map((feed) => ({
@@ -268,6 +288,23 @@ export function HostedMarketsView({
         )}
       </Panel>
 
+      {manifestConfigured ? (
+        <Panel
+          eyebrow="Explicit data-only operation"
+          title="Hosted Alpaca IEX ingestion"
+          action={<span className="as-of">Manual owner trigger only</span>}
+        >
+          <HostedMarketIngestionControl
+            lifecycleOperationId={sourceLifecycleOperationId}
+            ingestionOperationId={ingestionOperationId}
+            readiness={ingestionReadiness}
+            sourceEnabled={alpacaIexSource?.isEnabled === true}
+            windowStart={ingestionWindow.windowStart}
+            windowEnd={ingestionWindow.windowEnd}
+          />
+        </Panel>
+      ) : null}
+
       <div className="dashboard-grid dashboard-grid--split">
         <Panel eyebrow="Calendar evidence" title="Recent sessions">
           {snapshot.sessions.length === 0 ? (
@@ -348,9 +385,9 @@ export function HostedMarketsView({
             </div>
           )}
           <p className="safe-note">
-            <ShieldX size={14} aria-hidden="true" /> Read-only market evidence.
-            This page cannot place orders, contact a broker, or activate an
-            ingestion adapter.
+            <ShieldX size={14} aria-hidden="true" /> Market-data controls cannot
+            place orders, link a brokerage account, or enable AI or automated
+            scheduling.
           </p>
         </Panel>
       </div>

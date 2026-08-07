@@ -4,6 +4,23 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Owner-triggered Alpaca IEX ingestion
+
+- [x] Harden the data-only Alpaca HTTP adapter around the exact `data.alpaca.markets` quote and stock-bar endpoints with five-symbol bounds, raw/as-of historical semantics, pagination, byte/page/record limits, redirect refusal, per-request and aggregate timeouts, exact decimal parsing, provider request IDs, and sanitized typed failures.
+- [x] Define a fixed manual batch: the reviewed SPY/QQQ/AAPL/MSFT/NVDA aliases, latest IEX quotes, and bounded completed raw one-minute bars. Do not call Alpaca calendar, account, broker, or order hosts; market-session ingestion remains a later official-calendar slice.
+- [x] Add owner-only, idempotent source activation plus short begin/commit/fail/result database RPCs. Derive identity from `auth.uid()`, keep provider calls outside database transactions, stamp availability in PostgreSQL, append revisions rather than overwrite, record raw normalized evidence, source health, ingestion counters, and redacted audits, and deny direct writes.
+- [x] Add a re-authorizing Server Action, typed repository/orchestration boundary, and hosted `/markets` controls with truthful credential/source/readiness, success, replay, failure, and unknown-result states. Keep mock mode unchanged and scheduler/agent/order creation disabled.
+- [ ] Cover adapter, mapper, repository, action, RLS/grants, owner/non-owner/anonymous access, retry/idempotency, correction history, malformed/future/oversized payloads, source lifecycle, zero scheduler/agent/order side effects, and failure recording with unit and pgTAP tests.
+- [x] Reconcile generated database types and update data-source, security, deployment, runbook, limitation, implementation-plan, and task-review documentation.
+- [ ] Run formatting, lint, strict typecheck, focused/full tests, database reset/pgTAP, paper-only and secret scans, production build, mock browser journeys, protected Preview verification, Supabase advisors, and merge only through a green reviewed PR. Do not promote production or enable a scheduler/agent.
+
+Scope guard: this slice may contact only Alpaca Market Data after an authenticated owner explicitly enables the reviewed IEX source and invokes a manual batch with server-only credentials. It cannot call the Alpaca calendar because the documented calendar endpoint is on a trading host, cannot place or forward an order, cannot enable cron or AI, and cannot store credentials in Supabase.
+
+#### Review
+
+- Implementation is complete locally. Focused ingestion tests pass (9 files / 92 tests), and the clean-mirror `pnpm verify` pass is green: formatting, zero-warning lint, strict TypeScript, 41 Vitest files / 275 tests, paper-only scan, and Next.js 16.3 production build.
+- The migration compiles against the hosted schema in a rollback-only transaction. A full hosted fixture run is intentionally deferred to GitHub CI because the real singleton owner prevents loading the synthetic owner fixture, and weakening that live uniqueness index was rejected as unsafe. No hosted migration has been applied and no Alpaca request has been made yet.
+
 ### Owner-reviewed hosted market configuration
 
 - [x] Define one fixed, bounded manifest for XNAS/ARCX, SPY/QQQ/AAPL/MSFT/NVDA, exact Alpaca aliases, locked append-only owner universe versions that reuse the exact current version, and one initially disabled Alpaca IEX data-only source/policy.

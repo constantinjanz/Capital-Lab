@@ -4,6 +4,14 @@ export const decimalTextSchema = z
   .string()
   .regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/, 'Expected a canonical decimal string')
 
+export const boundedProviderDecimalTextSchema = z
+  .string()
+  .max(64)
+  .regex(
+    /^(?:0|[1-9]\d{0,27})(?:\.\d{1,28})?$/,
+    'Expected a bounded canonical provider decimal string',
+  )
+
 export const marketQuoteSchema = z.object({
   id: z.string().min(1),
   instrumentId: z.string().min(1),
@@ -40,6 +48,8 @@ export const marketBarSchema = z.object({
   volume: decimalTextSchema,
   currency: z.string().length(3),
   provider: z.string().min(1),
+  providerEventAt: z.iso.datetime().optional(),
+  providerReceivedAt: z.iso.datetime().optional(),
   firstSeenAt: z.iso.datetime(),
   availableAt: z.iso.datetime(),
   ingestedAt: z.iso.datetime(),

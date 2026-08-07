@@ -4039,6 +4039,45 @@ export type Database = {
           universe_id: string
         }[]
       }
+      begin_manual_hosted_market_ingestion: {
+        Args: {
+          p_operation_id: string
+          p_window_end: string
+          p_window_start: string
+        }
+        Returns: {
+          ingestion_run_id: string
+          operation_id: string
+          replayed: boolean
+          source_id: string
+          started_at: string
+          status: string
+          symbols: string[]
+          window_end: string
+          window_start: string
+        }[]
+      }
+      commit_manual_hosted_market_ingestion: {
+        Args: {
+          p_bars: Json
+          p_latency_ms: number
+          p_operation_id: string
+          p_quotes: Json
+          p_request_metadata: Json
+        }
+        Returns: {
+          finished_at: string
+          ingestion_run_id: string
+          operation_id: string
+          records_inserted: number
+          records_rejected: number
+          records_reused: number
+          records_seen: number
+          replayed: boolean
+          source_id: string
+          status: string
+        }[]
+      }
       create_draft_experiment: {
         Args: {
           p_name: string
@@ -4124,6 +4163,26 @@ export type Database = {
           owner_id: string
           source_ids: string[]
           universe_row: Json | null
+        }[]
+      }
+      fail_manual_hosted_market_ingestion: {
+        Args: {
+          p_error_class: string
+          p_latency_ms: number
+          p_operation_id: string
+        }
+        Returns: {
+          error_class: string
+          finished_at: string
+          ingestion_run_id: string
+          operation_id: string
+          records_inserted: number
+          records_rejected: number
+          records_reused: number
+          records_seen: number
+          replayed: boolean
+          source_id: string
+          status: string
         }[]
       }
       market_snapshot_read: {
@@ -4250,6 +4309,22 @@ export type Database = {
           source_type: string
         }[]
       }
+      manual_hosted_market_ingestion_result: {
+        Args: { p_operation_id: string }
+        Returns: {
+          error_class: string | null
+          finished_at: string | null
+          ingestion_run_id: string
+          operation_id: string
+          records_inserted: number
+          records_rejected: number
+          records_reused: number
+          records_seen: number
+          source_id: string
+          started_at: string
+          status: string
+        }[]
+      }
       market_quotes_as_of: {
         Args: { p_as_of: string; p_instrument_ids: string[] }
         Returns: {
@@ -4330,6 +4405,19 @@ export type Database = {
           p_web_search_calls: number
         }
         Returns: Json
+      }
+      set_hosted_market_source_enabled: {
+        Args: { p_enabled: boolean; p_operation_id: string }
+        Returns: {
+          effective_at: string
+          enabled: boolean
+          operation_id: string
+          policy_id: string
+          policy_version: number
+          replayed: boolean
+          source_id: string
+          status: string
+        }[]
       }
       transition_ai_reservation: {
         Args: {

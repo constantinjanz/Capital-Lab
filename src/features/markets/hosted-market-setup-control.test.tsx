@@ -21,12 +21,27 @@ vi.mock('react-dom', async () => {
 })
 vi.mock('@/features/markets/actions', () => ({
   configureHostedMarketManifest: vi.fn(),
+  runHostedAlpacaIngestion: vi.fn(),
+  setHostedAlpacaSourceState: vi.fn(),
 }))
 
 import { HostedMarketSetupControl } from './hosted-market-setup-control'
 import { HostedMarketsView } from './hosted-markets-view'
 
 const operationId = 'd3000000-0000-4000-8000-000000000001'
+const hostedIngestionProps = {
+  sourceLifecycleOperationId: 'd3000000-0000-4000-8000-000000000002',
+  ingestionOperationId: 'd3000000-0000-4000-8000-000000000003',
+  ingestionReadiness: {
+    ready: false,
+    code: 'provider_disabled' as const,
+    message: 'The hosted Alpaca data adapter is not enabled.',
+  },
+  ingestionWindow: {
+    windowStart: '2026-08-06T12:00:00.000Z',
+    windowEnd: '2026-08-07T12:00:00.000Z',
+  },
+}
 const emptySnapshot: HostedMarketSnapshot = {
   source: 'supabase',
   decisionAt: '2026-08-07T12:00:00.000Z',
@@ -153,6 +168,7 @@ describe('HostedMarketSetupControl', () => {
       <HostedMarketsView
         snapshot={emptySnapshot}
         configurationOperationId={operationId}
+        {...hostedIngestionProps}
       />,
     )
 
@@ -161,6 +177,9 @@ describe('HostedMarketSetupControl', () => {
         name: 'Save reviewed market configuration',
       }),
     ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Fetch reviewed IEX batch' }),
+    ).toBeNull()
 
     rerender(
       <HostedMarketsView
@@ -178,6 +197,7 @@ describe('HostedMarketSetupControl', () => {
           },
         }}
         configurationOperationId={operationId}
+        {...hostedIngestionProps}
       />,
     )
 
@@ -200,6 +220,7 @@ describe('HostedMarketSetupControl', () => {
           },
         }}
         configurationOperationId={operationId}
+        {...hostedIngestionProps}
       />,
     )
 
@@ -213,6 +234,7 @@ describe('HostedMarketSetupControl', () => {
       <HostedMarketsView
         snapshot={configuredSnapshot}
         configurationOperationId={operationId}
+        {...hostedIngestionProps}
       />,
     )
 
@@ -221,5 +243,8 @@ describe('HostedMarketSetupControl', () => {
         name: 'Save reviewed market configuration',
       }),
     ).toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'Fetch reviewed IEX batch' }),
+    ).toBeVisible()
   })
 })
