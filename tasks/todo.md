@@ -11,7 +11,7 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 - [x] Add a protected Server Action, typed repository boundary, and hosted-only editor with precise validation and conflict messaging while preserving the deterministic mock experience.
 - [x] Apply the additive migration after rollback-only hosted validation, regenerate/check database types, and review Supabase security and performance advisors.
 - [x] Run formatting, lint, strict typecheck, unit/database/browser tests, paper-only and secret scans, dependency audit, and the production build.
-- [ ] Publish through a reviewed GitHub PR, verify CI and the Vercel preview, and merge only if all gates are green.
+- [x] Publish through a reviewed GitHub PR, verify CI and the Vercel preview, and merge only if all gates are green.
 
 #### Review
 
@@ -19,6 +19,7 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 - The hosted contract exposes `draft_revision` as exact text, grants the public security-invoker RPC only to authenticated/service roles, and leaves direct table mutation denied. Same-operation replay, replay after a later edit, stale-write rollback, changed-body rejection, redacted auditing, and preservation of every execution side table were verified.
 - Full application verification passed: Prettier, ESLint with zero warnings, strict TypeScript, 27 Vitest files / 127 tests, paper-only safety scan, and the Next.js production build. Four mock Playwright journeys and the production dependency audit also passed. Independent reviews cleared the database security boundary, ambiguous-result reconciliation, and UUID normalization/version handling.
 - Supabase generated types match the checked-in revision/view/RPC fields. Security advisors remain unchanged with only the Free-plan leaked-password warning; performance advisors contain only expected unused-index information on the empty database.
+- GitHub PR #5 passed both push and pull-request application, database, and browser jobs, then merged as `c4cf042`. Vercel Preview `dpl_6tVtueNuiKawxfkuSjhGDzmim8Vv` is READY at the reviewed source commit after a cold-cache build; hosted owner login renders with setup disabled, unauthenticated experiment access redirects to login, and no runtime warnings or errors were found. The final hosted snapshot retains the controls-before-experiment lock order and zero experiment, update-idempotency, or update-audit rows.
 
 ### Hosted draft experiment creation
 
