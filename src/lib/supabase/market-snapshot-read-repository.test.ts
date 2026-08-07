@@ -21,6 +21,7 @@ const universeRow = {
   name: 'Primary universe',
   version: 1,
   description: null,
+  reviewed_manifest_id: null,
   locked_at: null,
   created_at: '2026-08-07T10:00:00.000Z',
 }

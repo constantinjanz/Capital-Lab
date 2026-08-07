@@ -8,6 +8,8 @@ import type { Tone } from '@/lib/mock/types'
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+export const REVIEWED_HOSTED_MARKET_MANIFEST_ID =
+  'capital_lab_us_core_alpaca_iex_v1' as const
 
 const assetClasses = new Set([
   'equity',
@@ -35,6 +37,7 @@ export interface HostedMarketUniverse {
   name: string
   version: number
   description: string | null
+  reviewedManifestId: typeof REVIEWED_HOSTED_MARKET_MANIFEST_ID | null
   lockedAt: string | null
   createdAt: string
   instrumentIds: string[]
@@ -170,6 +173,20 @@ function text(value: unknown, label: string): string {
 
 function nullableText(value: unknown, label: string): string | null {
   return value === null ? null : text(value, label)
+}
+
+function reviewedManifestId(
+  value: unknown,
+): typeof REVIEWED_HOSTED_MARKET_MANIFEST_ID | null {
+  if (value === null) return null
+  if (
+    text(value, 'reviewed manifest id') !== REVIEWED_HOSTED_MARKET_MANIFEST_ID
+  ) {
+    throw new Error(
+      'Hosted market snapshot has an unsupported reviewed manifest id',
+    )
+  }
+  return REVIEWED_HOSTED_MARKET_MANIFEST_ID
 }
 
 function uuid(value: unknown, label: string): string {
@@ -687,6 +704,7 @@ function mapUniverse(
     name: text(universe.name, 'universe name'),
     version: integer(universe.version, 'universe version', 1),
     description: nullableText(universe.description, 'universe description'),
+    reviewedManifestId: reviewedManifestId(universe.reviewed_manifest_id),
     lockedAt: nullableTimestamp(universe.locked_at, 'universe lock timestamp'),
     createdAt,
     instrumentIds: instrumentIds.toSorted(),

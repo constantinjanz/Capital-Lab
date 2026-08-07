@@ -20,9 +20,9 @@ All financial quantities use `decimal.js` in TypeScript and `numeric` in Postgre
 
 - Empty starting workspace; no existing user files to preserve.
 - Node.js 24 and pnpm 10 are available.
-- Docker and Supabase CLI are not installed, so local application verification will use deterministic mock mode. Supabase migrations and database tests will still be authored; their execution will be reported separately as infrastructure-dependent.
+- Docker is not available for a local Supabase reset, so local application verification uses deterministic mock mode. Hosted migrations and rollback-only pgTAP probes are recorded separately from the infrastructure-dependent local database gate.
 - Next.js App Router with Node runtime, strict TypeScript, Tailwind CSS, shadcn/ui source components, Supabase SSR, OpenAI Responses API behind one gateway, Vitest, and Playwright.
-- Vercel cron runs in UTC, uses `Authorization: Bearer CRON_SECRET`, and is protected by both idempotency and concurrency control.
+- Checked-in manual and cron routes run only the bounded mock-safe cycle. Hosted market-cycle routes fail closed until reviewed ingestion, calendar, idempotency, and concurrency wiring exists; no remote scheduler is enabled.
 
 ## Architecture boundaries
 
@@ -80,12 +80,14 @@ Acceptance: the ledger reconciles; impossible/stale/lookahead fills are rejected
 ### Phase 4 — market and public-event data
 
 - [x] Define market/news/research provider ports and deterministic mock implementations.
-- [ ] Add a direct Alpaca Market Data HTTP adapter restricted to the data host and quotes/bars/snapshots/news endpoints.
+- [x] Add a direct Alpaca Market Data HTTP adapter skeleton restricted to the data host and stock latest-quote and historical-bar endpoints; it has no broker client or order method.
+- [x] Add one owner-reviewed hosted reference manifest for XNAS/ARCX and SPY/QQQ/AAPL/MSFT/NVDA with exact Alpaca aliases, locked append-only owner universe versions, and one initially disabled Alpaca IEX source/policy. An exact current version is reused; a later unrelated current universe causes a new immutable version to be appended without changing separately reviewed lifecycle state. Configuration stores no provider credential and creates no observation, session, ingestion, or scheduler evidence.
+- [ ] Harden the Alpaca adapter for hosted use with raw/as-of historical semantics, pagination, redirect/timeout policy, bounded input and response validation, provider request IDs, persistence-stamped availability times, and sanitized typed failures.
 - [x] Add allowlisted SEC/Fed/BLS/White House/company-RSS adapter scaffolds with explicit user-agent, rate-limit, provenance, retention, and sanitization policy.
 - [x] Add disabled official social-provider interface; no authenticated scraping.
 - [ ] Add ingestion idempotency, revision history, source health, content hashing/deduplication, and deterministic features.
 
-Acceptance: missing credentials select conspicuous mock mode; every record has point-in-time provenance; the forbidden endpoint scan rejects brokerage paths.
+Acceptance: deterministic mock mode remains the default. Initial application of the hosted manifest performs no provider request and creates Alpaca disabled with zero market observations; later universe-only application preserves rather than changes activation state. Any owner-triggered ingestion, live calendar integration, scheduler finalization, or production activation is a separate reviewed slice; before then, every configured hosted path must fail closed and the forbidden endpoint scan must reject brokerage paths.
 
 ### Phase 5 — dashboard and control plane
 

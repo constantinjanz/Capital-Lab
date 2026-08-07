@@ -4029,6 +4029,16 @@ export type Database = {
         Returns: Json
       }
       bootstrap_first_owner: { Args: never; Returns: Json }
+      configure_hosted_market_manifest: {
+        Args: { p_operation_id: string }
+        Returns: {
+          operation_id: string
+          replayed: boolean
+          source_id: string
+          status: string
+          universe_id: string
+        }[]
+      }
       create_draft_experiment: {
         Args: {
           p_name: string
