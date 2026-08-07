@@ -4337,6 +4337,37 @@ export type Database = {
           volume_text: string
         }[]
       }
+      market_feature_bars_at: {
+        Args: {
+          p_decision_at: string
+          p_instrument_ids: string[]
+          p_limit_per_feed?: number
+          p_source_ids: string[]
+          p_timeframe: string
+        }
+        Returns: {
+          bar_available_at: string
+          bar_correction_state: string
+          bar_end: string
+          bar_first_seen_at: string
+          bar_id: string
+          bar_provider_event_at: string
+          bar_provider_received_at: string | null
+          bar_provider_record_key: string
+          bar_revision_no: number
+          bar_start: string
+          bar_timeframe: string
+          close_price_text: string
+          decision_at: string
+          high_price_text: string
+          instrument_id: string
+          low_price_text: string
+          open_price_text: string
+          owner_id: string
+          source_id: string
+          volume_text: string
+        }[]
+      }
       market_quotes_as_of: {
         Args: { p_as_of: string; p_instrument_ids: string[] }
         Returns: {
@@ -4395,6 +4426,7 @@ export type Database = {
         Args: { p_session_limit?: number; p_timeframe?: string }
         Returns: {
           decision_at: string
+          feature_bar_rows: Json
           health_rows: Json
           instrument_rows: Json
           member_rows: Json

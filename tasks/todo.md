@@ -4,6 +4,22 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Deterministic point-in-time market features
+
+- [x] Define `market-technical-v1` in pure domain code with canonical Decimal.js inputs/outputs, bounded one-minute history, strict continuity, and explicit unavailable states for missing samples or zero denominators.
+- [x] Add an owner-only, read-only Supabase feature-input function that selects at most 21 eligible latest logical bar revisions per feed at a required decision timestamp and returns every financial value as exact text.
+- [x] Extend the atomic hosted market snapshot and strict mapper so configuration, quotes/bars, feature inputs, sessions, and source health share one PostgreSQL statement boundary; reject owner/time/scope/latest-bar drift again in the application.
+- [x] Render spread, one/five-minute returns, 20-minute relative volume, five-minute realized volatility, SMA5 distance, and typical-price-VWAP20 distance with truthful history coverage on hosted `/markets`.
+- [x] Cover deterministic math, malformed/gapped/zero-denominator inputs, owner/grant/search-path boundaries, correction/cancellation/future-receipt behavior, exact-text precision, bounded reads, and zero mutations with unit and pgTAP tests.
+- [ ] Run the complete application/database/browser release gates, reconcile hosted generated types and advisors, publish a protected Preview through a green PR, apply the migration, and merge without enabling Alpaca, scheduler, AI, or production.
+
+Scope guard: feature generation is a read-only derivation from persisted evidence. It cannot contact Alpaca, add credentials, enable a source, create a scheduler/agent/order/fill/ledger row, or promote production. Missing market history remains unavailable.
+
+#### Review
+
+- The generated migration compiled on the hosted PostgreSQL schema and the bound rollback-only pgTAP rehearsal completed `1..17`; a post-check confirmed the new function, temporary feature bars, and pgTAP extension were all absent afterward.
+- Focused pure/application verification passes in the clean workspace (4 files / 30 tests plus strict TypeScript). The complete application gate is green: Prettier, zero-warning ESLint, strict TypeScript, 42 Vitest files / 282 tests, the PAPER TRADING ONLY safety scan, and the Next.js 16.3 production build. The repository-pinned pnpm download wrapper stalled after the bundled pnpm 11 tried to replace the mirror's dependency tree, so the same six scripts were executed directly with the already installed project binaries. Database CI, hosted type/advisor reconciliation, browser/Preview verification, and publication remain pending.
+
 ### Owner-triggered Alpaca IEX ingestion
 
 - [x] Harden the data-only Alpaca HTTP adapter around the exact `data.alpaca.markets` quote and stock-bar endpoints with five-symbol bounds, raw/as-of historical semantics, pagination, byte/page/record limits, redirect refusal, per-request and aggregate timeouts, exact decimal parsing, provider request IDs, and sanitized typed failures.

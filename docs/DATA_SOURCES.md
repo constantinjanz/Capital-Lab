@@ -24,6 +24,8 @@ Market-calendar population, durable decision-cycle wiring, remote scheduling, an
 
 The hosted market screen reads one database-stamped snapshot and exposes separate explicit forms for source lifecycle and manual ingestion only when the reviewed manifest attests. It labels persisted synthetic sources and leaves missing quote, bar, current-day session, or health values unavailable. Provider health is described as a past observation rather than a live status unless a separate freshness policy is introduced. Loading the page never contacts Alpaca or another external provider; only the enabled owner-submitted batch action can do so.
 
+The same read-only snapshot supplies bounded deterministic feature inputs: at most 21 completed one-minute logical bars per configured instrument/source after point-in-time revision collapse. `market-technical-v1` derives exact-string spread, return, relative-volume, realized-volatility, SMA-distance, and typical-price-VWAP-distance values in normal code. Feature generation performs no provider request, persists no duplicate financial fact, and does not invoke a scheduler, model, order, fill, or ledger path. Missing or non-contiguous history remains visibly unavailable.
+
 ## Public information
 
 Allowlisted import/connector definitions exist for SEC EDGAR, Federal Reserve, BLS, White House releases, explicitly configured company IR feeds, and licensed news. Connectors require HTTPS, a declared user agent, rate limits, licensing/retention metadata, and one fixed origin; discovered links are not crawled automatically.

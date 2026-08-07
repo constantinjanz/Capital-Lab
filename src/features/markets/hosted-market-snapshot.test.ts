@@ -132,6 +132,7 @@ function map(
     memberRows?: readonly unknown[]
     sourceIds?: readonly string[]
     instrumentRows?: readonly unknown[]
+    featureBarRows?: readonly unknown[]
     sessionRows?: readonly unknown[]
     healthRows?: readonly unknown[]
   } = {},
@@ -143,6 +144,7 @@ function map(
     memberRows: overrides.memberRows ?? [memberRow],
     sourceIds: overrides.sourceIds ?? [sourceId],
     instrumentRows: overrides.instrumentRows ?? [instrumentRow],
+    featureBarRows: overrides.featureBarRows ?? [instrumentRow],
     sessionRows: overrides.sessionRows ?? [sessionRow],
     healthRows: overrides.healthRows ?? [healthRow],
   })
@@ -159,6 +161,14 @@ describe('mapHostedMarketSnapshot', () => {
       '1234567890123456.123456789012',
     )
     expect(snapshot.sources[0]?.health?.status).toBe('healthy')
+    expect(snapshot.instruments[0]?.feeds[0]?.features).toMatchObject({
+      version: 'market-technical-v1',
+      observedBarCount: 1,
+      contiguousBarCount: 1,
+      spreadAbsolute: '0.1',
+      return1m: null,
+      relativeVolume20: null,
+    })
     expect(deriveHostedMarketSessionState(snapshot)).toMatchObject({
       state: 'open',
       label: 'XNAS session open',
@@ -210,6 +220,7 @@ describe('mapHostedMarketSnapshot', () => {
       memberRows: [],
       sourceIds: [],
       instrumentRows: [],
+      featureBarRows: [],
       sessionRows: [],
       healthRows: [],
     })
@@ -299,10 +310,28 @@ describe('mapHostedMarketSnapshot', () => {
       sourceIds: [],
       healthRows: [],
       instrumentRows: [unconfiguredRow],
+      featureBarRows: [],
     })
 
     expect(snapshot.instruments[0]?.feeds).toEqual([
-      { sourceId: null, quote: null, bar: null },
+      {
+        sourceId: null,
+        quote: null,
+        bar: null,
+        features: {
+          version: 'market-technical-v1',
+          observedBarCount: 0,
+          contiguousBarCount: 0,
+          spreadAbsolute: null,
+          spreadBps: null,
+          return1m: null,
+          return5m: null,
+          relativeVolume20: null,
+          realizedVolatility5m: null,
+          distanceFromSma5: null,
+          distanceFromTypicalPriceVwap20: null,
+        },
+      },
     ])
   })
 
@@ -428,6 +457,34 @@ describe('mapHostedMarketSnapshot', () => {
         instrumentRows: [{ ...instrumentRow, bar_timeframe: '5m' }],
       }),
     ).toThrow('unexpected bar timeframe')
+  })
+
+  it('rejects feature inputs outside the frozen feed or inconsistent with its latest bar', () => {
+    expect(() =>
+      map({
+        featureBarRows: [
+          {
+            ...instrumentRow,
+            source_id: '30000000-0000-4000-8000-000000000099',
+          },
+        ],
+      }),
+    ).toThrow('outside the snapshot scope')
+
+    expect(() =>
+      map({
+        featureBarRows: [
+          {
+            ...instrumentRow,
+            bar_id: '60000000-0000-4000-8000-000000000099',
+          },
+        ],
+      }),
+    ).toThrow('disagree with the current completed bar')
+
+    expect(() =>
+      map({ featureBarRows: [instrumentRow, instrumentRow] }),
+    ).toThrow('duplicate feature-bar ids')
   })
 
   it('requires current-day calendar evidence before deriving session state', () => {

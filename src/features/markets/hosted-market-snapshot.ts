@@ -3,6 +3,10 @@ import {
   requireNonNegative,
   requirePositive,
 } from '@/domain/financial/decimal'
+import {
+  computeDeterministicMarketFeatures,
+  type DeterministicMarketFeatures,
+} from '@/domain/market-data/features'
 import type { Tone } from '@/lib/mock/types'
 
 const UUID_PATTERN =
@@ -100,6 +104,7 @@ export interface HostedMarketInstrumentFeed {
   sourceId: string | null
   quote: HostedMarketQuote | null
   bar: HostedMarketBar | null
+  features: DeterministicMarketFeatures
 }
 
 export interface HostedMarketInstrument {
@@ -601,6 +606,8 @@ function mapInstrumentRow(
   if (activeFrom !== null && activeTo !== null) {
     assertBefore(activeFrom, activeTo, 'instrument active window')
   }
+  const quote = mapQuote(source, decisionAt, sourceId !== null)
+  const bar = mapBar(source, decisionAt, sourceId !== null)
 
   return {
     instrument: {
@@ -635,8 +642,12 @@ function mapInstrumentRow(
     source: mappedSource,
     feed: {
       sourceId,
-      quote: mapQuote(source, decisionAt, sourceId !== null),
-      bar: mapBar(source, decisionAt, sourceId !== null),
+      quote,
+      bar,
+      features: computeDeterministicMarketFeatures({
+        quote: { bid: quote?.bidPrice ?? null, ask: quote?.askPrice ?? null },
+        bars: [],
+      }),
     },
   }
 }
@@ -902,6 +913,97 @@ function mapInstruments(
   )
 }
 
+function featureFeedKey(instrumentId: string, sourceId: string): string {
+  return `${instrumentId}:${sourceId}`
+}
+
+function attachDeterministicFeatures(
+  values: readonly unknown[],
+  ownerId: string,
+  decisionAt: string,
+  instruments: readonly HostedMarketInstrument[],
+): void {
+  const feeds = new Map<
+    string,
+    {
+      feed: HostedMarketInstrumentFeed
+    }
+  >()
+  for (const instrument of instruments) {
+    for (const feed of instrument.feeds) {
+      if (feed.sourceId === null) continue
+      feeds.set(featureFeedKey(instrument.id, feed.sourceId), {
+        feed,
+      })
+    }
+  }
+
+  const barsByFeed = new Map<string, HostedMarketBar[]>()
+  const seenBarIds = new Set<string>()
+  const seenLogicalBars = new Set<string>()
+  for (const value of values) {
+    const source = row(value, 'feature-bar row')
+    if (uuid(source.owner_id, 'feature-bar owner id') !== ownerId) {
+      throw new Error('Hosted market feature bars crossed their owner boundary')
+    }
+    assertSameInstant(source.decision_at, decisionAt)
+    const instrumentId = uuid(source.instrument_id, 'feature-bar instrument id')
+    const sourceId = uuid(source.source_id, 'feature-bar source id')
+    const key = featureFeedKey(instrumentId, sourceId)
+    if (!feeds.has(key)) {
+      throw new Error('Hosted market feature bar is outside the snapshot scope')
+    }
+    const bar = mapBar(source, decisionAt, true)
+    if (bar === null) {
+      throw new Error('Hosted market feature input is missing its bar')
+    }
+    if (seenBarIds.has(bar.id)) {
+      throw new Error('Hosted market snapshot has duplicate feature-bar ids')
+    }
+    seenBarIds.add(bar.id)
+    const logicalKey = `${key}:${bar.startsAt}`
+    if (seenLogicalBars.has(logicalKey)) {
+      throw new Error('Hosted market snapshot has duplicate feature-bar starts')
+    }
+    seenLogicalBars.add(logicalKey)
+    const bars = barsByFeed.get(key) ?? []
+    bars.push(bar)
+    if (bars.length > 21) {
+      throw new Error('Hosted market snapshot exceeds the feature-bar limit')
+    }
+    barsByFeed.set(key, bars)
+  }
+
+  for (const [key, scoped] of feeds) {
+    const bars = (barsByFeed.get(key) ?? []).toSorted(
+      (left, right) => Date.parse(right.endsAt) - Date.parse(left.endsAt),
+    )
+    if (
+      (scoped.feed.bar === null && bars.length > 0) ||
+      (scoped.feed.bar !== null && bars[0]?.id !== scoped.feed.bar.id)
+    ) {
+      throw new Error(
+        'Hosted market feature inputs disagree with the current completed bar',
+      )
+    }
+    scoped.feed.features = computeDeterministicMarketFeatures({
+      quote: {
+        bid: scoped.feed.quote?.bidPrice ?? null,
+        ask: scoped.feed.quote?.askPrice ?? null,
+      },
+      bars: bars.map((bar) => ({
+        startsAt: bar.startsAt,
+        endsAt: bar.endsAt,
+        open: bar.openPrice,
+        high: bar.highPrice,
+        low: bar.lowPrice,
+        close: bar.closePrice,
+        volume: bar.volume,
+      })),
+    })
+  }
+}
+
 function mapSessions(
   values: readonly unknown[],
   ownerId: string,
@@ -1099,6 +1201,7 @@ export function mapHostedMarketReadResult(
   const payload = row((value as unknown[])[0], 'market snapshot payload')
   if (
     !Array.isArray(payload.instrument_rows) ||
+    !Array.isArray(payload.feature_bar_rows) ||
     !Array.isArray(payload.session_rows) ||
     !Array.isArray(payload.health_rows)
   ) {
@@ -1111,6 +1214,7 @@ export function mapHostedMarketReadResult(
     memberRows: scope.memberRows,
     sourceIds: scope.sourceIds,
     instrumentRows: payload.instrument_rows,
+    featureBarRows: payload.feature_bar_rows,
     sessionRows: payload.session_rows,
     healthRows: payload.health_rows,
   })
@@ -1123,6 +1227,7 @@ export function mapHostedMarketSnapshot(input: {
   memberRows: readonly unknown[]
   sourceIds: readonly string[]
   instrumentRows: readonly unknown[]
+  featureBarRows: readonly unknown[]
   sessionRows: readonly unknown[]
   healthRows: readonly unknown[]
 }): HostedMarketSnapshot {
@@ -1145,6 +1250,12 @@ export function mapHostedMarketSnapshot(input: {
     decisionAt,
     universe?.instrumentIds ?? [],
     sources,
+  )
+  attachDeterministicFeatures(
+    input.featureBarRows,
+    ownerId,
+    decisionAt,
+    instruments,
   )
   const exchanges = new Map(
     instruments.map((instrument) => [

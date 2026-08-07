@@ -247,4 +247,54 @@ describe('HostedMarketSetupControl', () => {
       screen.getByRole('button', { name: 'Fetch reviewed IEX batch' }),
     ).toBeVisible()
   })
+
+  it('renders exact deterministic feature values and truthful history coverage', () => {
+    const sourceId = configuredSnapshot.sources[0]!.id
+    const featureSnapshot: HostedMarketSnapshot = {
+      ...configuredSnapshot,
+      instruments: configuredSnapshot.instruments.map((instrument, index) =>
+        index === 0
+          ? {
+              ...instrument,
+              feeds: [
+                {
+                  sourceId,
+                  quote: null,
+                  bar: null,
+                  features: {
+                    version: 'market-technical-v1',
+                    observedBarCount: 21,
+                    contiguousBarCount: 21,
+                    spreadAbsolute: '1',
+                    spreadBps: '90.909090909091',
+                    return1m: '0.008403361345',
+                    return5m: '0.04347826087',
+                    relativeVolume20: '1.095890410959',
+                    realizedVolatility5m: '0.019115881796',
+                    distanceFromSma5: '0.016949152542',
+                    distanceFromTypicalPriceVwap20: '0.083023645199',
+                  },
+                },
+              ],
+            }
+          : instrument,
+      ),
+    }
+
+    render(
+      <HostedMarketsView
+        snapshot={featureSnapshot}
+        configurationOperationId={operationId}
+        {...hostedIngestionProps}
+      />,
+    )
+
+    expect(screen.getByText('Technical feature vector')).toBeVisible()
+    expect(screen.getByText('90.909090909091')).toBeVisible()
+    expect(screen.getByText('0.083023645199')).toBeVisible()
+    expect(screen.getByText('21/21')).toBeVisible()
+    expect(
+      screen.getByText(/missing minute or insufficient exact history/i),
+    ).toBeVisible()
+  })
 })
