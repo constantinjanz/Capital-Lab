@@ -82,12 +82,12 @@ Acceptance: the ledger reconciles; impossible/stale/lookahead fills are rejected
 - [x] Define market/news/research provider ports and deterministic mock implementations.
 - [x] Add a direct Alpaca Market Data HTTP adapter skeleton restricted to the data host and stock latest-quote and historical-bar endpoints; it has no broker client or order method.
 - [x] Add one owner-reviewed hosted reference manifest for XNAS/ARCX and SPY/QQQ/AAPL/MSFT/NVDA with exact Alpaca aliases, locked append-only owner universe versions, and one initially disabled Alpaca IEX source/policy. An exact current version is reused; a later unrelated current universe causes a new immutable version to be appended without changing separately reviewed lifecycle state. Configuration stores no provider credential and creates no observation, session, ingestion, or scheduler evidence.
-- [ ] Harden the Alpaca adapter for hosted use with raw/as-of historical semantics, pagination, redirect/timeout policy, bounded input and response validation, provider request IDs, persistence-stamped availability times, and sanitized typed failures.
+- [x] Harden the Alpaca adapter for hosted use with raw/as-of historical semantics, pagination, redirect/timeout policy, bounded input and response validation, provider request IDs, persistence-stamped availability times, and sanitized typed failures.
 - [x] Add allowlisted SEC/Fed/BLS/White House/company-RSS adapter scaffolds with explicit user-agent, rate-limit, provenance, retention, and sanitization policy.
 - [x] Add disabled official social-provider interface; no authenticated scraping.
 - [ ] Add ingestion idempotency, revision history, source health, content hashing/deduplication, and deterministic features.
 
-Acceptance: deterministic mock mode remains the default. Initial application of the hosted manifest performs no provider request and creates Alpaca disabled with zero market observations; later universe-only application preserves rather than changes activation state. Any owner-triggered ingestion, live calendar integration, scheduler finalization, or production activation is a separate reviewed slice; before then, every configured hosted path must fail closed and the forbidden endpoint scan must reject brokerage paths.
+Acceptance: deterministic mock mode remains the default. Initial application of the hosted manifest performs no provider request and creates Alpaca disabled with zero market observations; later universe-only application preserves rather than changes activation state. Manual owner-triggered IEX ingestion is a separate explicit action with server-only credentials, bounded provider access, idempotent persistence, and no scheduler/agent/order side effects. Live calendar integration, scheduler finalization, deterministic feature generation, and production activation remain separate reviewed slices.
 
 ### Phase 5 — dashboard and control plane
 

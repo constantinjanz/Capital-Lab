@@ -54,15 +54,6 @@ const serverEnvironmentSchema = z
         message: 'Both Alpaca Market Data credential values are required',
       })
     }
-    if (
-      value.MARKET_DATA_PROVIDER === 'alpaca' &&
-      !alpacaCredentials.every(Boolean)
-    ) {
-      context.addIssue({
-        code: 'custom',
-        message: 'Alpaca mode requires data-only API credentials',
-      })
-    }
     if (value.SCHEDULER_PROVIDER !== 'manual' && !value.CRON_SECRET) {
       context.addIssue({
         code: 'custom',
