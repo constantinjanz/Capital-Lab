@@ -10,15 +10,16 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 - [x] Add SQL contract coverage for valid owner creation, anonymous/non-owner denial, invalid input rollback, and persisted read-model precision.
 - [x] Add a protected Next.js Server Action and hosted form that validate input, create the draft, surface safe field errors, and redirect to the persisted detail route.
 - [x] Preserve the existing deterministic mock flow and update hosted list/detail copy so the new write boundary is truthful.
-- [ ] Apply the migration to Capital-Lab, regenerate/check database types, run advisors, and verify the owner-only hosted browser journey.
-- [ ] Run formatting, lint, typecheck, unit, database, browser, audit, and production-build gates; document the review results before publishing.
+- [x] Apply the migration to Capital-Lab, regenerate/check database types, run advisors, and verify the hosted owner authorization and protected browser boundaries.
+- [x] Run formatting, lint, typecheck, unit, database, browser, audit, and production-build gates; document the review results before publishing.
 
 #### Review
 
 - Hosted creation and idempotent-replay migrations applied after rollback-only validation. A create/edit/retry verification returned the original UUID with one lifecycle event and one audit record, then rolled back; the project remains at zero experiments.
 - Focused boundary tests: 4 files and 23 tests passed. Full application suite: 26 files and 92 tests passed. Lint, typecheck, paper-only safety scan, production build, production dependency audit, and four mock Playwright journeys passed.
 - Hosted generated types match the checked-in RPC contract. Authenticated execution remains granted, anonymous execution is denied, and no verification experiment, idempotency row, or audit row remains.
-- Post-migration security advisors remain unchanged: only the Supabase Pro-plan leaked-password warning is open. Preview and CI/database review remain pending.
+- Post-migration security advisors remain unchanged: only the Supabase Pro-plan leaked-password warning is open.
+- GitHub PR #4 passed both application, database, and browser jobs for the push and pull-request events. Vercel preview `dpl_82Gowd43b66Z9NzrPMSbe6c3ajMT` is READY at the reviewed commit with no runtime errors; the owner login rendered and an unauthenticated experiment request failed closed. No privileged sign-in link was generated and no permanent draft was created for visual testing.
 
 ### Owner lock and hosted experiment detail
 
