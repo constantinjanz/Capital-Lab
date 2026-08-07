@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import type { Metadata } from 'next'
 
 import {
@@ -23,5 +25,10 @@ export default async function ExperimentsPage() {
   if (workspace.source !== 'supabase') {
     throw new Error('Hosted experiments resolved the wrong data source')
   }
-  return <HostedExperimentsView experiments={workspace.experiments} />
+  return (
+    <HostedExperimentsView
+      experiments={workspace.experiments}
+      draftOperationId={randomUUID()}
+    />
+  )
 }

@@ -138,23 +138,27 @@ export function ExperimentsView({
 
 export function HostedExperimentsView({
   experiments,
+  draftOperationId,
 }: {
   experiments: HostedExperiment[]
+  draftOperationId: string
 }) {
   return (
     <div className="page-stack">
       <PageHeader
         eyebrow="Hosted control plane"
         title="Experiments"
-        description="Read-only owner-scoped lifecycle and control state from Supabase."
-        actions={<NewExperimentButton mode="supabase" />}
+        description="Owner-scoped draft creation, lifecycle, and control state persisted in Supabase."
+        actions={
+          <NewExperimentButton mode="supabase" operationId={draftOperationId} />
+        }
       />
       <DataModeNotice compact mode="supabase" />
       {experiments.length === 0 ? (
         <EmptyState
           icon={Database}
           title="No hosted experiments yet"
-          description="The owner workspace is connected. Draft creation remains locked until the reviewed write use case is added."
+          description="The owner workspace is connected. Create a paper-only draft with disabled scheduler and agent controls."
         />
       ) : (
         <div className="experiment-cards">
@@ -213,8 +217,10 @@ export function HostedExperimentsView({
               </dl>
               <div className="experiment-card__footer">
                 <span>
-                  <LockKeyhole size={14} aria-hidden="true" /> Hosted writes
-                  locked
+                  <LockKeyhole size={14} aria-hidden="true" />
+                  {experiment.lifecycleStatus === 'draft'
+                    ? 'Draft editing not yet available'
+                    : 'Versioned rules locked'}
                 </span>
                 <Link
                   href={`/experiments/${experiment.id}`}
@@ -227,11 +233,11 @@ export function HostedExperimentsView({
           ))}
         </div>
       )}
-      <Panel eyebrow="Read boundary" title="Financial precision preserved">
+      <Panel eyebrow="Write boundary" title="Safe draft defaults">
         <p className="safe-note">
-          <ShieldCheck size={14} aria-hidden="true" /> Financial fields are not
-          read through generated JavaScript number types. Exact decimal-string
-          views will be added before portfolio data is shown.
+          <ShieldCheck size={14} aria-hidden="true" /> New drafts start with an
+          exact EUR 100000.00000000 initial-capital setting. Agent, scheduler,
+          and emergency controls remain disabled until later reviewed actions.
         </p>
       </Panel>
     </div>
