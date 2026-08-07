@@ -12,13 +12,14 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 - [x] Route `/markets` by authenticated data mode and add a separate hosted view with truthful unconfigured/empty/current-day-session/provider-observation states while preserving the deterministic mock page byte-for-byte.
 - [x] Apply and verify the additive migration with rollback-only hosted fixtures, regenerate/check database types, review Supabase advisors, and confirm the empty project remains unchanged.
 - [x] Run formatting, lint, strict typecheck, focused/full unit and database tests, paper-only/secret scans, the production build, and all mock Playwright journeys.
-- [ ] Publish through a reviewed GitHub PR, verify CI and a protected Vercel Preview, and merge only if every gate is green.
+- [x] Publish through a reviewed GitHub PR, verify CI and a protected Vercel Preview, and merge only if every gate is green.
 
 #### Review
 
 - The additive hosted market migration was exercised against rollback-only fixtures with `1..73` pgTAP assertions, then applied as hosted migration `20260807140239`. The owner receives one database-stamped aggregate row, non-owners fail with `42501`, all five RPCs remain stable security invokers with fixed empty search paths, and anonymous/PUBLIC execution is revoked.
 - The hosted database remains empty across universes, instruments, sources, quotes, bars, sessions, and health evidence. Generated types were reconciled with SQL-correct nullable fields. Supabase security advisors remain unchanged with only leaked-password protection disabled; performance advisors contain only expected unused-index information on the empty database.
 - Full application verification passed: Prettier, ESLint with zero warnings, strict TypeScript, 29 Vitest files / 144 tests, the paper-only and literal-secret scans, the Next.js production build, four mock Playwright journeys, a visual `/markets` browser check with no overlay/console/page errors, and the production dependency audit with no known vulnerabilities.
+- GitHub PR #7 passed the application, database, and browser jobs for both push and pull-request events at application commit `7acb0a0`. Protected Vercel Preview `dpl_Dkcm52JGA3zmznHajSwGwA8FVCp7` is READY at that exact commit after a cold-cache build; health is paper-only with the external market-data feed and agent disabled, the Supabase owner form renders with bootstrap absent, unauthenticated `/markets` access fails closed, and browser/runtime error logs are empty. Production remains unpromoted.
 
 ### Hosted draft metadata editing
 
