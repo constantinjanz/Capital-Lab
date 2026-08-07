@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import type { HostedExperimentDetailRow } from './hosted-experiment-detail'
-import { mapHostedExperimentDetail } from './hosted-experiment-detail'
+import {
+  isHostedDraftMetadataEditable,
+  mapHostedExperimentDetail,
+} from './hosted-experiment-detail'
 
 const detailRow: HostedExperimentDetailRow = {
   id: 'experiment-id',
@@ -38,6 +41,7 @@ const detailRow: HostedExperimentDetailRow = {
   knowledge_corpus_version_id: null,
   budget_policy_id: null,
   locked_version_created_at: '2026-08-03T13:29:00.000Z',
+  draft_revision: '9007199254740993',
 }
 
 describe('mapHostedExperimentDetail', () => {
@@ -49,6 +53,7 @@ describe('mapHostedExperimentDetail', () => {
       '9007199254740993.12345678',
     )
     expect(detail.controls?.stateVersion).toBe('9007199254740993')
+    expect(detail.draftRevision).toBe('9007199254740993')
   })
 
   it('maps owner-scoped lifecycle events in database order', () => {
@@ -76,6 +81,46 @@ describe('mapHostedExperimentDetail', () => {
     expect(() =>
       mapHostedExperimentDetail({ ...detailRow, scheduler_enabled: null }, []),
     ).toThrow('partial control state')
+  })
+
+  it('fails closed when the draft revision is not a canonical integer', () => {
+    expect(() =>
+      mapHostedExperimentDetail({ ...detailRow, draft_revision: '01' }, []),
+    ).toThrow('invalid draft revision')
+  })
+
+  it('exposes editing only for an unlocked draft with disabled controls', () => {
+    const draft = mapHostedExperimentDetail(
+      {
+        ...detailRow,
+        lifecycle_status: 'draft',
+        execution_mode: null,
+        starts_at: null,
+        ends_at: null,
+        locked_at: null,
+        locked_version_id: null,
+        locked_version: null,
+        locked_initial_capital: null,
+        locked_base_currency: null,
+        locked_objective: null,
+        locked_version_content_hash: null,
+        market_universe_id: null,
+        simulator_config_version_id: null,
+        risk_config_version_id: null,
+        model_routing_version_id: null,
+        data_source_config_version_id: null,
+        locked_version_created_at: null,
+      },
+      [],
+    )
+
+    expect(isHostedDraftMetadataEditable(draft)).toBe(true)
+    expect(
+      isHostedDraftMetadataEditable({
+        ...draft,
+        controls: { ...draft.controls!, schedulerEnabled: true },
+      }),
+    ).toBe(false)
   })
 
   it('fails closed for unsupported lifecycle states', () => {

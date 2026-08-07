@@ -40,6 +40,7 @@ export interface HostedExperimentDetailRow {
   knowledge_corpus_version_id: string | null
   budget_policy_id: string | null
   locked_version_created_at: string | null
+  draft_revision: string | null
 }
 
 export interface HostedExperimentStatusEventRow {
@@ -69,6 +70,7 @@ export interface HostedExperimentDetail {
   lockedVersionId: string | null
   createdAt: string
   updatedAt: string
+  draftRevision: string
   controls: {
     schedulerEnabled: boolean
     agentEnabled: boolean
@@ -97,6 +99,25 @@ export interface HostedExperimentDetail {
   }>
 }
 
+export function isHostedDraftMetadataEditable(
+  experiment: HostedExperimentDetail,
+): boolean {
+  return (
+    experiment.lifecycleStatus === 'draft' &&
+    experiment.executionMode === null &&
+    experiment.startsAt === null &&
+    experiment.endsAt === null &&
+    experiment.pauseReason === null &&
+    experiment.lockedAt === null &&
+    experiment.lockedVersionId === null &&
+    experiment.controls !== null &&
+    !experiment.controls.schedulerEnabled &&
+    !experiment.controls.agentEnabled &&
+    !experiment.controls.emergencyPaused &&
+    experiment.controls.pauseReason === null
+  )
+}
+
 const lifecycleStatuses = new Set<HostedLifecycleStatus>([
   'draft',
   'starting',
@@ -119,6 +140,14 @@ const eventActors = new Set<HostedStatusEventActor>([
 function required(value: string | null, field: string): string {
   if (!value) throw new Error(`Hosted experiment detail is missing ${field}`)
   return value
+}
+
+function exactNonnegativeInteger(value: string | null, field: string): string {
+  const result = required(value, field)
+  if (!/^(0|[1-9][0-9]*)$/.test(result)) {
+    throw new Error(`Hosted experiment detail has an invalid ${field}`)
+  }
+  return result
 }
 
 function lifecycleStatus(value: string | null): HostedLifecycleStatus {
@@ -194,6 +223,10 @@ export function mapHostedExperimentDetail(
     lockedVersionId: row.locked_version_id,
     createdAt: required(row.created_at, 'created timestamp'),
     updatedAt: required(row.updated_at, 'updated timestamp'),
+    draftRevision: exactNonnegativeInteger(
+      row.draft_revision,
+      'draft revision',
+    ),
     controls: hasControls
       ? {
           schedulerEnabled: row.scheduler_enabled as boolean,

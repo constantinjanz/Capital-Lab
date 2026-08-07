@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
@@ -24,5 +26,10 @@ export default async function ExperimentPage({
 
   const experiment = await readHostedExperimentDetail(owner.id, id)
   if (!experiment) notFound()
-  return <HostedExperimentDetailView experiment={experiment} />
+  return (
+    <HostedExperimentDetailView
+      experiment={experiment}
+      draftOperationId={randomUUID()}
+    />
+  )
 }
