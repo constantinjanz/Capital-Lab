@@ -82,6 +82,13 @@ export type Database = {
             foreignKeyName: 'agent_decisions_experiment_id_owner_id_fkey'
             columns: ['experiment_id', 'owner_id']
             isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'agent_decisions_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: false
             referencedRelation: 'experiments'
             referencedColumns: ['id', 'owner_id']
           },
@@ -147,6 +154,13 @@ export type Database = {
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: 'agent_runs_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
           {
             foreignKeyName: 'agent_runs_experiment_id_owner_id_fkey'
             columns: ['experiment_id', 'owner_id']
@@ -721,6 +735,13 @@ export type Database = {
             foreignKeyName: 'decision_context_snapshots_experiment_id_owner_id_fkey'
             columns: ['experiment_id', 'owner_id']
             isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'decision_context_snapshots_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: false
             referencedRelation: 'experiments'
             referencedColumns: ['id', 'owner_id']
           },
@@ -1147,6 +1168,13 @@ export type Database = {
             foreignKeyName: 'experiment_benchmarks_experiment_id_owner_id_fkey'
             columns: ['experiment_id', 'owner_id']
             isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'experiment_benchmarks_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: false
             referencedRelation: 'experiments'
             referencedColumns: ['id', 'owner_id']
           },
@@ -1198,6 +1226,13 @@ export type Database = {
             foreignKeyName: 'experiment_controls_experiment_id_owner_id_fkey'
             columns: ['experiment_id', 'owner_id']
             isOneToOne: true
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'experiment_controls_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: true
             referencedRelation: 'experiments'
             referencedColumns: ['id', 'owner_id']
           },
@@ -1241,6 +1276,13 @@ export type Database = {
           to_status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: 'experiment_status_events_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
           {
             foreignKeyName: 'experiment_status_events_experiment_id_owner_id_fkey'
             columns: ['experiment_id', 'owner_id']
@@ -1331,6 +1373,13 @@ export type Database = {
             columns: ['data_source_config_version_id', 'owner_id']
             isOneToOne: false
             referencedRelation: 'configuration_versions'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'experiment_versions_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
             referencedColumns: ['id', 'owner_id']
           },
           {
@@ -2627,6 +2676,13 @@ export type Database = {
             foreignKeyName: 'memory_summaries_experiment_id_owner_id_fkey'
             columns: ['experiment_id', 'owner_id']
             isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'memory_summaries_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: false
             referencedRelation: 'experiments'
             referencedColumns: ['id', 'owner_id']
           },
@@ -2738,6 +2794,13 @@ export type Database = {
             columns: ['agent_run_id', 'owner_id']
             isOneToOne: false
             referencedRelation: 'agent_runs'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'model_routing_events_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
             referencedColumns: ['id', 'owner_id']
           },
           {
@@ -3053,6 +3116,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: 'pattern_hypotheses_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
           {
             foreignKeyName: 'pattern_hypotheses_experiment_id_owner_id_fkey'
             columns: ['experiment_id', 'owner_id']
@@ -3378,6 +3448,13 @@ export type Database = {
             foreignKeyName: 'risk_events_experiment_id_owner_id_fkey'
             columns: ['experiment_id', 'owner_id']
             isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'risk_events_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: false
             referencedRelation: 'experiments'
             referencedColumns: ['id', 'owner_id']
           },
@@ -3425,6 +3502,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: 'simulation_accounts_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
           {
             foreignKeyName: 'simulation_accounts_experiment_id_owner_id_fkey'
             columns: ['experiment_id', 'owner_id']
@@ -3478,6 +3562,13 @@ export type Database = {
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: 'simulator_runs_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
           {
             foreignKeyName: 'simulator_runs_experiment_id_owner_id_fkey'
             columns: ['experiment_id', 'owner_id']
@@ -3679,6 +3770,13 @@ export type Database = {
             foreignKeyName: 'strategy_assignments_experiment_id_owner_id_fkey'
             columns: ['experiment_id', 'owner_id']
             isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'strategy_assignments_experiment_id_owner_id_fkey'
+            columns: ['experiment_id', 'owner_id']
+            isOneToOne: false
             referencedRelation: 'experiments'
             referencedColumns: ['id', 'owner_id']
           },
@@ -3784,63 +3882,6 @@ export type Database = {
       }
     }
     Views: {
-      experiment_detail_read_view: {
-        Row: {
-          agent_enabled: boolean | null
-          agent_prompt_version_id: string | null
-          base_currency: string | null
-          budget_policy_id: string | null
-          control_created_at: string | null
-          control_pause_reason: string | null
-          control_state_version: string | null
-          control_updated_at: string | null
-          created_at: string | null
-          data_source_config_version_id: string | null
-          draft_revision: string | null
-          emergency_paused: boolean | null
-          ends_at: string | null
-          execution_mode: string | null
-          id: string | null
-          initial_capital: string | null
-          knowledge_corpus_version_id: string | null
-          lifecycle_pause_reason: string | null
-          lifecycle_status: string | null
-          locked_at: string | null
-          locked_base_currency: string | null
-          locked_initial_capital: string | null
-          locked_objective: string | null
-          locked_version: number | null
-          locked_version_content_hash: string | null
-          locked_version_created_at: string | null
-          locked_version_id: string | null
-          market_universe_id: string | null
-          model_routing_version_id: string | null
-          name: string | null
-          objective: string | null
-          owner_id: string | null
-          risk_config_version_id: string | null
-          scheduler_enabled: boolean | null
-          simulator_config_version_id: string | null
-          starts_at: string | null
-          updated_at: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'experiments_locked_version_fk'
-            columns: ['locked_version_id', 'owner_id']
-            isOneToOne: false
-            referencedRelation: 'experiment_versions'
-            referencedColumns: ['id', 'owner_id']
-          },
-          {
-            foreignKeyName: 'experiments_owner_id_fkey'
-            columns: ['owner_id']
-            isOneToOne: false
-            referencedRelation: 'app_users'
-            referencedColumns: ['user_id']
-          },
-        ]
-      }
       ai_budget_status_view: {
         Row: {
           budget_policy_id: string | null
@@ -3998,6 +4039,63 @@ export type Database = {
         }
         Relationships: []
       }
+      experiment_detail_read_view: {
+        Row: {
+          agent_enabled: boolean | null
+          agent_prompt_version_id: string | null
+          base_currency: string | null
+          budget_policy_id: string | null
+          control_created_at: string | null
+          control_pause_reason: string | null
+          control_state_version: string | null
+          control_updated_at: string | null
+          created_at: string | null
+          data_source_config_version_id: string | null
+          draft_revision: string | null
+          emergency_paused: boolean | null
+          ends_at: string | null
+          execution_mode: string | null
+          id: string | null
+          initial_capital: string | null
+          knowledge_corpus_version_id: string | null
+          lifecycle_pause_reason: string | null
+          lifecycle_status: string | null
+          locked_at: string | null
+          locked_base_currency: string | null
+          locked_initial_capital: string | null
+          locked_objective: string | null
+          locked_version: number | null
+          locked_version_content_hash: string | null
+          locked_version_created_at: string | null
+          locked_version_id: string | null
+          market_universe_id: string | null
+          model_routing_version_id: string | null
+          name: string | null
+          objective: string | null
+          owner_id: string | null
+          risk_config_version_id: string | null
+          scheduler_enabled: boolean | null
+          simulator_config_version_id: string | null
+          starts_at: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'experiments_locked_version_fk'
+            columns: ['locked_version_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiment_versions'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'experiments_owner_id_fkey'
+            columns: ['owner_id']
+            isOneToOne: false
+            referencedRelation: 'app_users'
+            referencedColumns: ['user_id']
+          },
+        ]
+      }
       scheduler_health_view: {
         Row: {
           error_class: string | null
@@ -4028,17 +4126,6 @@ export type Database = {
         }
         Returns: Json
       }
-      bootstrap_first_owner: { Args: never; Returns: Json }
-      configure_hosted_market_manifest: {
-        Args: { p_operation_id: string }
-        Returns: {
-          operation_id: string
-          replayed: boolean
-          source_id: string
-          status: string
-          universe_id: string
-        }[]
-      }
       begin_manual_hosted_market_ingestion: {
         Args: {
           p_operation_id: string
@@ -4057,6 +4144,7 @@ export type Database = {
           window_start: string
         }[]
       }
+      bootstrap_first_owner: { Args: never; Returns: Json }
       commit_manual_hosted_market_ingestion: {
         Args: {
           p_bars: Json
@@ -4078,22 +4166,18 @@ export type Database = {
           status: string
         }[]
       }
-      create_draft_experiment: {
-        Args: {
-          p_name: string
-          p_objective: string
-          p_operation_id: string
-        }
-        Returns: string
+      configure_hosted_market_manifest: {
+        Args: { p_operation_id: string }
+        Returns: {
+          operation_id: string
+          replayed: boolean
+          source_id: string
+          status: string
+          universe_id: string
+        }[]
       }
-      update_draft_experiment: {
-        Args: {
-          p_expected_revision: string
-          p_experiment_id: string
-          p_name: string
-          p_objective: string
-          p_operation_id: string
-        }
+      create_draft_experiment: {
+        Args: { p_name: string; p_objective: string; p_operation_id: string }
         Returns: string
       }
       event_revisions_as_of: {
@@ -4127,6 +4211,26 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      fail_manual_hosted_market_ingestion: {
+        Args: {
+          p_error_class: string
+          p_latency_ms: number
+          p_operation_id: string
+        }
+        Returns: {
+          error_class: string
+          finished_at: string
+          ingestion_run_id: string
+          operation_id: string
+          records_inserted: number
+          records_rejected: number
+          records_reused: number
+          records_seen: number
+          replayed: boolean
+          source_id: string
+          status: string
+        }[]
+      }
       knowledge_chunks_as_of: {
         Args: { p_as_of: string }
         Returns: {
@@ -4155,22 +4259,8 @@ export type Database = {
           isSetofReturn: true
         }
       }
-      market_snapshot_scope: {
-        Args: never
-        Returns: {
-          decision_at: string
-          member_rows: Json
-          owner_id: string
-          source_ids: string[]
-          universe_row: Json | null
-        }[]
-      }
-      fail_manual_hosted_market_ingestion: {
-        Args: {
-          p_error_class: string
-          p_latency_ms: number
-          p_operation_id: string
-        }
+      manual_hosted_market_ingestion_result: {
+        Args: { p_operation_id: string }
         Returns: {
           error_class: string
           finished_at: string
@@ -4180,25 +4270,9 @@ export type Database = {
           records_rejected: number
           records_reused: number
           records_seen: number
-          replayed: boolean
           source_id: string
+          started_at: string
           status: string
-        }[]
-      }
-      market_snapshot_read: {
-        Args: {
-          p_session_limit?: number
-          p_timeframe?: string
-        }
-        Returns: {
-          decision_at: string
-          health_rows: Json
-          instrument_rows: Json
-          member_rows: Json
-          owner_id: string
-          session_rows: Json
-          source_ids: string[]
-          universe_row: Json | null
         }[]
       }
       market_instrument_snapshot_at: {
@@ -4209,97 +4283,49 @@ export type Database = {
           p_timeframe: string
         }
         Returns: {
-          active_from: string | null
-          active_to: string | null
-          ask_price_text: string | null
-          ask_size_text: string | null
+          active_from: string
+          active_to: string
+          ask_price_text: string
+          ask_size_text: string
           asset_class: string
-          bar_available_at: string | null
-          bar_correction_state: string | null
-          bar_end: string | null
-          bar_first_seen_at: string | null
-          bar_id: string | null
-          bar_provider_event_at: string | null
-          bar_provider_received_at: string | null
-          bar_provider_record_key: string | null
-          bar_revision_no: number | null
-          bar_start: string | null
-          bar_timeframe: string | null
-          bid_price_text: string | null
-          bid_size_text: string | null
-          close_price_text: string | null
+          bar_available_at: string
+          bar_correction_state: string
+          bar_end: string
+          bar_first_seen_at: string
+          bar_id: string
+          bar_provider_event_at: string
+          bar_provider_received_at: string
+          bar_provider_record_key: string
+          bar_revision_no: number
+          bar_start: string
+          bar_timeframe: string
+          bid_price_text: string
+          bid_size_text: string
+          close_price_text: string
           currency: string
           decision_at: string
           exchange_id: string
           exchange_mic: string
           exchange_name: string
           exchange_timezone: string
-          high_price_text: string | null
+          high_price_text: string
           instrument_id: string
           instrument_name: string
           is_shortable: boolean
           is_tradable: boolean
-          low_price_text: string | null
-          open_price_text: string | null
+          low_price_text: string
+          open_price_text: string
           owner_id: string
           price_increment_text: string
           quantity_increment_text: string
-          quote_available_at: string | null
-          quote_correction_state: string | null
-          quote_first_seen_at: string | null
-          quote_id: string | null
-          quote_provider_event_at: string | null
-          quote_provider_received_at: string | null
-          quote_provider_record_key: string | null
-          quote_revision_no: number | null
-          source_code: string | null
-          source_id: string | null
-          source_is_enabled: boolean | null
-          source_is_mock: boolean | null
-          source_name: string | null
-          source_provider: string | null
-          source_type: string | null
-          symbol: string
-          volume_text: string | null
-        }[]
-      }
-      market_sessions_at: {
-        Args: {
-          p_decision_at: string
-          p_exchange_ids: string[]
-          p_limit_per_exchange?: number
-        }
-        Returns: {
-          calendar_source_code: string | null
-          calendar_source_id: string | null
-          calendar_source_name: string | null
-          closes_at: string | null
-          decision_at: string
-          exchange_id: string
-          exchange_mic: string
-          exchange_name: string
-          exchange_timezone: string
-          opens_at: string | null
-          owner_id: string
-          session_available_at: string
-          session_date: string
-          session_id: string
-          session_type: string
-          source_identifier: string
-        }[]
-      }
-      market_source_health_at: {
-        Args: { p_decision_at: string; p_source_ids: string[] }
-        Returns: {
-          checked_at: string | null
-          decision_at: string
-          error_class: string | null
-          health_available_at: string | null
-          health_id: string | null
-          health_status: string | null
-          last_success_at: string | null
-          latency_ms: number | null
-          owner_id: string
+          quote_available_at: string
+          quote_correction_state: string
+          quote_first_seen_at: string
+          quote_id: string
+          quote_provider_event_at: string
+          quote_provider_received_at: string
+          quote_provider_record_key: string
+          quote_revision_no: number
           source_code: string
           source_id: string
           source_is_enabled: boolean
@@ -4307,22 +4333,8 @@ export type Database = {
           source_name: string
           source_provider: string
           source_type: string
-        }[]
-      }
-      manual_hosted_market_ingestion_result: {
-        Args: { p_operation_id: string }
-        Returns: {
-          error_class: string | null
-          finished_at: string | null
-          ingestion_run_id: string
-          operation_id: string
-          records_inserted: number
-          records_rejected: number
-          records_reused: number
-          records_seen: number
-          source_id: string
-          started_at: string
-          status: string
+          symbol: string
+          volume_text: string
         }[]
       }
       market_quotes_as_of: {
@@ -4353,6 +4365,75 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      market_sessions_at: {
+        Args: {
+          p_decision_at: string
+          p_exchange_ids: string[]
+          p_limit_per_exchange?: number
+        }
+        Returns: {
+          calendar_source_code: string
+          calendar_source_id: string
+          calendar_source_name: string
+          closes_at: string
+          decision_at: string
+          exchange_id: string
+          exchange_mic: string
+          exchange_name: string
+          exchange_timezone: string
+          opens_at: string
+          owner_id: string
+          session_available_at: string
+          session_date: string
+          session_id: string
+          session_type: string
+          source_identifier: string
+        }[]
+      }
+      market_snapshot_read: {
+        Args: { p_session_limit?: number; p_timeframe?: string }
+        Returns: {
+          decision_at: string
+          health_rows: Json
+          instrument_rows: Json
+          member_rows: Json
+          owner_id: string
+          session_rows: Json
+          source_ids: string[]
+          universe_row: Json
+        }[]
+      }
+      market_snapshot_scope: {
+        Args: never
+        Returns: {
+          decision_at: string
+          member_rows: Json
+          owner_id: string
+          source_ids: string[]
+          universe_row: Json
+        }[]
+      }
+      market_source_health_at: {
+        Args: { p_decision_at: string; p_source_ids: string[] }
+        Returns: {
+          checked_at: string
+          decision_at: string
+          error_class: string
+          health_available_at: string
+          health_id: string
+          health_status: string
+          last_success_at: string
+          latency_ms: number
+          owner_id: string
+          source_code: string
+          source_id: string
+          source_is_enabled: boolean
+          source_is_mock: boolean
+          source_name: string
+          source_provider: string
+          source_type: string
+        }[]
       }
       post_cash_ledger_entry: {
         Args: {
@@ -4389,6 +4470,19 @@ export type Database = {
         }
         Returns: Json
       }
+      set_hosted_market_source_enabled: {
+        Args: { p_enabled: boolean; p_operation_id: string }
+        Returns: {
+          effective_at: string
+          enabled: boolean
+          operation_id: string
+          policy_id: string
+          policy_version: number
+          replayed: boolean
+          source_id: string
+          status: string
+        }[]
+      }
       settle_ai_budget: {
         Args: {
           p_cache_write_tokens: number
@@ -4406,19 +4500,6 @@ export type Database = {
         }
         Returns: Json
       }
-      set_hosted_market_source_enabled: {
-        Args: { p_enabled: boolean; p_operation_id: string }
-        Returns: {
-          effective_at: string
-          enabled: boolean
-          operation_id: string
-          policy_id: string
-          policy_version: number
-          replayed: boolean
-          source_id: string
-          status: string
-        }[]
-      }
       transition_ai_reservation: {
         Args: {
           p_owner_id: string
@@ -4426,6 +4507,16 @@ export type Database = {
           p_target_status: string
         }
         Returns: Json
+      }
+      update_draft_experiment: {
+        Args: {
+          p_expected_revision: string
+          p_experiment_id: string
+          p_name: string
+          p_objective: string
+          p_operation_id: string
+        }
+        Returns: string
       }
     }
     Enums: {
