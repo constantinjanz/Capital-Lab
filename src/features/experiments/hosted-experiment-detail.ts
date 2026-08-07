@@ -41,13 +41,16 @@ export interface HostedExperimentDetailRow {
   budget_policy_id: string | null
   locked_version_created_at: string | null
   draft_revision: string | null
+  source_experiment_id: string | null
 }
 
 export interface HostedExperimentStatusEventRow {
   id: string
+  from_execution_mode: string | null
   from_status: string | null
   to_status: string
   reason_code: string | null
+  to_execution_mode: string | null
   reason: string | null
   actor_type: string
   correlation_id: string
@@ -71,6 +74,7 @@ export interface HostedExperimentDetail {
   createdAt: string
   updatedAt: string
   draftRevision: string
+  sourceExperimentId: string | null
   controls: {
     schedulerEnabled: boolean
     agentEnabled: boolean
@@ -91,6 +95,8 @@ export interface HostedExperimentDetail {
     id: string
     fromStatus: HostedLifecycleStatus | null
     toStatus: HostedLifecycleStatus
+    fromExecutionMode: HostedExecutionMode
+    toExecutionMode: HostedExecutionMode
     reasonCode: string
     reason: string | null
     actorType: HostedStatusEventActor
@@ -116,6 +122,46 @@ export function isHostedDraftMetadataEditable(
     !experiment.controls.emergencyPaused &&
     experiment.controls.pauseReason === null
   )
+}
+
+export function getHostedLockedLifecycleAvailability(
+  experiment: HostedExperimentDetail,
+) {
+  const controls = experiment.controls
+  const locked =
+    controls !== null &&
+    experiment.lockedAt !== null &&
+    experiment.lockedVersionId !== null &&
+    experiment.lockedVersion !== null &&
+    experiment.executionMode !== null
+  const runtimeDisabled =
+    controls !== null && !controls.schedulerEnabled && !controls.agentEnabled
+
+  return {
+    promote_live_paper:
+      locked &&
+      runtimeDisabled &&
+      experiment.lifecycleStatus === 'active' &&
+      experiment.executionMode === 'shadow' &&
+      controls !== null &&
+      !controls.emergencyPaused,
+    pause: locked && experiment.lifecycleStatus === 'active',
+    resume:
+      locked &&
+      runtimeDisabled &&
+      experiment.lifecycleStatus === 'paused' &&
+      controls !== null &&
+      !controls.emergencyPaused,
+    complete:
+      locked &&
+      (experiment.lifecycleStatus === 'active' ||
+        experiment.lifecycleStatus === 'paused'),
+    clone:
+      locked &&
+      ['active', 'paused', 'completed', 'failed'].includes(
+        experiment.lifecycleStatus,
+      ),
+  }
 }
 
 const lifecycleStatuses = new Set<HostedLifecycleStatus>([
@@ -227,6 +273,7 @@ export function mapHostedExperimentDetail(
       row.draft_revision,
       'draft revision',
     ),
+    sourceExperimentId: row.source_experiment_id,
     controls: hasControls
       ? {
           schedulerEnabled: row.scheduler_enabled as boolean,
@@ -285,6 +332,8 @@ export function mapHostedExperimentDetail(
             ? null
             : lifecycleStatus(event.from_status),
         toStatus: lifecycleStatus(event.to_status),
+        fromExecutionMode: executionMode(event.from_execution_mode),
+        toExecutionMode: executionMode(event.to_execution_mode),
         reasonCode: required(event.reason_code, 'status event reason code'),
         reason: event.reason,
         actorType: event.actor_type as HostedStatusEventActor,

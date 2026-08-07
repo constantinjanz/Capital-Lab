@@ -24,7 +24,7 @@ export const readHostedExperimentDetail = cache(
       supabase
         .from('experiment_status_events')
         .select(
-          'id,from_status,to_status,reason_code,reason,actor_type,correlation_id,occurred_at',
+          'id,from_status,to_status,from_execution_mode,to_execution_mode,reason_code,reason,actor_type,correlation_id,occurred_at',
         )
         .eq('owner_id', ownerId)
         .eq('experiment_id', experimentId)

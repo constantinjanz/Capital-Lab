@@ -5,8 +5,15 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Panel } from '@/components/ui/panel'
 import { StatusPill } from '@/components/ui/status-pill'
 import { HostedDraftEditor } from '@/features/experiments/hosted-draft-editor'
+import {
+  HostedLifecycleControls,
+  type HostedLifecycleOperationIds,
+} from '@/features/experiments/hosted-lifecycle-controls'
 import type { HostedExperimentDetail } from '@/features/experiments/hosted-experiment-detail'
-import { isHostedDraftMetadataEditable } from '@/features/experiments/hosted-experiment-detail'
+import {
+  getHostedLockedLifecycleAvailability,
+  isHostedDraftMetadataEditable,
+} from '@/features/experiments/hosted-experiment-detail'
 import { formatStatus, formatUtc } from '@/lib/formatting'
 import type { Tone } from '@/lib/mock/types'
 
@@ -28,12 +35,16 @@ function enabledLabel(value: boolean): string {
 export function HostedExperimentDetailView({
   experiment,
   draftOperationId,
+  lifecycleOperationIds,
 }: {
   experiment: HostedExperimentDetail
   draftOperationId: string
+  lifecycleOperationIds: HostedLifecycleOperationIds
 }) {
   const lockedVersion = experiment.lockedVersion
   const canEditDraft = isHostedDraftMetadataEditable(experiment)
+  const lifecycleAvailability = getHostedLockedLifecycleAvailability(experiment)
+  const hasLifecycleAction = Object.values(lifecycleAvailability).some(Boolean)
 
   return (
     <div className="page-stack">
@@ -63,6 +74,20 @@ export function HostedExperimentDetailView({
               objective={experiment.objective}
             />
           </div>
+        </Panel>
+      ) : null}
+      {hasLifecycleAction &&
+      experiment.controls &&
+      experiment.lockedVersionId ? (
+        <Panel eyebrow="Owner controls" title="Paper lifecycle actions">
+          <HostedLifecycleControls
+            experimentId={experiment.id}
+            experimentName={experiment.name}
+            expectedControlStateVersion={experiment.controls.stateVersion}
+            lockedVersionId={experiment.lockedVersionId}
+            availability={lifecycleAvailability}
+            operationIds={lifecycleOperationIds}
+          />
         </Panel>
       ) : null}
       <Panel eyebrow="Owner controls" title="Read-only lifecycle state">
@@ -161,6 +186,12 @@ export function HostedExperimentDetailView({
                 {experiment.lockedVersionId ?? 'Not created'}
               </dd>
             </div>
+            <div>
+              <dt>Source experiment ID</dt>
+              <dd className="mono">
+                {experiment.sourceExperimentId ?? 'Original experiment'}
+              </dd>
+            </div>
           </dl>
         </Panel>
       </div>
@@ -221,6 +252,18 @@ export function HostedExperimentDetailView({
                       {formatStatus(event.reasonCode)} · {event.actorType}
                       {event.reason ? ` · ${event.reason}` : ''}
                     </p>
+                    {event.fromExecutionMode !== event.toExecutionMode ? (
+                      <p>
+                        Mode:{' '}
+                        {event.fromExecutionMode
+                          ? formatStatus(event.fromExecutionMode)
+                          : 'Not selected'}{' '}
+                        →{' '}
+                        {event.toExecutionMode
+                          ? formatStatus(event.toExecutionMode)
+                          : 'Not selected'}
+                      </p>
+                    ) : null}
                   </div>
                 </article>
               ))}

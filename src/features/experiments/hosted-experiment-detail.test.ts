@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { HostedExperimentDetailRow } from './hosted-experiment-detail'
 import {
+  getHostedLockedLifecycleAvailability,
   isHostedDraftMetadataEditable,
   mapHostedExperimentDetail,
 } from './hosted-experiment-detail'
@@ -42,6 +43,7 @@ const detailRow: HostedExperimentDetailRow = {
   budget_policy_id: null,
   locked_version_created_at: '2026-08-03T13:29:00.000Z',
   draft_revision: '9007199254740993',
+  source_experiment_id: null,
 }
 
 describe('mapHostedExperimentDetail', () => {
@@ -60,8 +62,10 @@ describe('mapHostedExperimentDetail', () => {
     const detail = mapHostedExperimentDetail(detailRow, [
       {
         id: 'event-id',
+        from_execution_mode: 'replay',
         from_status: 'active',
         to_status: 'completed',
+        to_execution_mode: 'replay',
         reason_code: 'replay_complete',
         reason: null,
         actor_type: 'system',
@@ -73,6 +77,8 @@ describe('mapHostedExperimentDetail', () => {
     expect(detail.statusEvents[0]).toMatchObject({
       fromStatus: 'active',
       toStatus: 'completed',
+      fromExecutionMode: 'replay',
+      toExecutionMode: 'replay',
       actorType: 'system',
     })
   })
@@ -130,5 +136,37 @@ describe('mapHostedExperimentDetail', () => {
         [],
       ),
     ).toThrow('unsupported lifecycle state')
+  })
+
+  it('exposes only state-valid locked paper lifecycle actions', () => {
+    const completed = mapHostedExperimentDetail(detailRow, [])
+    expect(getHostedLockedLifecycleAvailability(completed)).toEqual({
+      promote_live_paper: false,
+      pause: false,
+      resume: false,
+      complete: false,
+      clone: true,
+    })
+
+    const shadow = {
+      ...completed,
+      lifecycleStatus: 'active' as const,
+      executionMode: 'shadow' as const,
+    }
+    expect(getHostedLockedLifecycleAvailability(shadow)).toEqual({
+      promote_live_paper: true,
+      pause: true,
+      resume: false,
+      complete: true,
+      clone: true,
+    })
+
+    expect(
+      getHostedLockedLifecycleAvailability({
+        ...shadow,
+        lifecycleStatus: 'paused',
+        controls: { ...shadow.controls!, emergencyPaused: true },
+      }).resume,
+    ).toBe(false)
   })
 })

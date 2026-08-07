@@ -95,6 +95,8 @@ Acceptance: deterministic mock mode remains the default. Initial application of 
 - [x] Add persistent PAPER TRADING ONLY badge, experiment selector/status, market/data/agent/scheduler state, budget meters, and emergency pause.
 - [x] Add dashboard metrics, equity/benchmark chart, positions, decisions, fills, events, source health, risk state, and cost/runway views.
 - [ ] Add lifecycle actions for draft, replay, shadow, explicit live-paper promotion, pause/resume, completion, and clone.
+  - [x] Add owner-only, revision-checked, idempotent controls for explicit shadow-to-live-paper simulation promotion, pause, resume, completion, and clone-to-disabled-draft, with immutable provenance/evidence and no scheduler, agent, broker, or execution side effects.
+  - [ ] Add draft-to-replay/shadow start only after the complete owner-reviewed simulator, risk, routing, data-source, prompt/corpus, budget, universe, and official-calendar manifest can be locked atomically.
 - [x] Provide polished loading, empty, error, disconnected, responsive, keyboard, focus, and contrast states.
 
 Acceptance: seeded mock data renders all required routes and control states; no control can enable real trading.
