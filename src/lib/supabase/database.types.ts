@@ -4106,6 +4106,140 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      market_snapshot_scope: {
+        Args: never
+        Returns: {
+          decision_at: string
+          member_rows: Json
+          owner_id: string
+          source_ids: string[]
+          universe_row: Json | null
+        }[]
+      }
+      market_snapshot_read: {
+        Args: {
+          p_session_limit?: number
+          p_timeframe?: string
+        }
+        Returns: {
+          decision_at: string
+          health_rows: Json
+          instrument_rows: Json
+          member_rows: Json
+          owner_id: string
+          session_rows: Json
+          source_ids: string[]
+          universe_row: Json | null
+        }[]
+      }
+      market_instrument_snapshot_at: {
+        Args: {
+          p_decision_at: string
+          p_instrument_ids: string[]
+          p_source_ids: string[]
+          p_timeframe: string
+        }
+        Returns: {
+          active_from: string | null
+          active_to: string | null
+          ask_price_text: string | null
+          ask_size_text: string | null
+          asset_class: string
+          bar_available_at: string | null
+          bar_correction_state: string | null
+          bar_end: string | null
+          bar_first_seen_at: string | null
+          bar_id: string | null
+          bar_provider_event_at: string | null
+          bar_provider_received_at: string | null
+          bar_provider_record_key: string | null
+          bar_revision_no: number | null
+          bar_start: string | null
+          bar_timeframe: string | null
+          bid_price_text: string | null
+          bid_size_text: string | null
+          close_price_text: string | null
+          currency: string
+          decision_at: string
+          exchange_id: string
+          exchange_mic: string
+          exchange_name: string
+          exchange_timezone: string
+          high_price_text: string | null
+          instrument_id: string
+          instrument_name: string
+          is_shortable: boolean
+          is_tradable: boolean
+          low_price_text: string | null
+          open_price_text: string | null
+          owner_id: string
+          price_increment_text: string
+          quantity_increment_text: string
+          quote_available_at: string | null
+          quote_correction_state: string | null
+          quote_first_seen_at: string | null
+          quote_id: string | null
+          quote_provider_event_at: string | null
+          quote_provider_received_at: string | null
+          quote_provider_record_key: string | null
+          quote_revision_no: number | null
+          source_code: string | null
+          source_id: string | null
+          source_is_enabled: boolean | null
+          source_is_mock: boolean | null
+          source_name: string | null
+          source_provider: string | null
+          source_type: string | null
+          symbol: string
+          volume_text: string | null
+        }[]
+      }
+      market_sessions_at: {
+        Args: {
+          p_decision_at: string
+          p_exchange_ids: string[]
+          p_limit_per_exchange?: number
+        }
+        Returns: {
+          calendar_source_code: string | null
+          calendar_source_id: string | null
+          calendar_source_name: string | null
+          closes_at: string | null
+          decision_at: string
+          exchange_id: string
+          exchange_mic: string
+          exchange_name: string
+          exchange_timezone: string
+          opens_at: string | null
+          owner_id: string
+          session_available_at: string
+          session_date: string
+          session_id: string
+          session_type: string
+          source_identifier: string
+        }[]
+      }
+      market_source_health_at: {
+        Args: { p_decision_at: string; p_source_ids: string[] }
+        Returns: {
+          checked_at: string | null
+          decision_at: string
+          error_class: string | null
+          health_available_at: string | null
+          health_id: string | null
+          health_status: string | null
+          last_success_at: string | null
+          latency_ms: number | null
+          owner_id: string
+          source_code: string
+          source_id: string
+          source_is_enabled: boolean
+          source_is_mock: boolean
+          source_name: string
+          source_provider: string
+          source_type: string
+        }[]
+      }
       market_quotes_as_of: {
         Args: { p_as_of: string; p_instrument_ids: string[] }
         Returns: {

@@ -951,7 +951,7 @@ textarea {
   border-collapse: collapse;
 }
 
-.table-shell th {
+.table-shell thead th {
   border-bottom: 1px solid var(--border-strong);
   padding: 8px 10px;
   color: var(--muted);
@@ -962,7 +962,8 @@ textarea {
   text-transform: uppercase;
 }
 
-.table-shell td {
+.table-shell tbody th,
+.table-shell tbody td {
   border-bottom: 1px solid var(--border);
   padding: 10px;
   color: var(--text-soft);
@@ -970,13 +971,18 @@ textarea {
   vertical-align: middle;
 }
 
-.table-shell tbody tr:last-child td {
+.table-shell tbody th {
+  font-weight: 400;
+  text-align: left;
+}
+
+.table-shell tbody tr:last-child > :is(th, td) {
   border-bottom: 0;
 }
-.table-shell tbody tr:hover td {
+.table-shell tbody tr:hover > :is(th, td) {
   background: rgb(255 255 255 / 1.2%);
 }
-.table-row--warning td {
+.table-row--warning > :is(th, td) {
   background: rgb(251 191 36 / 3.5%);
 }
 .numeric {
@@ -1073,10 +1079,24 @@ textarea {
   border-bottom: 0;
   padding-bottom: 0;
 }
-.source-health > svg,
 .session-list__item > svg,
 .check-item > svg {
   color: var(--green);
+}
+.source-health > svg {
+  color: var(--green);
+}
+.source-health > svg.source-health__icon {
+  color: var(--muted);
+}
+.source-health > svg.source-health__icon--positive {
+  color: var(--green);
+}
+.source-health > svg.source-health__icon--warning {
+  color: var(--amber);
+}
+.source-health > svg.source-health__icon--negative {
+  color: var(--red);
 }
 .source-health span,
 .session-list__item span,
