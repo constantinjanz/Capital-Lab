@@ -9,7 +9,7 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 - [x] Verify the confirmed hosted identity is the single active application owner and the database bootstrap is consumed.
 - [x] Disable the application owner-setup flag, deploy the locked Preview, and verify sign-in remains while setup is absent.
 - [x] Merge the verified owner/bootstrap revision through GitHub PR #1 and synchronize `main`.
-- [ ] Disable project-level public signup in Supabase Auth; the connected dashboard requires the owner to sign in before this setting can be changed.
+- [x] Disable project-level public signup in Supabase Auth and verify after reload that signup, manual linking, and anonymous sign-in remain off while email confirmation remains on.
 - [x] Add an owner-RLS-backed `security_invoker` experiment-detail read view with exact decimal/bigint strings, explicit grants, and its supporting index.
 - [x] Replace the hosted experiment-detail 404 with a read-only Supabase repository, strict mapper, honest empty states, persisted status timeline, and mock-mode preservation.
 - [x] Remove adjacent hosted fabrications: unknown AI spend, missing controls shown as off, mock-specific 404 copy, and hosted manual-cycle execution.
@@ -53,7 +53,7 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Review
 
-- Status: GitHub, hosted Supabase, and protected Vercel previews are connected; the confirmed identity is the single active owner, application bootstrap is disabled, PR #1 is merged, the exact-string hosted experiment-detail slice is ready for review, and production promotion remains intentionally pending while project-level Supabase signup stays open.
+- Status: GitHub, hosted Supabase, and protected Vercel previews are connected; the confirmed identity is the single active owner, both application bootstrap and project-level signup are disabled, PRs #1 and #2 are merged, and production promotion remains intentionally pending while the remaining hosted adapters and write paths are built and reviewed.
 - Starting state: empty directory, no Git repository.
 - Available: Node.js 24, corepack, pnpm 10, npm 11, Git.
 - Unavailable: Docker and Supabase CLI; local database test execution will require installation.
