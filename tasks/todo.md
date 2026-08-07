@@ -4,6 +4,24 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Owner-reviewed hosted market configuration
+
+- [x] Define one fixed, bounded manifest for XNAS/ARCX, SPY/QQQ/AAPL/MSFT/NVDA, exact Alpaca aliases, locked append-only owner universe versions that reuse the exact current version, and one initially disabled Alpaca IEX data-only source/policy.
+- [x] Add an atomic owner-only configuration RPC that derives identity from `auth.uid()`, uses a private `SECURITY DEFINER` implementation with a fixed empty search path and public invoker wrapper, serializes setup, records durable idempotency and redacted audit evidence, and rejects conflicting reference metadata.
+- [x] Cover owner/non-owner/anonymous access, direct-write denial, same-operation replay, changed-input rejection, conflict rollback, immutable prior universe versions, explicit grants, and a zero-observation post-state with rollback-only pgTAP.
+- [x] Add a typed Supabase repository, re-authorizing Server Action, and hosted-only `/markets` setup control with precise failure states while preserving the deterministic mock page unchanged.
+- [x] Reconcile generated database types and the implementation/data-source/limitation/security documentation with the already implemented direct Alpaca adapter and the deliberately deferred ingestion/runtime boundaries.
+- [ ] Apply and verify the additive migration against the hosted project, confirm the exact five-member disabled-source state and zero quote/bar/session/health/ingestion/scheduler evidence, and review Supabase advisors.
+- [ ] Run formatting, lint, strict typecheck, focused/full tests, pgTAP, paper-only/secret scans, production build, mock Playwright journeys, protected Preview verification, and merge only through a green reviewed PR.
+
+Scope guard: this slice makes no Alpaca request, stores no Alpaca or Supabase secret, grants no direct table writes, creates no calendar or market observation, enables no scheduler/agent/provider, and does not promote production. Manual owner-triggered data-only ingestion remains the next separate review slice.
+
+#### Review
+
+- The fixed configuration, owner-only idempotent RPC, typed Server Action/repository, hosted setup control, and database-attested `reviewed_manifest_id` are implemented. The attestation fails closed on reference/member/alias/source/policy/audit drift while remaining separate from future runtime activation authorization.
+- Local application verification is green: changed-file formatting, ESLint with zero warnings, strict TypeScript, 33 Vitest files / 185 tests, the paper-only scan, and the Next.js production build. Independent application, SQL, and contract-consistency reviews were addressed.
+- Hosted migration validation/application, Supabase post-state/advisor review, clean CI database execution, protected Preview verification, and PR merge remain pending.
+
 ### Hosted point-in-time market snapshot
 
 - [x] Add owner-only, read-only Supabase functions for an atomic current configuration scope, universe instruments, completed quote/bar revisions, recent sessions, and provider health at one database-stamped decision timestamp; return every market decimal as exact text and deny anonymous callers explicitly.

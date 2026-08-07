@@ -19,6 +19,7 @@ const universeRow = {
   name: 'Primary universe',
   version: 2,
   description: 'Persisted instruments',
+  reviewed_manifest_id: null,
   locked_at: null,
   created_at: '2026-08-07T10:00:00.000Z',
 }
@@ -162,6 +163,43 @@ describe('mapHostedMarketSnapshot', () => {
       state: 'open',
       label: 'XNAS session open',
     })
+  })
+
+  it('maps the database-attested reviewed manifest id and rejects version skew', () => {
+    const snapshot = map({
+      universeRow: {
+        ...universeRow,
+        reviewed_manifest_id: 'capital_lab_us_core_alpaca_iex_v1',
+      },
+    })
+
+    expect(snapshot.universe?.reviewedManifestId).toBe(
+      'capital_lab_us_core_alpaca_iex_v1',
+    )
+    expect(() =>
+      map({
+        universeRow: {
+          ...universeRow,
+          reviewed_manifest_id: undefined,
+        },
+      }),
+    ).toThrow('reviewed manifest id')
+    expect(() =>
+      map({
+        universeRow: {
+          ...universeRow,
+          reviewed_manifest_id: { id: 'unexpected' },
+        },
+      }),
+    ).toThrow('reviewed manifest id')
+    expect(() =>
+      map({
+        universeRow: {
+          ...universeRow,
+          reviewed_manifest_id: 'capital_lab_us_core_alpaca_iex_v2',
+        },
+      }),
+    ).toThrow('unsupported reviewed manifest id')
   })
 
   it('maps a truthful empty hosted state', () => {

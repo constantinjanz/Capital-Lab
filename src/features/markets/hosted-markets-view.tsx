@@ -13,12 +13,14 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Panel } from '@/components/ui/panel'
 import { StatusPill } from '@/components/ui/status-pill'
 import { TableShell } from '@/components/ui/table-shell'
+import { hasReviewedHostedMarketManifest } from '@/features/markets/hosted-market-configuration-status'
 import {
   deriveHostedMarketSessionState,
   type HostedMarketSession,
   type HostedMarketSnapshot,
   type HostedMarketSource,
 } from '@/features/markets/hosted-market-snapshot'
+import { HostedMarketSetupControl } from '@/features/markets/hosted-market-setup-control'
 import { formatStatus, formatUtc } from '@/lib/formatting'
 import type { Tone } from '@/lib/mock/types'
 
@@ -68,10 +70,13 @@ function sessionRowState(
 
 export function HostedMarketsView({
   snapshot,
+  configurationOperationId,
 }: {
   snapshot: HostedMarketSnapshot
+  configurationOperationId: string
 }) {
   const sessionState = deriveHostedMarketSessionState(snapshot)
+  const manifestConfigured = hasReviewedHostedMarketManifest(snapshot)
   const sourcesById = new Map(
     snapshot.sources.map((source) => [source.id, source]),
   )
@@ -138,12 +143,23 @@ export function HostedMarketsView({
         title="Quote and completed-bar evidence"
         action={<span className="as-of">Exact database values · 1m bars</span>}
       >
-        {!snapshot.universe ? (
-          <EmptyState
-            icon={Radio}
-            title="No market universe configured"
-            description="Create and review a persisted universe before market evidence can be associated with instruments. No fixture symbols are substituted."
-          />
+        {!manifestConfigured ? (
+          <>
+            <EmptyState
+              icon={Radio}
+              title={
+                snapshot.universe
+                  ? 'Reviewed market manifest not configured'
+                  : 'No market universe configured'
+              }
+              description={
+                snapshot.universe
+                  ? 'The current persisted universe is not the reviewed five-instrument hosted manifest. Save the fixed manifest before using this market evidence view.'
+                  : 'Create and review a persisted universe before market evidence can be associated with instruments. No fixture symbols are substituted.'
+              }
+            />
+            <HostedMarketSetupControl operationId={configurationOperationId} />
+          </>
         ) : quoteRows.length === 0 ? (
           <EmptyState
             icon={Radio}

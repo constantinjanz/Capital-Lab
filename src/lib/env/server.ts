@@ -13,7 +13,6 @@ const decimalCurrency = z
 
 const serverEnvironmentSchema = z
   .object({
-    SUPABASE_SECRET_KEY: z.string().min(1).optional(),
     OWNER_EMAIL: z.email().optional(),
     OWNER_BOOTSTRAP_ENABLED: booleanString,
     OPENAI_API_KEY: z.string().min(1).optional(),

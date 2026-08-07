@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import type { Metadata } from 'next'
 
 import { HostedMarketsView } from '@/features/markets/hosted-markets-view'
@@ -15,5 +17,10 @@ export default async function MarketsPage() {
   }
 
   const snapshot = await readHostedMarketSnapshot(identity.id)
-  return <HostedMarketsView snapshot={snapshot} />
+  return (
+    <HostedMarketsView
+      snapshot={snapshot}
+      configurationOperationId={randomUUID()}
+    />
+  )
 }
