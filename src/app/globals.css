@@ -1137,6 +1137,52 @@ textarea {
   border-top: 0;
   padding-top: 0;
 }
+.lifecycle-controls > .safe-note {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0;
+}
+.lifecycle-control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.lifecycle-control-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgb(255 255 255 / 1.5%);
+  padding: 14px;
+}
+.lifecycle-control-card > svg {
+  color: var(--cyan);
+}
+.lifecycle-control-card h3,
+.lifecycle-control-card p {
+  margin: 0;
+}
+.lifecycle-control-card h3 {
+  font-size: 13px;
+}
+.lifecycle-control-card p {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+.lifecycle-control-card .field-label {
+  margin-top: 4px;
+}
+.lifecycle-control-card input {
+  width: 100%;
+}
+.lifecycle-control-card .button {
+  margin-top: auto;
+}
 .thresholds {
   display: flex;
   justify-content: space-between;

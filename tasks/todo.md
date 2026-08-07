@@ -4,6 +4,26 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Hosted locked-experiment lifecycle controls
+
+- [x] Define one owner-only, revision-checked, idempotent lifecycle contract for explicit shadow-to-live-paper simulation promotion, pause, resume, completion, and clone-to-draft; keep scheduler, agent, and all broker capabilities disabled.
+- [x] Preserve the immutable locked experiment/version, simulation ledger, orders, fills, and historical status evidence; clone only configuration references and paper capital into a new disabled draft.
+- [x] Add strict application inputs, a re-authorizing Server Action, typed Supabase repository mapping, and hosted detail controls with explicit confirmation and truthful conflict/unknown-result states.
+- [x] Cover owner/non-owner/anonymous access, allowed and forbidden transitions, revision conflicts, retries, evidence integrity, clone isolation, and zero financial/order/AI/scheduler side effects with unit and pgTAP tests.
+- [ ] Reconcile generated types and lifecycle/security/runbook/limitation documentation, then run the complete application/database/browser release gates before a protected Preview and reviewed merge.
+
+#### Scope note
+
+Draft-to-replay/shadow start follows in a separate reviewed slice because hosted start must first lock an owner-reviewed simulator, risk, routing, data-source, prompt/corpus, budget, universe, and calendar manifest. This slice must not synthesize those references or silently start a draft.
+
+#### Review in progress
+
+- The migration and all 43 lifecycle pgTAP assertions passed against the hosted Capital-Lab schema in rollback-only transactions; no fixture state was retained. The rehearsals caught and corrected the canonical open-order state set, result-column qualification, fixture portability, and owner-scoped provenance index coverage before release.
+- Clean-mirror application gates pass: Prettier, zero-warning ESLint, strict TypeScript, 43 Vitest files / 308 tests, the paper-only safety scan, and the Next.js 16.3 production build.
+- GitHub PR #12 CI run 56 is green: the application, fresh Supabase reset/pgTAP, and Chromium browser jobs all passed.
+- Hosted lifecycle and provenance-index migrations were applied only after CI passed. Hosted-generated TypeScript types were reconciled. The project remains at zero experiments, orders, fills, agent runs, scheduler runs, enabled controls, and enabled Alpaca sources. Authenticated execution is granted only through the narrow lifecycle RPC; anonymous/PUBLIC execution and direct authenticated experiment updates are denied, and both lifecycle functions have fixed search paths.
+- Supabase security advisors report only the known Free-plan leaked-password warning. The new foreign key is fully indexed; performance advisors otherwise report informational unused-index findings on the empty/low-traffic schema.
+
 ### Deterministic point-in-time market features
 
 - [x] Define `market-technical-v1` in pure domain code with canonical Decimal.js inputs/outputs, bounded one-minute history, strict continuity, and explicit unavailable states for missing samples or zero denominators.

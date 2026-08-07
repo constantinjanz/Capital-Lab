@@ -1243,36 +1243,42 @@ export type Database = {
           actor_type: string
           correlation_id: string
           experiment_id: string
+          from_execution_mode: string | null
           from_status: string | null
           id: string
           occurred_at: string
           owner_id: string
           reason: string | null
           reason_code: string | null
+          to_execution_mode: string | null
           to_status: string
         }
         Insert: {
           actor_type: string
           correlation_id: string
           experiment_id: string
+          from_execution_mode?: string | null
           from_status?: string | null
           id?: string
           occurred_at?: string
           owner_id: string
           reason?: string | null
           reason_code?: string | null
+          to_execution_mode?: string | null
           to_status: string
         }
         Update: {
           actor_type?: string
           correlation_id?: string
           experiment_id?: string
+          from_execution_mode?: string | null
           from_status?: string | null
           id?: string
           occurred_at?: string
           owner_id?: string
           reason?: string | null
           reason_code?: string | null
+          to_execution_mode?: string | null
           to_status?: string
         }
         Relationships: [
@@ -1442,6 +1448,7 @@ export type Database = {
           objective: string
           owner_id: string
           pause_reason: string | null
+          source_experiment_id: string | null
           starts_at: string | null
           updated_at: string
         }
@@ -1460,6 +1467,7 @@ export type Database = {
           objective: string
           owner_id: string
           pause_reason?: string | null
+          source_experiment_id?: string | null
           starts_at?: string | null
           updated_at?: string
         }
@@ -1478,6 +1486,7 @@ export type Database = {
           objective?: string
           owner_id?: string
           pause_reason?: string | null
+          source_experiment_id?: string | null
           starts_at?: string | null
           updated_at?: string
         }
@@ -1495,6 +1504,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: 'app_users'
             referencedColumns: ['user_id']
+          },
+          {
+            foreignKeyName: 'experiments_source_experiment_fk'
+            columns: ['source_experiment_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'experiments_source_experiment_fk'
+            columns: ['source_experiment_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiments'
+            referencedColumns: ['id', 'owner_id']
           },
         ]
       }
@@ -4076,6 +4099,7 @@ export type Database = {
           risk_config_version_id: string | null
           scheduler_enabled: boolean | null
           simulator_config_version_id: string | null
+          source_experiment_id: string | null
           starts_at: string | null
           updated_at: string | null
         }
@@ -4093,6 +4117,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: 'app_users'
             referencedColumns: ['user_id']
+          },
+          {
+            foreignKeyName: 'experiments_source_experiment_fk'
+            columns: ['source_experiment_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiment_detail_read_view'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'experiments_source_experiment_fk'
+            columns: ['source_experiment_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiments'
+            referencedColumns: ['id', 'owner_id']
           },
         ]
       }
@@ -4465,6 +4503,26 @@ export type Database = {
           source_name: string
           source_provider: string
           source_type: string
+        }[]
+      }
+      mutate_locked_experiment_lifecycle: {
+        Args: {
+          p_action: string
+          p_clone_name?: string
+          p_confirmation?: string
+          p_expected_control_state_version: string
+          p_experiment_id: string
+          p_locked_version_id?: string
+          p_operation_id: string
+          p_reason?: string
+        }
+        Returns: {
+          control_state_version: string
+          execution_mode: string
+          experiment_id: string
+          lifecycle_status: string
+          replayed: boolean
+          source_experiment_id: string
         }[]
       }
       post_cash_ledger_entry: {

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   createHostedDraftExperiment,
+  mutateHostedLockedExperimentLifecycle,
   updateHostedDraftExperiment,
 } from './experiment-write-repository'
 
@@ -137,4 +138,163 @@ describe('hosted experiment write repository', () => {
       ).resolves.toEqual({ ok: false, reason: 'unknown' })
     },
   )
+
+  it('calls the lifecycle RPC without caller identity or unused fields', async () => {
+    const lifecycleInput = {
+      operationId: 'd3000000-0000-4000-8000-000000000001',
+      experimentId: 'e3000000-0000-4000-8000-000000000001',
+      expectedControlStateVersion: '9007199254740993',
+      action: 'pause' as const,
+      reason: 'Owner review',
+      confirmation: null,
+      lockedVersionId: null,
+      cloneName: null,
+    }
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          experiment_id: lifecycleInput.experimentId,
+          source_experiment_id: null,
+          lifecycle_status: 'paused',
+          execution_mode: 'shadow',
+          control_state_version: '9007199254740994',
+          replayed: false,
+        },
+      ],
+      error: null,
+    })
+
+    await expect(
+      mutateHostedLockedExperimentLifecycle({ rpc } as never, lifecycleInput),
+    ).resolves.toEqual({
+      ok: true,
+      result: {
+        experimentId: lifecycleInput.experimentId,
+        sourceExperimentId: null,
+        lifecycleStatus: 'paused',
+        executionMode: 'shadow',
+        controlStateVersion: '9007199254740994',
+        replayed: false,
+      },
+    })
+    expect(rpc).toHaveBeenCalledWith('mutate_locked_experiment_lifecycle', {
+      p_action: 'pause',
+      p_expected_control_state_version: '9007199254740993',
+      p_experiment_id: lifecycleInput.experimentId,
+      p_operation_id: lifecycleInput.operationId,
+      p_reason: 'Owner review',
+    })
+  })
+
+  it('maps clone provenance and immutable replay output', async () => {
+    const sourceExperimentId = 'e3000000-0000-4000-8000-000000000001'
+    const cloneExperimentId = 'e3000000-0000-4000-8000-000000000002'
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          experiment_id: cloneExperimentId,
+          source_experiment_id: sourceExperimentId,
+          lifecycle_status: 'draft',
+          execution_mode: null,
+          control_state_version: '0',
+          replayed: true,
+        },
+      ],
+      error: null,
+    })
+
+    await expect(
+      mutateHostedLockedExperimentLifecycle({ rpc } as never, {
+        operationId: 'd3000000-0000-4000-8000-000000000002',
+        experimentId: sourceExperimentId,
+        expectedControlStateVersion: '4',
+        action: 'clone',
+        reason: null,
+        confirmation: null,
+        lockedVersionId: null,
+        cloneName: 'Next paper draft',
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: {
+        experimentId: cloneExperimentId,
+        sourceExperimentId,
+        lifecycleStatus: 'draft',
+        executionMode: null,
+        replayed: true,
+      },
+    })
+  })
+
+  it.each([
+    ['40001', 'conflict'],
+    ['22023', 'invalid'],
+    ['55000', 'transition'],
+    ['42501', 'rejected'],
+    ['PGRST000', 'unknown'],
+  ] as const)(
+    'maps lifecycle database error %s to %s',
+    async (code, reason) => {
+      const rpc = vi.fn().mockResolvedValue({
+        data: null,
+        error: { code, message: 'raw database detail' },
+      })
+
+      await expect(
+        mutateHostedLockedExperimentLifecycle({ rpc } as never, {
+          operationId: 'd3000000-0000-4000-8000-000000000003',
+          experimentId: 'e3000000-0000-4000-8000-000000000001',
+          expectedControlStateVersion: '0',
+          action: 'resume',
+          reason: null,
+          confirmation: null,
+          lockedVersionId: null,
+          cloneName: null,
+        }),
+      ).resolves.toEqual({ ok: false, reason })
+    },
+  )
+
+  it.each([
+    { data: [] },
+    {
+      data: [
+        {
+          experiment_id: 'e3000000-0000-4000-8000-000000000001',
+          source_experiment_id: null,
+          lifecycle_status: 'active',
+          execution_mode: 'shadow',
+          control_state_version: '1',
+          replayed: false,
+        },
+      ],
+    },
+    {
+      data: [
+        {
+          experiment_id: 'not-a-uuid',
+          source_experiment_id: null,
+          lifecycle_status: 'paused',
+          execution_mode: 'shadow',
+          control_state_version: '1',
+          replayed: false,
+        },
+      ],
+    },
+  ])('fails closed on malformed lifecycle output', async ({ data }) => {
+    const rpc = vi.fn().mockResolvedValue({ data, error: null })
+
+    await expect(
+      mutateHostedLockedExperimentLifecycle({ rpc } as never, {
+        operationId: 'd3000000-0000-4000-8000-000000000004',
+        experimentId: 'e3000000-0000-4000-8000-000000000001',
+        expectedControlStateVersion: '0',
+        action: 'pause',
+        reason: 'Owner review',
+        confirmation: null,
+        lockedVersionId: null,
+        cloneName: null,
+      }),
+    ).resolves.toEqual({ ok: false, reason: 'unknown' })
+  })
 })

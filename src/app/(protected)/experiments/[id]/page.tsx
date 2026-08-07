@@ -30,6 +30,13 @@ export default async function ExperimentPage({
     <HostedExperimentDetailView
       experiment={experiment}
       draftOperationId={randomUUID()}
+      lifecycleOperationIds={{
+        promote_live_paper: randomUUID(),
+        pause: randomUUID(),
+        resume: randomUUID(),
+        complete: randomUUID(),
+        clone: randomUUID(),
+      }}
     />
   )
 }
