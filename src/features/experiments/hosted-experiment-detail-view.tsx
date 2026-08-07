@@ -4,7 +4,9 @@ import { DataModeNotice } from '@/components/ui/data-mode-notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Panel } from '@/components/ui/panel'
 import { StatusPill } from '@/components/ui/status-pill'
+import { HostedDraftEditor } from '@/features/experiments/hosted-draft-editor'
 import type { HostedExperimentDetail } from '@/features/experiments/hosted-experiment-detail'
+import { isHostedDraftMetadataEditable } from '@/features/experiments/hosted-experiment-detail'
 import { formatStatus, formatUtc } from '@/lib/formatting'
 import type { Tone } from '@/lib/mock/types'
 
@@ -25,10 +27,13 @@ function enabledLabel(value: boolean): string {
 
 export function HostedExperimentDetailView({
   experiment,
+  draftOperationId,
 }: {
   experiment: HostedExperimentDetail
+  draftOperationId: string
 }) {
   const lockedVersion = experiment.lockedVersion
+  const canEditDraft = isHostedDraftMetadataEditable(experiment)
 
   return (
     <div className="page-stack">
@@ -43,6 +48,23 @@ export function HostedExperimentDetailView({
         }
       />
       <DataModeNotice compact mode="supabase" />
+      {canEditDraft ? (
+        <Panel eyebrow="Editable draft" title="Name and objective">
+          <div className="panel-action-row">
+            <p className="safe-note">
+              <ShieldCheck size={14} aria-hidden="true" /> Metadata changes are
+              revision-checked and audited. Execution settings stay disabled.
+            </p>
+            <HostedDraftEditor
+              experimentId={experiment.id}
+              operationId={draftOperationId}
+              expectedRevision={experiment.draftRevision}
+              name={experiment.name}
+              objective={experiment.objective}
+            />
+          </div>
+        </Panel>
+      ) : null}
       <Panel eyebrow="Owner controls" title="Read-only lifecycle state">
         {experiment.controls ? (
           <div className="configuration-grid">
@@ -128,6 +150,10 @@ export function HostedExperimentDetailView({
             <div>
               <dt>Experiment ID</dt>
               <dd className="mono">{experiment.id}</dd>
+            </div>
+            <div>
+              <dt>Draft revision</dt>
+              <dd className="mono">{experiment.draftRevision}</dd>
             </div>
             <div>
               <dt>Locked version ID</dt>

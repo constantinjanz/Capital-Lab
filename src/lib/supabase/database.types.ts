@@ -1381,6 +1381,7 @@ export type Database = {
         Row: {
           base_currency: string
           created_at: string
+          draft_revision: number
           ends_at: string | null
           execution_mode: string | null
           id: string
@@ -1398,6 +1399,7 @@ export type Database = {
         Insert: {
           base_currency?: string
           created_at?: string
+          draft_revision?: number
           ends_at?: string | null
           execution_mode?: string | null
           id?: string
@@ -1415,6 +1417,7 @@ export type Database = {
         Update: {
           base_currency?: string
           created_at?: string
+          draft_revision?: number
           ends_at?: string | null
           execution_mode?: string | null
           id?: string
@@ -3793,6 +3796,7 @@ export type Database = {
           control_updated_at: string | null
           created_at: string | null
           data_source_config_version_id: string | null
+          draft_revision: string | null
           emergency_paused: boolean | null
           ends_at: string | null
           execution_mode: string | null
@@ -4027,6 +4031,16 @@ export type Database = {
       bootstrap_first_owner: { Args: never; Returns: Json }
       create_draft_experiment: {
         Args: {
+          p_name: string
+          p_objective: string
+          p_operation_id: string
+        }
+        Returns: string
+      }
+      update_draft_experiment: {
+        Args: {
+          p_expected_revision: string
+          p_experiment_id: string
           p_name: string
           p_objective: string
           p_operation_id: string

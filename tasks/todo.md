@@ -4,6 +4,22 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Hosted draft metadata editing
+
+- [x] Add an owner-only, revision-checked draft-update contract that changes only the normalized name and objective, preserves every execution/configuration field, and uses durable idempotency plus one redacted audit record.
+- [x] Expose the exact draft revision in the hosted detail read model and add SQL contract coverage for authorization, validation, stale writes, retries, immutable replay results, direct-write denial, and atomic rollback.
+- [x] Add a protected Server Action, typed repository boundary, and hosted-only editor with precise validation and conflict messaging while preserving the deterministic mock experience.
+- [x] Apply the additive migration after rollback-only hosted validation, regenerate/check database types, and review Supabase security and performance advisors.
+- [x] Run formatting, lint, strict typecheck, unit/database/browser tests, paper-only and secret scans, dependency audit, and the production build.
+- [ ] Publish through a reviewed GitHub PR, verify CI and the Vercel preview, and merge only if all gates are green.
+
+#### Review
+
+- Additive metadata migration and the reviewed controls-before-experiment lock-order correction applied to Capital-Lab after rollback-only compile/behavior probes. A focused hosted pgTAP transaction passed `1..28`, then rolled back its temporary experiment, audit/idempotency rows, and pgTAP extension; the project remains at zero experiments.
+- The hosted contract exposes `draft_revision` as exact text, grants the public security-invoker RPC only to authenticated/service roles, and leaves direct table mutation denied. Same-operation replay, replay after a later edit, stale-write rollback, changed-body rejection, redacted auditing, and preservation of every execution side table were verified.
+- Full application verification passed: Prettier, ESLint with zero warnings, strict TypeScript, 27 Vitest files / 127 tests, paper-only safety scan, and the Next.js production build. Four mock Playwright journeys and the production dependency audit also passed. Independent reviews cleared the database security boundary, ambiguous-result reconciliation, and UUID normalization/version handling.
+- Supabase generated types match the checked-in revision/view/RPC fields. Security advisors remain unchanged with only the Free-plan leaked-password warning; performance advisors contain only expected unused-index information on the empty database.
+
 ### Hosted draft experiment creation
 
 - [x] Define an owner-only, atomic Supabase draft-creation contract with explicit grants, an exact decimal default, safe paper-only settings, durable idempotency, audit evidence, and an initialized disabled control row.

@@ -1106,6 +1106,17 @@ textarea {
 .safe-note--warning {
   color: var(--amber);
 }
+.panel-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.panel-action-row .safe-note {
+  margin: 0;
+  border-top: 0;
+  padding-top: 0;
+}
 .thresholds {
   display: flex;
   justify-content: space-between;
@@ -2761,6 +2772,10 @@ textarea {
   }
   .page-header__actions .button {
     width: 100%;
+  }
+  .panel-action-row {
+    align-items: stretch;
+    flex-direction: column;
   }
   .metric-grid,
   .metric-grid--four {

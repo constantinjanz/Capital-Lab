@@ -219,7 +219,7 @@ export function HostedExperimentsView({
                 <span>
                   <LockKeyhole size={14} aria-hidden="true" />
                   {experiment.lifecycleStatus === 'draft'
-                    ? 'Draft editing not yet available'
+                    ? 'Name and objective editable'
                     : 'Versioned rules locked'}
                 </span>
                 <Link

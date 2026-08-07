@@ -136,6 +136,11 @@ select is(
   'text',
   'experiment detail exposes bigint control versions as exact text'
 );
+select is(
+  (select data_type from information_schema.columns where table_schema = 'public' and table_name = 'experiment_detail_read_view' and column_name = 'draft_revision'),
+  'text',
+  'experiment detail exposes draft revisions as exact text'
+);
 select ok(
   has_table_privilege('authenticated', 'public.experiment_detail_read_view', 'SELECT'),
   'authenticated owners may select the experiment detail view'
@@ -161,6 +166,32 @@ select ok(
     'EXECUTE'
   ),
   'anonymous callers cannot request draft creation'
+);
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.update_draft_experiment(uuid,uuid,text,text,text)',
+    'EXECUTE'
+  ),
+  'authenticated owners may request an atomic draft metadata update'
+);
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.update_draft_experiment(uuid,uuid,text,text,text)',
+    'EXECUTE'
+  ),
+  'anonymous callers cannot request a draft metadata update'
+);
+select ok(
+  strpos(
+    pg_get_functiondef('private.update_draft_experiment(uuid,uuid,text,text,text)'::regprocedure),
+    'select controls.*'
+  ) < strpos(
+    pg_get_functiondef('private.update_draft_experiment(uuid,uuid,text,text,text)'::regprocedure),
+    'select experiment.*'
+  ),
+  'draft updates lock controls before experiments like budget auto-pause'
 );
 
 insert into private.owner_bootstrap_config(expected_email)
@@ -489,6 +520,297 @@ select is(
   ),
   0::bigint,
   'an unauthorized caller leaves no partial write state'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
+select is(
+  (
+    select draft_revision
+    from public.experiment_detail_read_view
+    where id = '70000000-0000-0000-0000-000000000001'
+  ),
+  '0',
+  'an existing hosted draft begins at exact revision zero'
+);
+select is(
+  public.update_draft_experiment(
+    'd2000000-0000-4000-8000-000000000001',
+    '70000000-0000-0000-0000-000000000001',
+    '0',
+    '  Revised hosted draft  ',
+    '  Test a revised paper-only hypothesis with point-in-time evidence.  '
+  ),
+  '70000000-0000-0000-0000-000000000001'::uuid,
+  'the active owner can update hosted draft metadata atomically'
+);
+select is(
+  (
+    select name
+    from public.experiments
+    where id = '70000000-0000-0000-0000-000000000001'
+  ),
+  'Revised hosted draft',
+  'draft metadata update trims the experiment name'
+);
+select is(
+  (
+    select objective
+    from public.experiments
+    where id = '70000000-0000-0000-0000-000000000001'
+  ),
+  'Test a revised paper-only hypothesis with point-in-time evidence.',
+  'draft metadata update trims the objective'
+);
+select is(
+  (
+    select draft_revision
+    from public.experiment_detail_read_view
+    where id = '70000000-0000-0000-0000-000000000001'
+  ),
+  '1',
+  'a successful draft metadata update advances the exact revision once'
+);
+select ok(
+  exists (
+    select 1
+    from public.experiments
+    where id = '70000000-0000-0000-0000-000000000001'
+      and lifecycle_status = 'draft'
+      and execution_mode is null
+      and base_currency = 'EUR'
+      and initial_capital = '100000.00000000'::numeric(24,8)
+      and starts_at is null
+      and ends_at is null
+      and pause_reason is null
+      and locked_at is null
+      and locked_version_id is null
+  ),
+  'draft metadata editing preserves capital, lifecycle, execution, and lock state'
+);
+select ok(
+  exists (
+    select 1
+    from public.experiment_controls
+    where experiment_id = '70000000-0000-0000-0000-000000000001'
+      and not scheduler_enabled
+      and not agent_enabled
+      and not emergency_paused
+      and pause_reason is null
+      and state_version = 0
+  ),
+  'draft metadata editing preserves the disabled control state'
+);
+select is(
+  public.update_draft_experiment(
+    'd2000000-0000-4000-8000-000000000001',
+    '70000000-0000-0000-0000-000000000001',
+    '0',
+    'Revised hosted draft',
+    'Test a revised paper-only hypothesis with point-in-time evidence.'
+  ),
+  '70000000-0000-0000-0000-000000000001'::uuid,
+  'the same normalized draft update is idempotent'
+);
+select throws_ok(
+  $$select public.update_draft_experiment(
+    'd2000000-0000-4000-8000-000000000001',
+    '70000000-0000-0000-0000-000000000001',
+    '0',
+    'Changed under reused operation',
+    'Test a revised paper-only hypothesis with point-in-time evidence.'
+  )$$,
+  '23505',
+  'draft update operation id was reused with different input',
+  'a draft update operation id cannot be reused with changed input'
+);
+select is(
+  public.update_draft_experiment(
+    'd2000000-0000-4000-8000-000000000002',
+    '70000000-0000-0000-0000-000000000001',
+    '1',
+    'Second hosted draft revision',
+    'Test a second paper-only revision without changing execution state.'
+  ),
+  '70000000-0000-0000-0000-000000000001'::uuid,
+  'a later operation can advance the draft to its next revision'
+);
+select is(
+  public.update_draft_experiment(
+    'd2000000-0000-4000-8000-000000000001',
+    '70000000-0000-0000-0000-000000000001',
+    '0',
+    'Revised hosted draft',
+    'Test a revised paper-only hypothesis with point-in-time evidence.'
+  ),
+  '70000000-0000-0000-0000-000000000001'::uuid,
+  'a completed update remains idempotent after later draft changes'
+);
+select throws_ok(
+  $$select public.update_draft_experiment(
+    'd2000000-0000-4000-8000-000000000003',
+    '70000000-0000-0000-0000-000000000001',
+    '1',
+    'Stale hosted draft revision',
+    'This stale operation must fail without leaving partial write state.'
+  )$$,
+  '40001',
+  'draft experiment changed; reload before saving again',
+  'a stale expected revision fails deterministically'
+);
+select throws_ok(
+  $$select public.update_draft_experiment(
+    'd2000000-0000-4000-8000-000000000004',
+    '70000000-0000-0000-0000-000000000001',
+    '02',
+    'Invalid revision spelling',
+    'A noncanonical revision cannot reach the write boundary.'
+  )$$,
+  '22023',
+  'expected draft revision must be a canonical nonnegative integer',
+  'a noncanonical expected revision is rejected'
+);
+select throws_ok(
+  $$select public.update_draft_experiment(
+    'd2000000-0000-4000-8000-000000000005',
+    '70000000-0000-0000-0000-000000000001',
+    '2',
+    'Second hosted draft revision',
+    'Test a second paper-only revision without changing execution state.'
+  )$$,
+  '22023',
+  'draft update must change the name or objective',
+  'an unchanged draft save is rejected'
+);
+select throws_ok(
+  $$select public.update_draft_experiment(
+    'd2000000-0000-4000-8000-000000000006',
+    '70000000-0000-0000-0000-000000000002',
+    '0',
+    'Locked replay cannot change',
+    'A completed replay must remain immutable after its configuration lock.'
+  )$$,
+  '55000',
+  'draft experiment is not editable',
+  'a locked non-draft experiment cannot use the metadata update boundary'
+);
+select throws_ok(
+  $$select public.update_draft_experiment(
+    'd2000000-0000-4000-8000-000000000007',
+    '79999999-9999-4999-8999-999999999999',
+    '0',
+    'Missing hosted draft',
+    'An unavailable draft must fail without revealing target ownership.'
+  )$$,
+  '42501',
+  'draft experiment is unavailable',
+  'a nonexistent draft uses the closed availability error'
+);
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000002","role":"authenticated"}', true);
+select throws_ok(
+  $$select public.update_draft_experiment(
+    'd2000000-0000-4000-8000-000000000008',
+    '70000000-0000-0000-0000-000000000001',
+    '2',
+    'Unauthorized hosted draft',
+    'A non-owner must fail without revealing whether the draft exists.'
+  )$$,
+  '42501',
+  'draft experiment is unavailable',
+  'a non-owner receives the same closed availability error'
+);
+select throws_ok(
+  $$update public.experiments
+    set name = 'Direct writes remain forbidden'
+    where id = '70000000-0000-0000-0000-000000000001'$$,
+  '42501',
+  null,
+  'authenticated sessions still cannot update experiment rows directly'
+);
+reset role;
+select set_config('request.jwt.claims', '{}', true);
+
+select is(
+  (
+    select count(*)
+    from private.audit_log
+    where experiment_id = '70000000-0000-0000-0000-000000000001'
+      and action = 'experiment.draft_updated'
+      and correlation_id in (
+        'd2000000-0000-4000-8000-000000000001',
+        'd2000000-0000-4000-8000-000000000002'
+      )
+      and metadata ->> 'paper_only' = 'true'
+      and metadata ? 'changed_fields'
+      and not metadata ? 'name'
+      and not metadata ? 'objective'
+  ),
+  2::bigint,
+  'each successful update writes one redacted immutable audit record'
+);
+select is(
+  (
+    select count(*)
+    from private.audit_log
+    where correlation_id = 'd2000000-0000-4000-8000-000000000003'
+  ),
+  0::bigint,
+  'a stale update leaves no audit residue'
+);
+select is(
+  (
+    select count(*)
+    from private.idempotency_records
+    where scope = 'experiment.update_draft.v1'
+      and idempotency_key = 'd2000000-0000-4000-8000-000000000003'
+  ),
+  0::bigint,
+  'a stale update leaves no idempotency residue'
+);
+select is(
+  (
+    select count(*)
+    from private.idempotency_records
+    where scope = 'experiment.update_draft.v1'
+      and idempotency_key in (
+        'd2000000-0000-4000-8000-000000000001',
+        'd2000000-0000-4000-8000-000000000002'
+      )
+      and status = 'completed'
+      and result_ref_type = 'experiment'
+      and result_ref_id = '70000000-0000-0000-0000-000000000001'
+      and completed_at is not null
+  ),
+  2::bigint,
+  'successful draft updates finalize durable idempotency records'
+);
+select is(
+  (select count(*) from public.experiment_versions where experiment_id = '70000000-0000-0000-0000-000000000001'),
+  0::bigint,
+  'draft metadata editing creates no experiment version'
+);
+select is(
+  (select count(*) from public.experiment_status_events where experiment_id = '70000000-0000-0000-0000-000000000001'),
+  0::bigint,
+  'draft metadata editing creates no lifecycle event'
+);
+select is(
+  (select count(*) from public.simulation_accounts where experiment_id = '70000000-0000-0000-0000-000000000001'),
+  0::bigint,
+  'draft metadata editing creates no simulation account'
+);
+select is(
+  (select count(*) from private.cash_ledger_entries where experiment_id = '70000000-0000-0000-0000-000000000001'),
+  0::bigint,
+  'draft metadata editing posts no cash ledger entry'
+);
+select is(
+  (select count(*) from public.portfolio_snapshots where experiment_id = '70000000-0000-0000-0000-000000000001'),
+  0::bigint,
+  'draft metadata editing creates no portfolio snapshot'
 );
 
 select throws_ok(
