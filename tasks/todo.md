@@ -4,6 +4,30 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Hosted evidence statistics and reviewed pattern gates
+
+- [x] Define one owner-only, bounded `decisionAt` learning snapshot for confidence calibration, decision categories, evidence kinds, evaluated outcome horizons, and current pattern/strategy readiness.
+- [x] Return every rate, return, excursion, allocation, and threshold as an exact decimal string; exclude decisions, citations, outcomes, patterns, and assignments that were not available at the requested decision boundary.
+- [x] Replace JavaScript financial-number promotion inputs with exact decimal values and a fixed versioned policy; require independent linked outcomes, positive benchmark-relative evidence, bounded adverse excursion, and an explicit holdout result before eligibility.
+- [x] Add owner-reviewed pattern lifecycle actions with durable idempotency and audit evidence, while preventing self-promotion, direct table writes, active strategy assignment, or allocation changes.
+- [x] Add strict application mapping, a server-only repository, and truthful hosted `/memory` statistics/review states while preserving deterministic mock mode.
+- [x] Cover owner/non-owner/anonymous access, grants/search paths, point-in-time exclusion, exact decimals, sparse/empty evidence, idempotent review, deterministic gate failure reasons, and zero AI/provider/scheduler/order/fill/ledger side effects with pgTAP and application tests.
+- [x] Run complete application/database/browser release gates, reconcile hosted types/advisors, and publish through a protected Preview and reviewed PR without enabling agents, paid calls, providers, scheduling, strategy allocation, or Production.
+
+Scope guard: this slice measures immutable hosted paper evidence and records explicit owner review of pattern lifecycle only. It cannot call a model/provider, create or modify a strategy assignment, allocate capital, enable a runtime control, create an order/fill, mutate positions/ledger/P&L, or promote Production.
+
+#### Review
+
+- Existing schema audit: authenticated owners can read owner-scoped pattern, evidence, strategy-version, and assignment rows through forced RLS, but cannot write them directly. No hosted pattern review RPC or point-in-time aggregate existed, and the prior pure promotion helper accepted financial evidence as JavaScript basis-point numbers.
+- The additive migration compiles against the hosted Capital-Lab schema. Its combined rollback-only rehearsal passes all 39 pgTAP assertions, including a regression check that a later lifecycle review cannot leak into an earlier learning snapshot. A post-rollback audit confirms that the functions and index are absent, so no rehearsal state persisted.
+- Focused application verification passes 10 files / 64 tests. Repository-wide zero-warning lint, strict TypeScript, 61 files / 491 tests, the PAPER TRADING ONLY scan, and the Next.js 16.3 production build all pass.
+- The exact `pnpm verify` sequence reaches only the known local OneDrive formatting condition: Prettier reports 17 unrelated market-ingestion files whose line endings differ in this Windows working tree while Git reports no content diff. Intended-slice formatting and `git diff --check` pass; clean-checkout CI remains the full formatter authority.
+- Next.js and React boundary review keeps both independent historical reads parallel, authenticates and authorizes inside the Server Action, retains server-only Supabase access, and serializes only strings, booleans, bounded arrays, and lifecycle-available operation IDs to the client.
+- GitHub PR #18 CI run 96 is green at exact application commit `4d8854b`: clean-checkout formatting, zero-warning lint, strict TypeScript, all 491 Vitest tests, the paper-only scan, the Next.js build, all Chromium journeys, a fresh Supabase start/reset, and every pgTAP file passed.
+- Hosted migration `20260808204019` is applied to Capital-Lab. Its rollback-only rehearsal and hosted pgTAP suite pass all 39 assertions; generated types match, the five functions retain fixed empty search paths and least-privilege grants, security advisors retain only the known leaked-password-protection warning, and performance findings remain informational unused-index notices.
+- Protected Vercel Preview `dpl_6GhNStW2ddTcnJHV78PzUvw6uKjp` is READY as Next.js at exact application commit `4d8854b` with no Production target. The authenticated owner `/memory` route renders the hosted decision boundary, exact-decimal statistics, and honest zero-data states; browser diagnostics are empty and exact-deployment runtime logs contain only successful `200`/`204` requests with no warning, error, or fatal entries.
+- The hosted project still has zero pattern hypotheses, strategy assignments, agent runs, agent decisions, orders, and fills. The one pre-existing opening cash-ledger entry is unchanged; market ingestion, scheduler, agents, paid calls, providers, brokerage connections, strategy allocation, and Production remain disabled.
+
 ### Immutable hosted decision memory
 
 - [x] Enforce owner, experiment, version, portfolio, run, and decision-time alignment for every new immutable decision context and decision.

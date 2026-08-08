@@ -4481,6 +4481,19 @@ export type Database = {
           owner_id: string
         }[]
       }
+      hosted_learning_snapshot: {
+        Args: { p_decision_at: string; p_pattern_limit?: number }
+        Returns: {
+          assignment_rows: Json
+          calibration_rows: Json
+          category_rows: Json
+          decision_at: string
+          evidence_kind_rows: Json
+          horizon_rows: Json
+          owner_id: string
+          pattern_rows: Json
+        }[]
+      }
       hosted_manual_cycle_state: {
         Args: { p_experiment_id: string }
         Returns: {
@@ -4744,6 +4757,30 @@ export type Database = {
           p_requested_at: string
         }
         Returns: Json
+      }
+      review_hosted_pattern_lifecycle: {
+        Args: {
+          p_action: string
+          p_confirmation: string
+          p_expected_status: string
+          p_operation_id: string
+          p_pattern_id: string
+          p_reason?: string
+        }
+        Returns: {
+          gate_eligible: boolean
+          gate_reasons: Json
+          hit_rate_text: string
+          holdout_passed: boolean
+          independent_observations_text: string
+          lifecycle_status: string
+          mean_benchmark_relative_return_text: string
+          pattern_id: string
+          policy_version: string
+          replayed: boolean
+          reviewed_at: string
+          worst_maximum_adverse_excursion_text: string
+        }[]
       }
       run_hosted_manual_cycle: {
         Args: {
