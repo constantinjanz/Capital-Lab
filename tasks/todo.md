@@ -4,6 +4,13 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Preview deployment control
+
+- [x] Diagnose the missing Vercel Git deployment without changing production, domains, billing, or environment secrets.
+- [x] Replace the repository-wide deployment shutdown with a branch rule that keeps `main` disabled and permits non-production Preview branches.
+- [ ] Verify the configuration, publish only the scoped config/tracker change, and confirm Vercel creates a protected Preview from the Git push.
+- [ ] Run the protected browser and runtime checks, then merge only after the Preview is green; leave Production unpromoted.
+
 ### Hosted locked-experiment lifecycle controls
 
 - [x] Define one owner-only, revision-checked, idempotent lifecycle contract for explicit shadow-to-live-paper simulation promotion, pause, resume, completion, and clone-to-draft; keep scheduler, agent, and all broker capabilities disabled.
