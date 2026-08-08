@@ -20,6 +20,12 @@ Use the experiment detail page only for a clean disabled draft after the readine
 
 A successful start must lock one immutable version and report an active paper mode with a new simulation account. Verify the controls remain scheduler off, agent off, emergency pause clear; the new account has exactly EUR 100000.00000000 opening cash; and the opening snapshot has zero exposure, EUR 100000.00000000 NAV, and EUR 200000.00000000 paper buying power. The start itself launches no cycle, provider request, model call, order, or fill. If readiness is unavailable or blocked, do not bypass the RPC or modify manifest rows. If the page reports a revision conflict, reload and reassess. If the result is unknown, reload before any further operation and inspect the operation UUID's idempotency, status, audit, ledger, and snapshot evidence.
 
+## Manual hosted paper cycle
+
+Use the experiment detail action only for an active replay/shadow experiment with its reviewed locked version and active paper account visible. Confirm the remote scheduler, agent, and emergency pause are all off, then enter `RUN PAPER CYCLE` exactly. The database uses the displayed decision boundary, the current control revision, the locked 2026 XNAS/ARCX session, and a unique 15-minute slot. A successful request must return or reload one `skipped` result with `market_closed`, `outside_regular_session`, or `market_data_runtime_disabled`, plus one scheduler-run ID and one simulator-run ID. It must not change ingestion, source health, market observations, AI budget/usage, decisions, orders, fills, positions, ledger, or portfolio/P&L state.
+
+An exact operation retry and a different delivery in the same slot must return the original IDs and result. On a revision or eligibility conflict, reload before reconsidering the action. On an unknown network result, do not create a new operation; reload and inspect the existing operation UUID, scheduler slot/run, simulator journal, idempotency record, and redacted audit. Never enable a remote scheduler to work around a blocked manual state.
+
 ## Locked experiment lifecycle
 
 Use the experiment detail page only after confirming its locked version, execution mode, lifecycle state, and control revision. Promotion accepts only an active shadow experiment with the simulation account active, the emergency pause clear, and scheduler/agent controls disabled. Enter `PROMOTE TO LIVE PAPER` exactly; this changes only the simulation execution mode and does not enable a runtime loop or broker capability.
@@ -34,7 +40,7 @@ Keep the source disabled unless a reviewed batch is intended. Confirm `MARKET_DA
 
 ## Official 2026 market calendar
 
-Sign in as the owner and save the fixed calendar from Markets only after its migration and pgTAP contract pass. A success must attest 522 records across XNAS/ARCX: 498 regular, 4 early-close, and 20 holiday rows in total. Confirm the Nasdaq Trader and NYSE provenance sources remain disabled, scheduler/agent controls remain off, and no provider request or ingestion run was recorded. If setup reports a conflict, inspect the existing 2026 session/source/policy evidence; never overwrite or delete immutable rows to force acceptance. If the result is unknown, retry the same operation UUID from the unchanged page. This calendar is reference evidence only and must not be used to enable remote scheduling until the separate durable cycle review passes.
+Sign in as the owner and save the fixed calendar from Markets only after its migration and pgTAP contract pass. A success must attest 522 records across XNAS/ARCX: 498 regular, 4 early-close, and 20 holiday rows in total. Confirm the Nasdaq Trader and NYSE provenance sources remain disabled, scheduler/agent controls remain off, and no provider request or ingestion run was recorded. If setup reports a conflict, inspect the existing 2026 session/source/policy evidence; never overwrite or delete immutable rows to force acceptance. If the result is unknown, retry the same operation UUID from the unchanged page. The calendar may support the reviewed owner-triggered skipped envelope, but it must not be used to enable remote scheduling until that separate activation review passes.
 
 ## Cost reconciliation
 

@@ -11,6 +11,7 @@ import {
   readHostedExperimentDetail,
   readHostedExperimentStartReadiness,
 } from '@/lib/supabase/experiment-detail-read-repository'
+import { readHostedManualCycleState } from '@/lib/supabase/manual-cycle-repository'
 
 export const metadata: Metadata = { title: 'Experiment' }
 
@@ -27,9 +28,10 @@ export default async function ExperimentPage({
     return <ExperimentDetailView experiment={experiment} />
   }
 
-  const [experiment, startReadiness] = await Promise.all([
+  const [experiment, startReadiness, manualCycleState] = await Promise.all([
     readHostedExperimentDetail(owner.id, id),
     readHostedExperimentStartReadiness(id),
+    readHostedManualCycleState(id),
   ])
   if (!experiment) notFound()
   return (
@@ -38,6 +40,8 @@ export default async function ExperimentPage({
       draftOperationId={randomUUID()}
       startReadiness={startReadiness}
       startOperationIds={{ replay: randomUUID(), shadow: randomUUID() }}
+      manualCycleState={manualCycleState}
+      manualCycleOperationId={randomUUID()}
       lifecycleOperationIds={{
         promote_live_paper: randomUUID(),
         pause: randomUUID(),

@@ -4,6 +4,25 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Durable owner-triggered paper cycle envelope
+
+- [x] Define one manual-only hosted scheduler contract with a database-stamped decision boundary, fixed 15-minute slots, official-calendar checks, overlap exclusion, and exact duplicate-result reuse.
+- [x] Require the authenticated owner, current control revision, active replay/shadow lifecycle, active paper account, locked reviewed manifests, and scheduler/agent/emergency controls off.
+- [x] Persist only sanitized scheduler and skipped-simulator evidence while provider requests, ingestion, AI reservations/calls, decisions, orders, fills, positions, and ledger writes remain impossible.
+- [x] Add a strict state/read projection, typed repository, re-authorizing Server Action, and hosted experiment control with exact confirmation and unknown-result guidance.
+- [x] Cover grants, owner/non-owner/anonymous access, stale inputs, same-operation and same-slot retries, market-closed/runtime-disabled paths, immutable evidence, and zero financial/AI/provider side effects with pgTAP and application tests.
+- [ ] Reconcile generated types and scheduling/security/runbook/limitation documentation, then run complete application/database/browser release gates before a protected Preview and reviewed merge.
+
+Scope guard: this slice finalizes only the durable manual scheduling envelope and a skipped simulator-run journal. It cannot enable a remote scheduler, fetch market data, call a model, reserve AI budget, create a proposal/order/fill, or mutate cash, positions, or P&L.
+
+#### Review in progress
+
+- The additive migration compiles against the hosted Capital-Lab schema, and the combined rollback-only rehearsal passes all 55 pgTAP assertions without retaining a function, row, or fixture.
+- Application gates pass: zero-warning ESLint, strict TypeScript, 52 Vitest files / 429 tests, the PAPER TRADING ONLY scan, the Next.js 16.3 production build, all four mock Chromium journeys, slice formatting, and `git diff --check`. The repository-wide local formatter reports only 17 untouched Windows-checkout line-ending files; clean-checkout CI remains the authoritative full formatting gate. Docker is unavailable locally, so the fresh reset/every-pgTAP gate remains for CI; the hosted-schema rollback rehearsal covers all 55 new assertions.
+- The public functions are fixed-search-path security invokers over private fixed-search-path definers. Authenticated callers retain no direct scheduler/simulator inserts, and anonymous/PUBLIC/service-role function execution is denied.
+- Two reviewed replay boundaries create exactly two skipped slots/runs and two skipped simulator journals. Exact operation retries and same-slot duplicate deliveries reuse immutable IDs; ingestion, source health, quotes, bars, agents, AI reservations/usage, decisions, orders, fills, ledger, position, and portfolio/P&L counts remain unchanged.
+- A post-rollback hosted audit confirms both functions, migration history, and every rehearsal scheduler row are absent. No hosted state has been changed and Production remains unpromoted.
+
 ### Owner-reviewed hosted experiment start
 
 - [x] Define one fixed paper-only start manifest covering the simulator, risk, disabled model routing, reviewed data sources, Luna prompt, empty corpus, AI budget, hosted universe, and official calendar.

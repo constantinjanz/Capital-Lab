@@ -6,6 +6,7 @@ import {
   startHostedDraftExperiment,
   updateHostedDraftExperiment,
 } from './experiment-write-repository'
+import { runHostedManualCycleMutation } from './manual-cycle-repository'
 
 const input = {
   operationId: 'd1000000-0000-4000-8000-000000000001',
@@ -20,6 +21,14 @@ const startInput = {
   expectedControlStateVersion: '9007199254740994',
   mode: 'replay' as const,
   confirmation: 'START REPLAY',
+}
+
+const cycleInput = {
+  operationId: 'd5000000-0000-4000-8000-000000000001',
+  experimentId: 'e5000000-0000-4000-8000-000000000001',
+  expectedControlStateVersion: '9007199254740995',
+  decisionAt: '2026-08-08T15:45:02.000+00:00',
+  confirmation: 'RUN PAPER CYCLE' as const,
 }
 
 describe('hosted experiment write repository', () => {
@@ -432,6 +441,97 @@ describe('hosted experiment write repository', () => {
 
     await expect(
       startHostedDraftExperiment({ rpc } as never, startInput),
+    ).resolves.toEqual({ ok: false, reason: 'unknown' })
+  })
+
+  it('calls only the strict hosted manual cycle RPC boundary', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          scheduler_run_id: 'e5000000-0000-4000-8000-000000000002',
+          simulator_run_id: 'e5000000-0000-4000-8000-000000000003',
+          slot_key: `hosted-paper-cycle:${cycleInput.experimentId}:2026-08-08T15:45:00Z`,
+          decision_at: '2026-08-08T15:45:02.000+00:00',
+          status: 'skipped',
+          reason: 'market_closed',
+          model_calls: 0,
+          paper_orders_created: 0,
+          paper_fills_created: 0,
+          replayed: false,
+        },
+      ],
+      error: null,
+    })
+
+    await expect(
+      runHostedManualCycleMutation({ rpc } as never, cycleInput),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: {
+        status: 'skipped',
+        reason: 'market_closed',
+        modelCalls: 0,
+        paperOrdersCreated: 0,
+        paperFillsCreated: 0,
+        replayed: false,
+      },
+    })
+    expect(rpc).toHaveBeenCalledWith('run_hosted_manual_cycle', {
+      p_confirmation: 'RUN PAPER CYCLE',
+      p_decision_at: cycleInput.decisionAt,
+      p_expected_control_state_version: '9007199254740995',
+      p_experiment_id: cycleInput.experimentId,
+      p_operation_id: cycleInput.operationId,
+    })
+  })
+
+  it.each([
+    ['40001', 'conflict'],
+    ['22023', 'invalid'],
+    ['55000', 'transition'],
+    ['42501', 'rejected'],
+    ['PGRST000', 'unknown'],
+  ] as const)(
+    'maps manual cycle database error %s to %s',
+    async (code, reason) => {
+      const rpc = vi.fn().mockResolvedValue({
+        data: null,
+        error: { code, message: 'raw database detail' },
+      })
+      await expect(
+        runHostedManualCycleMutation({ rpc } as never, cycleInput),
+      ).resolves.toEqual({ ok: false, reason })
+    },
+  )
+
+  it.each([
+    { model_calls: 1 },
+    { paper_orders_created: 1 },
+    { status: 'completed' },
+    { reason: 'agent_disabled' },
+    { scheduler_run_id: 'not-a-uuid' },
+  ])('fails closed on unsafe manual cycle output %#', async (change) => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          scheduler_run_id: 'e5000000-0000-4000-8000-000000000002',
+          simulator_run_id: 'e5000000-0000-4000-8000-000000000003',
+          slot_key: `hosted-paper-cycle:${cycleInput.experimentId}:2026-08-08T15:45:00Z`,
+          decision_at: '2026-08-08T15:45:02.000+00:00',
+          status: 'skipped',
+          reason: 'market_closed',
+          model_calls: 0,
+          paper_orders_created: 0,
+          paper_fills_created: 0,
+          replayed: false,
+          ...change,
+        },
+      ],
+      error: null,
+    })
+
+    await expect(
+      runHostedManualCycleMutation({ rpc } as never, cycleInput),
     ).resolves.toEqual({ ok: false, reason: 'unknown' })
   })
 })
