@@ -8,6 +8,10 @@ import {
   parseHostedMarketConfigurationForm,
 } from '@/features/markets/configure-hosted-market'
 import {
+  type HostedOfficialCalendarConfigurationActionState,
+  parseHostedOfficialCalendarConfigurationForm,
+} from '@/features/markets/hosted-official-calendar'
+import {
   deriveHostedMarketIngestionReadiness,
   type HostedMarketMutationActionState,
   parseHostedMarketIngestionForm,
@@ -21,6 +25,7 @@ import {
   createHostedMarketIngestionPersistence,
   setHostedMarketSourceEnabled,
 } from '@/lib/supabase/market-ingestion-write-repository'
+import { writeHostedOfficialCalendarConfiguration } from '@/lib/supabase/official-calendar-write-repository'
 import { AlpacaMarketDataProvider } from '@/providers/market-data/alpaca'
 
 const UNKNOWN_CONFIGURATION_MESSAGE =
@@ -29,6 +34,8 @@ const UNKNOWN_SOURCE_MESSAGE =
   'The source lifecycle result could not be confirmed. Retry this same operation or reload Markets before continuing.'
 const UNKNOWN_INGESTION_MESSAGE =
   'The ingestion result could not be confirmed. Retry this same operation or reload Markets before continuing.'
+const UNKNOWN_CALENDAR_MESSAGE =
+  'The calendar setup result could not be confirmed. Retry this same setup or reload Markets before continuing.'
 
 export async function configureHostedMarketManifest(
   _previousState: HostedMarketConfigurationActionState,
@@ -83,6 +90,66 @@ export async function configureHostedMarketManifest(
     message: result.replayed
       ? 'This reviewed configuration was already saved. No data was fetched and no activation state changed.'
       : 'Reviewed configuration saved. No data was fetched, no credentials were added, and no activation state changed.',
+  }
+}
+
+export async function configureHostedOfficialCalendarManifest(
+  _previousState: HostedOfficialCalendarConfigurationActionState,
+  formData: FormData,
+): Promise<HostedOfficialCalendarConfigurationActionState> {
+  const context = await getHostedOwnerMutationContext()
+
+  if (context.status === 'unconfigured') {
+    return {
+      status: 'error',
+      message: 'Official calendar setup is unavailable in local mock mode.',
+    }
+  }
+  if (context.status === 'unauthenticated') {
+    redirect('/login?reason=session-expired')
+  }
+  if (context.status === 'unauthorized') {
+    await context.supabase.auth.signOut()
+    redirect('/login?reason=unauthorized')
+  }
+  if (context.status === 'unavailable') {
+    return {
+      status: 'error',
+      message: 'Owner verification is temporarily unavailable. Try again.',
+    }
+  }
+
+  const parsed = parseHostedOfficialCalendarConfigurationForm(formData)
+  if (!parsed.success) return parsed.state
+
+  let result: Awaited<
+    ReturnType<typeof writeHostedOfficialCalendarConfiguration>
+  >
+  try {
+    result = await writeHostedOfficialCalendarConfiguration(
+      context.supabase,
+      parsed.data,
+    )
+  } catch {
+    return { status: 'unknown', message: UNKNOWN_CALENDAR_MESSAGE }
+  }
+
+  if (!result.ok) {
+    return result.reason === 'unknown'
+      ? { status: 'unknown', message: UNKNOWN_CALENDAR_MESSAGE }
+      : {
+          status: 'error',
+          message:
+            'The reviewed official calendar was rejected. No partial calendar configuration was accepted.',
+        }
+  }
+
+  revalidatePath('/markets')
+  return {
+    status: 'success',
+    message: result.replayed
+      ? 'This reviewed 2026 calendar was already saved. No provider or scheduler state changed.'
+      : 'Reviewed 2026 XNAS/ARCX calendar saved. No provider request was made and scheduling remains disabled.',
   }
 }
 

@@ -10,6 +10,7 @@ import { requireOwner } from '@/lib/auth/require-owner'
 import { getServerEnvironment } from '@/lib/env/server'
 import { mockRepository } from '@/lib/mock/repository'
 import { readHostedMarketSnapshot } from '@/lib/supabase/market-snapshot-read-repository'
+import { readHostedOfficialCalendarState } from '@/lib/supabase/official-calendar-read-repository'
 
 export const metadata: Metadata = { title: 'Markets' }
 
@@ -46,7 +47,10 @@ export default async function MarketsPage() {
     return <MarketsView data={mockRepository.getMarkets()} />
   }
 
-  const snapshot = await readHostedMarketSnapshot(identity.id)
+  const [snapshot, officialCalendarState] = await Promise.all([
+    readHostedMarketSnapshot(identity.id),
+    readHostedOfficialCalendarState(identity.id),
+  ])
   const ingestionReadiness = hostedMarketIngestionReadiness()
   const ingestionWindow = previousCompletedMinuteWindow(new Date())
   const sourceLifecycleOperationId = randomUUID()
@@ -55,6 +59,8 @@ export default async function MarketsPage() {
     <HostedMarketsView
       snapshot={snapshot}
       configurationOperationId={randomUUID()}
+      calendarConfigurationOperationId={randomUUID()}
+      officialCalendarState={officialCalendarState}
       sourceLifecycleOperationId={sourceLifecycleOperationId}
       ingestionOperationId={ingestionOperationId}
       ingestionReadiness={ingestionReadiness}

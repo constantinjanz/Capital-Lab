@@ -17,6 +17,8 @@ import { MARKET_FEATURE_VERSION } from '@/domain/market-data/features'
 import { hasReviewedHostedMarketManifest } from '@/features/markets/hosted-market-configuration-status'
 import { type HostedMarketIngestionReadiness } from '@/features/markets/hosted-market-ingestion'
 import { HostedMarketIngestionControl } from '@/features/markets/hosted-market-ingestion-control'
+import { type HostedOfficialCalendarState } from '@/features/markets/hosted-official-calendar'
+import { HostedOfficialCalendarControl } from '@/features/markets/hosted-official-calendar-control'
 import {
   deriveHostedMarketSessionState,
   type HostedMarketSession,
@@ -74,6 +76,8 @@ function sessionRowState(
 export function HostedMarketsView({
   snapshot,
   configurationOperationId,
+  calendarConfigurationOperationId,
+  officialCalendarState,
   sourceLifecycleOperationId,
   ingestionOperationId,
   ingestionReadiness,
@@ -81,6 +85,8 @@ export function HostedMarketsView({
 }: {
   snapshot: HostedMarketSnapshot
   configurationOperationId: string
+  calendarConfigurationOperationId: string
+  officialCalendarState: HostedOfficialCalendarState
   sourceLifecycleOperationId: string
   ingestionOperationId: string
   ingestionReadiness: HostedMarketIngestionReadiness
@@ -410,6 +416,10 @@ export function HostedMarketsView({
 
       <div className="dashboard-grid dashboard-grid--split">
         <Panel eyebrow="Calendar evidence" title="Recent sessions">
+          <HostedOfficialCalendarControl
+            operationId={calendarConfigurationOperationId}
+            state={officialCalendarState}
+          />
           {snapshot.sessions.length === 0 ? (
             <EmptyState
               icon={CalendarClock}

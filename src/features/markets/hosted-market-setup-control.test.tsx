@@ -20,6 +20,7 @@ vi.mock('react-dom', async () => {
   return { ...actual, useFormStatus: mocks.useFormStatus }
 })
 vi.mock('@/features/markets/actions', () => ({
+  configureHostedOfficialCalendarManifest: vi.fn(),
   configureHostedMarketManifest: vi.fn(),
   runHostedAlpacaIngestion: vi.fn(),
   setHostedAlpacaSourceState: vi.fn(),
@@ -30,6 +31,12 @@ import { HostedMarketsView } from './hosted-markets-view'
 
 const operationId = 'd3000000-0000-4000-8000-000000000001'
 const hostedIngestionProps = {
+  calendarConfigurationOperationId: 'd3000000-0000-4000-8000-000000000004',
+  officialCalendarState: {
+    status: 'unconfigured' as const,
+    decisionAt: '2026-08-07T12:00:00.000Z',
+    calendarYear: 2026 as const,
+  },
   sourceLifecycleOperationId: 'd3000000-0000-4000-8000-000000000002',
   ingestionOperationId: 'd3000000-0000-4000-8000-000000000003',
   ingestionReadiness: {
