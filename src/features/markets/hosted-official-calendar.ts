@@ -25,7 +25,7 @@ const configurationRowSchema = z
 const stateRowSchema = z
   .object({
     owner_id: canonicalUuid,
-    decision_at: z.iso.datetime(),
+    decision_at: z.iso.datetime({ offset: true }),
     configured: z.boolean(),
     manifest_id: z.string().nullable(),
     manifest_record_id: canonicalUuid.nullable(),

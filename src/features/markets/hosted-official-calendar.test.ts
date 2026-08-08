@@ -134,6 +134,34 @@ describe('hosted official calendar contract mapping', () => {
     })
   })
 
+  it('accepts the UTC offset emitted by hosted PostgREST', () => {
+    const hostedDecisionAt = '2026-08-08T12:09:48.046771+00:00'
+
+    expect(
+      mapHostedOfficialCalendarState(
+        [
+          {
+            ...configuredStateRow(),
+            decision_at: hostedDecisionAt,
+            configured: false,
+            manifest_id: null,
+            manifest_record_id: null,
+            exchange_count: 0,
+            session_count: 0,
+            regular_session_count: 0,
+            early_close_session_count: 0,
+            closed_session_count: 0,
+          },
+        ],
+        ownerId,
+      ),
+    ).toEqual({
+      status: 'unconfigured',
+      decisionAt: hostedDecisionAt,
+      calendarYear: 2026,
+    })
+  })
+
   it('rejects cross-owner state and unconfigured evidence', () => {
     expect(() =>
       mapHostedOfficialCalendarState([configuredStateRow()], operationId),
