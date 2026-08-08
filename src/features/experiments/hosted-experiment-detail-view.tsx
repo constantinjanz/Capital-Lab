@@ -5,6 +5,8 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Panel } from '@/components/ui/panel'
 import { StatusPill } from '@/components/ui/status-pill'
 import { HostedDraftEditor } from '@/features/experiments/hosted-draft-editor'
+import { HostedManualCycleControls } from '@/features/experiments/hosted-manual-cycle-controls'
+import type { HostedManualCycleState } from '@/features/experiments/hosted-manual-cycle'
 import {
   HostedExperimentStartControls,
   type HostedExperimentStartOperationIds,
@@ -42,18 +44,26 @@ export function HostedExperimentDetailView({
   draftOperationId,
   startReadiness,
   startOperationIds,
+  manualCycleState,
+  manualCycleOperationId,
   lifecycleOperationIds,
 }: {
   experiment: HostedExperimentDetail
   draftOperationId: string
   startReadiness: HostedExperimentStartReadiness
   startOperationIds: HostedExperimentStartOperationIds
+  manualCycleState: HostedManualCycleState
+  manualCycleOperationId: string
   lifecycleOperationIds: HostedLifecycleOperationIds
 }) {
   const lockedVersion = experiment.lockedVersion
   const canEditDraft = isHostedDraftMetadataEditable(experiment)
   const lifecycleAvailability = getHostedLockedLifecycleAvailability(experiment)
   const hasLifecycleAction = Object.values(lifecycleAvailability).some(Boolean)
+  const canShowManualCycle =
+    experiment.lifecycleStatus !== 'draft' &&
+    (experiment.executionMode === 'replay' ||
+      experiment.executionMode === 'shadow')
 
   return (
     <div className="page-stack">
@@ -107,6 +117,14 @@ export function HostedExperimentDetailView({
             lockedVersionId={experiment.lockedVersionId}
             availability={lifecycleAvailability}
             operationIds={lifecycleOperationIds}
+          />
+        </Panel>
+      ) : null}
+      {canShowManualCycle ? (
+        <Panel eyebrow="Owner cycle" title="Durable paper scheduler envelope">
+          <HostedManualCycleControls
+            cycleState={manualCycleState}
+            operationId={manualCycleOperationId}
           />
         </Panel>
       ) : null}

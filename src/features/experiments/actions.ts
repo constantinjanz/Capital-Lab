@@ -12,6 +12,10 @@ import {
   parseHostedLifecycleForm,
 } from '@/features/experiments/mutate-hosted-lifecycle'
 import {
+  type HostedManualCycleActionState,
+  parseHostedManualCycleForm,
+} from '@/features/experiments/hosted-manual-cycle'
+import {
   type HostedDraftUpdateActionState,
   parseHostedDraftUpdateForm,
 } from '@/features/experiments/update-hosted-draft'
@@ -20,6 +24,7 @@ import {
   parseHostedExperimentStartForm,
 } from '@/features/experiments/start-hosted-draft'
 import { getHostedOwnerMutationContext } from '@/lib/auth/hosted-owner-mutation'
+import { runHostedManualCycleMutation } from '@/lib/supabase/manual-cycle-repository'
 import {
   createHostedDraftExperiment as createHostedDraft,
   mutateHostedLockedExperimentLifecycle as mutateHostedLifecycle,
@@ -33,6 +38,8 @@ const UNKNOWN_LIFECYCLE_MESSAGE =
   'The lifecycle result could not be confirmed. Reload this page before trying another action.'
 const UNKNOWN_START_MESSAGE =
   'The start result could not be confirmed. Reload this page before trying another action.'
+const UNKNOWN_MANUAL_CYCLE_MESSAGE =
+  'The cycle result could not be confirmed. Reload before requesting another cycle.'
 
 export async function createHostedDraftExperiment(
   _previousState: HostedDraftActionState,
@@ -229,6 +236,77 @@ export async function mutateHostedLockedExperimentLifecycle(
   revalidatePath(`/experiments/${parsed.data.experimentId}`)
   revalidatePath(`/experiments/${mutation.result.experimentId}`)
   redirect(`/experiments/${mutation.result.experimentId}`)
+}
+
+export async function runHostedManualCycle(
+  _previousState: HostedManualCycleActionState,
+  formData: FormData,
+): Promise<HostedManualCycleActionState> {
+  const context = await getHostedOwnerMutationContext()
+
+  if (context.status === 'unconfigured') {
+    return {
+      status: 'error',
+      message: 'Hosted paper cycles are unavailable in local mock mode.',
+    }
+  }
+  if (context.status === 'unauthenticated') {
+    redirect('/login?reason=session-expired')
+  }
+  if (context.status === 'unauthorized') {
+    await context.supabase.auth.signOut()
+    redirect('/login?reason=unauthorized')
+  }
+  if (context.status === 'unavailable') {
+    return {
+      status: 'error',
+      message: 'Owner verification is temporarily unavailable. Try again.',
+    }
+  }
+
+  const parsed = parseHostedManualCycleForm(formData)
+  if (!parsed.success) return parsed.state
+
+  let mutation: Awaited<ReturnType<typeof runHostedManualCycleMutation>>
+  try {
+    mutation = await runHostedManualCycleMutation(context.supabase, parsed.data)
+  } catch {
+    return { status: 'unknown', message: UNKNOWN_MANUAL_CYCLE_MESSAGE }
+  }
+
+  if (!mutation.ok) {
+    if (mutation.reason === 'conflict') {
+      return {
+        status: 'error',
+        message: 'This experiment changed. Reload before running a cycle.',
+      }
+    }
+    if (mutation.reason === 'invalid') {
+      return {
+        status: 'error',
+        message: 'Enter RUN PAPER CYCLE exactly.',
+      }
+    }
+    if (mutation.reason === 'transition') {
+      return {
+        status: 'error',
+        message:
+          'The paper cycle is not currently eligible. Reload and review the lifecycle, controls, and locked runtime manifest.',
+      }
+    }
+    if (mutation.reason === 'unknown') {
+      return { status: 'unknown', message: UNKNOWN_MANUAL_CYCLE_MESSAGE }
+    }
+    return {
+      status: 'error',
+      message: 'The paper cycle was rejected. No partial run was saved.',
+    }
+  }
+
+  revalidatePath('/experiments')
+  revalidatePath('/dashboard')
+  revalidatePath(`/experiments/${parsed.data.experimentId}`)
+  redirect(`/experiments/${parsed.data.experimentId}`)
 }
 
 export async function startHostedDraftExperiment(

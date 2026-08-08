@@ -4,6 +4,28 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Durable owner-triggered paper cycle envelope
+
+- [x] Define one manual-only hosted scheduler contract with a database-stamped decision boundary, fixed 15-minute slots, official-calendar checks, overlap exclusion, and exact duplicate-result reuse.
+- [x] Require the authenticated owner, current control revision, active replay/shadow lifecycle, active paper account, locked reviewed manifests, and scheduler/agent/emergency controls off.
+- [x] Persist only sanitized scheduler and skipped-simulator evidence while provider requests, ingestion, AI reservations/calls, decisions, orders, fills, positions, and ledger writes remain impossible.
+- [x] Add a strict state/read projection, typed repository, re-authorizing Server Action, and hosted experiment control with exact confirmation and unknown-result guidance.
+- [x] Cover grants, owner/non-owner/anonymous access, stale inputs, same-operation and same-slot retries, market-closed/runtime-disabled paths, immutable evidence, and zero financial/AI/provider side effects with pgTAP and application tests.
+- [x] Reconcile generated types and scheduling/security/runbook/limitation documentation, then run complete application/database/browser release gates before a protected Preview and reviewed merge.
+
+Scope guard: this slice finalizes only the durable manual scheduling envelope and a skipped simulator-run journal. It cannot enable a remote scheduler, fetch market data, call a model, reserve AI budget, create a proposal/order/fill, or mutate cash, positions, or P&L.
+
+#### Review
+
+- The additive migration compiles against the hosted Capital-Lab schema, and the combined rollback-only rehearsal passes all 55 pgTAP assertions without retaining a function, row, or fixture.
+- Application gates pass: zero-warning ESLint, strict TypeScript, 52 Vitest files / 429 tests, the PAPER TRADING ONLY scan, the Next.js 16.3 production build, all four mock Chromium journeys, slice formatting, and `git diff --check`. The repository-wide local formatter reports only 17 untouched Windows-checkout line-ending files; clean-checkout CI remains the authoritative full formatting gate. Docker is unavailable locally, so the fresh reset/every-pgTAP gate remains for CI; the hosted-schema rollback rehearsal covers all 55 new assertions.
+- The public functions are fixed-search-path security invokers over private fixed-search-path definers. Authenticated callers retain no direct scheduler/simulator inserts, and anonymous/PUBLIC/service-role function execution is denied.
+- Two reviewed replay boundaries create exactly two skipped slots/runs and two skipped simulator journals. Exact operation retries and same-slot duplicate deliveries reuse immutable IDs; ingestion, source health, quotes, bars, agents, AI reservations/usage, decisions, orders, fills, ledger, position, and portfolio/P&L counts remain unchanged.
+- Hosted migration `20260808181247` is applied to Capital-Lab. Generated hosted RPC types match the checked-in state/run contracts; all five functions retain fixed empty search paths, the public wrappers remain security invokers, and only `authenticated` has execution while owner identity is rechecked inside the private definers. Supabase advisors report no new schema security finding: leaked-password protection remains the one project-level warning, and unused-index notices remain informational.
+- GitHub PR #16 passed the clean-checkout application, browser, database, Vercel, and Preview-comment checks for both push and pull-request events at commit `d2ded11`. Vercel Preview `dpl_41gZPMB3o7Tvv7XTaccew5sVfVja` is READY as Next.js at that exact commit; the protected owner UI renders with scheduler, agent, market ingestion, paid calls, and broker connections disabled.
+- The authenticated Preview action recorded scheduler run `cfac7702-d0b5-4a19-8ece-76309d962661`, simulator journal `c8c63901-b38b-49d3-b8fa-0db2c2b9ae60`, and one manual slot at the database-stamped `2026-08-08T18:26:37.796476Z` boundary. The closed Saturday session returned `market_closed`; the UI and database agree on the durable IDs and safe-skip result.
+- The immediate before/after hosted audit changed only scheduler slots/runs, simulator journals, idempotency, and redacted audit rows from zero/four baselines by exactly one. Ingestion, source health, quotes, bars, agent runs/decisions, AI reservations/usage, orders, fills, position lots/positions, cash-ledger entries, and portfolio snapshots remained unchanged; metadata attests zero provider requests, model calls, orders, fills, and ledger entries. Browser diagnostics are empty, the action POST/refresh are HTTP 200, deployment runtime errors are empty, and Production remains unpromoted.
+
 ### Owner-reviewed hosted experiment start
 
 - [x] Define one fixed paper-only start manifest covering the simulator, risk, disabled model routing, reviewed data sources, Luna prompt, empty corpus, AI budget, hosted universe, and official calendar.

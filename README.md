@@ -79,7 +79,7 @@ Imports support preview before commit, content hashes, deterministic chunks, dup
 
 ## Scheduler
 
-Exactly one provider may be active: `manual`, `vercel`, or `supabase`. The checked-in deployment keeps remote scheduling disabled while the durable database cycle is still under review. When that integration is ready, a 15-minute weekday Vercel schedule can call the secured handler, which then checks the US regular session in `America/New_York`; frequent Vercel schedules require a paid plan because Hobby is daily-only. Supabase Cron is the documented fallback. Never enable both.
+Exactly one provider may be active: `manual`, `vercel`, or `supabase`. The checked-in deployment keeps remote scheduling disabled. An authenticated owner may explicitly submit the reviewed manual hosted envelope for an active replay/shadow experiment; the database checks the locked 2026 XNAS/ARCX session, serializes one 15-minute slot, and persists only a skipped scheduler/simulator journal because provider runtime, AI, orders, fills, positions, and financial writes remain off. Vercel or Supabase scheduling requires a later reviewed activation; never enable both.
 
 ## Important limitations
 

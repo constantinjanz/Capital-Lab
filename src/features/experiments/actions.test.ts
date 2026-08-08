@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { initialHostedDraftActionState } from './create-hosted-draft'
+import { initialHostedManualCycleActionState } from './hosted-manual-cycle'
 import { initialHostedLifecycleActionState } from './mutate-hosted-lifecycle'
 import { initialHostedExperimentStartActionState } from './start-hosted-draft'
 import { initialHostedDraftUpdateActionState } from './update-hosted-draft'
@@ -8,6 +9,7 @@ import { initialHostedDraftUpdateActionState } from './update-hosted-draft'
 const mocks = vi.hoisted(() => ({
   createDraft: vi.fn(),
   mutateLifecycle: vi.fn(),
+  runCycle: vi.fn(),
   startDraft: vi.fn(),
   updateDraft: vi.fn(),
   getContext: vi.fn(),
@@ -29,10 +31,14 @@ vi.mock('@/lib/supabase/experiment-write-repository', () => ({
   startHostedDraftExperiment: mocks.startDraft,
   updateHostedDraftExperiment: mocks.updateDraft,
 }))
+vi.mock('@/lib/supabase/manual-cycle-repository', () => ({
+  runHostedManualCycleMutation: mocks.runCycle,
+}))
 
 import {
   createHostedDraftExperiment,
   mutateHostedLockedExperimentLifecycle,
+  runHostedManualCycle,
   startHostedDraftExperiment,
   updateHostedDraftExperiment,
 } from './actions'
@@ -79,6 +85,16 @@ function validStartForm(mode: 'replay' | 'shadow' = 'replay') {
   data.set('expectedControlStateVersion', '9007199254740994')
   data.set('mode', mode)
   data.set('confirmation', mode === 'replay' ? 'START REPLAY' : 'START SHADOW')
+  return data
+}
+
+function validCycleForm() {
+  const data = new FormData()
+  data.set('operationId', 'd5000000-0000-4000-8000-000000000001')
+  data.set('experimentId', experimentId)
+  data.set('expectedControlStateVersion', '9007199254740995')
+  data.set('decisionAt', '2026-08-08T15:45:02.000+00:00')
+  data.set('confirmation', 'RUN PAPER CYCLE')
   return data
 }
 
@@ -513,6 +529,138 @@ describe('startHostedDraftExperiment action', () => {
       [`/experiments/${experimentId}`],
     ])
     expect(mocks.redirect).toHaveBeenCalledWith(`/experiments/${experimentId}`)
+  })
+})
+
+describe('runHostedManualCycle action', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getContext.mockResolvedValue(readyContext())
+    mocks.runCycle.mockResolvedValue({
+      ok: true,
+      result: {
+        schedulerRunId: 'e5000000-0000-4000-8000-000000000002',
+        simulatorRunId: 'e5000000-0000-4000-8000-000000000003',
+        slotKey: `hosted-paper-cycle:${experimentId}:2026-08-08T15:45:00Z`,
+        decisionAt: '2026-08-08T15:45:02.000+00:00',
+        status: 'skipped',
+        reason: 'market_closed',
+        modelCalls: 0,
+        paperOrdersCreated: 0,
+        paperFillsCreated: 0,
+        replayed: false,
+      },
+    })
+  })
+
+  it('reauthorizes and forwards no identity, environment, or enable fields', async () => {
+    const data = validCycleForm()
+    data.set('ownerId', '00000000-0000-4000-8000-000000000999')
+    data.set('schedulerEnabled', 'true')
+    data.set('agentEnabled', 'true')
+    data.set('providerCredential', 'do-not-forward')
+
+    await expect(
+      runHostedManualCycle(initialHostedManualCycleActionState, data),
+    ).rejects.toThrow(`NEXT_REDIRECT:/experiments/${experimentId}`)
+    expect(mocks.runCycle).toHaveBeenCalledWith(readyContext().supabase, {
+      operationId: 'd5000000-0000-4000-8000-000000000001',
+      experimentId,
+      expectedControlStateVersion: '9007199254740995',
+      decisionAt: '2026-08-08T15:45:02.000+00:00',
+      confirmation: 'RUN PAPER CYCLE',
+    })
+  })
+
+  it.each([
+    ['unauthenticated', '/login?reason=session-expired'],
+    ['unauthorized', '/login?reason=unauthorized'],
+  ] as const)('redirects a %s caller', async (status, destination) => {
+    mocks.getContext.mockResolvedValue({
+      status,
+      supabase: { auth: { signOut: mocks.signOut } },
+    })
+
+    await expect(
+      runHostedManualCycle(
+        initialHostedManualCycleActionState,
+        validCycleForm(),
+      ),
+    ).rejects.toThrow(`NEXT_REDIRECT:${destination}`)
+    expect(mocks.runCycle).not.toHaveBeenCalled()
+    expect(mocks.signOut).toHaveBeenCalledTimes(
+      status === 'unauthorized' ? 1 : 0,
+    )
+  })
+
+  it('returns exact confirmation errors before reaching the repository', async () => {
+    const data = validCycleForm()
+    data.set('confirmation', 'RUN CYCLE')
+
+    const result = await runHostedManualCycle(
+      initialHostedManualCycleActionState,
+      data,
+    )
+    expect(result.fieldErrors?.confirmation).toBe(
+      'Enter RUN PAPER CYCLE exactly',
+    )
+    expect(mocks.runCycle).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['conflict', 'This experiment changed. Reload before running a cycle.'],
+    ['invalid', 'Enter RUN PAPER CYCLE exactly.'],
+    [
+      'transition',
+      'The paper cycle is not currently eligible. Reload and review the lifecycle, controls, and locked runtime manifest.',
+    ],
+    ['rejected', 'The paper cycle was rejected. No partial run was saved.'],
+    [
+      'unknown',
+      'The cycle result could not be confirmed. Reload before requesting another cycle.',
+    ],
+  ] as const)('maps %s failures to a safe message', async (reason, message) => {
+    mocks.runCycle.mockResolvedValue({ ok: false, reason })
+
+    await expect(
+      runHostedManualCycle(
+        initialHostedManualCycleActionState,
+        validCycleForm(),
+      ),
+    ).resolves.toEqual({
+      status: reason === 'unknown' ? 'unknown' : 'error',
+      message,
+    })
+    expect(mocks.redirect).not.toHaveBeenCalled()
+  })
+
+  it('sanitizes transport failures as unknown outcomes', async () => {
+    mocks.runCycle.mockRejectedValue(new Error('connection reset'))
+    await expect(
+      runHostedManualCycle(
+        initialHostedManualCycleActionState,
+        validCycleForm(),
+      ),
+    ).resolves.toEqual({
+      status: 'unknown',
+      message:
+        'The cycle result could not be confirmed. Reload before requesting another cycle.',
+    })
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it('revalidates current owner reads before redirecting', async () => {
+    await expect(
+      runHostedManualCycle(
+        initialHostedManualCycleActionState,
+        validCycleForm(),
+      ),
+    ).rejects.toThrow(`NEXT_REDIRECT:/experiments/${experimentId}`)
+    expect(mocks.revalidatePath.mock.calls).toEqual([
+      ['/experiments'],
+      ['/dashboard'],
+      [`/experiments/${experimentId}`],
+    ])
   })
 })
 

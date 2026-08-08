@@ -4470,6 +4470,23 @@ export type Database = {
           universe_id: string | null
         }[]
       }
+      hosted_manual_cycle_state: {
+        Args: { p_experiment_id: string }
+        Returns: {
+          control_state_version: string
+          decision_at: string
+          experiment_id: string
+          last_decision_at: string
+          last_reason: string
+          last_scheduler_run_id: string
+          last_simulator_run_id: string
+          last_slot_key: string
+          last_status: string
+          ready: boolean
+          reason: string
+          scheduler_provider: string
+        }[]
+      }
       market_instrument_snapshot_at: {
         Args: {
           p_decision_at: string
@@ -4716,6 +4733,27 @@ export type Database = {
           p_requested_at: string
         }
         Returns: Json
+      }
+      run_hosted_manual_cycle: {
+        Args: {
+          p_confirmation: string
+          p_decision_at: string
+          p_expected_control_state_version: string
+          p_experiment_id: string
+          p_operation_id: string
+        }
+        Returns: {
+          decision_at: string
+          model_calls: number
+          paper_fills_created: number
+          paper_orders_created: number
+          reason: string
+          replayed: boolean
+          scheduler_run_id: string
+          simulator_run_id: string
+          slot_key: string
+          status: string
+        }[]
       }
       set_hosted_market_source_enabled: {
         Args: { p_enabled: boolean; p_operation_id: string }
