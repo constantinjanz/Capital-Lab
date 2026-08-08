@@ -117,7 +117,8 @@ insert into public.experiment_versions(
   id, experiment_id, owner_id, version, market_universe_id,
   simulator_config_version_id, risk_config_version_id, model_routing_version_id,
   data_source_config_version_id, agent_prompt_version_id, knowledge_corpus_version_id,
-  budget_policy_id, initial_capital, base_currency, objective, resolved_rules, content_hash
+  budget_policy_id, initial_capital, base_currency, objective, resolved_rules, content_hash,
+  created_at
 ) values (
   '71000000-0000-0000-0000-000000000002', '70000000-0000-0000-0000-000000000002',
   '00000000-0000-0000-0000-000000000001', 1,
@@ -126,7 +127,8 @@ insert into public.experiment_versions(
   '40000000-0000-0000-0000-000000000004', '61000000-0000-0000-0000-000000000001',
   '62000000-0000-0000-0000-000000000001', '60000000-0000-0000-0000-000000000001',
   100000, 'EUR', 'Maximize terminal net liquidation value in a deterministic replay',
-  '{"paperTradingOnly":true,"mock":true,"regularHoursOnly":true}', repeat('8',64)
+  '{"paperTradingOnly":true,"mock":true,"regularHoursOnly":true}', repeat('8',64),
+  '2026-08-03 13:28:00+00'
 )
 on conflict (id) do nothing;
 
