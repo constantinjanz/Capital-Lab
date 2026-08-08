@@ -106,7 +106,7 @@ Acceptance: seeded mock data renders all required routes and control states; no 
 
 - [x] Implement effective-dated pricing and exact daily/monthly/lifetime decimal cost calculations.
 - [x] Implement atomic worst-case reservations, settlement/release/unknown states, 70/90/100% alerts, and auto-pause rules.
-- [ ] Add scheduler provider selection, secured market-cycle handler, New York market-session checks, unique 15-minute slot keys, overlap protection, and duplicate result reuse.
+- [x] Add scheduler provider selection, secured market-cycle handler, New York market-session checks, unique 15-minute slot keys, overlap protection, and duplicate result reuse.
   - [x] Add the manual-only owner-triggered hosted envelope: it checks the locked 2026 XNAS/ARCX session at an explicit point-in-time boundary, serializes one 15-minute experiment slot, reuses exact terminal results, and writes only skipped scheduler/simulator evidence while every provider, AI, order, fill, position, ledger, and P&L path remains off.
 - [x] Add fake OpenAI gateway and scheduler integration tests without paid calls.
 
@@ -116,7 +116,7 @@ Acceptance: concurrent reservations cannot overspend; closed/no-event/disabled/b
 
 - [x] Implement Markdown, JSON strategy-card, and CSV source-registry preview/commit importers.
 - [x] Add sanitization, deterministic chunking, hashes, versioning, duplicate detection, corpus versions, full-text/vector-ready retrieval, and deterministic test embeddings.
-- [ ] Add immutable decision contexts, outcome labels, confidence/source/category statistics, pattern lifecycle, and champion/challenger promotion gates.
+- [x] Add immutable decision contexts, outcome labels, confidence/source/category statistics, pattern lifecycle, and champion/challenger promotion gates.
 
 Acceptance: retrieval is point-in-time safe and provenance-bearing; patterns cannot self-promote or rewrite controls.
 

@@ -4,6 +4,26 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Structured paper-agent orchestration
+
+- [x] Replace financial-number proposal fields with canonical decimal strings and enforce semantic bounds through the financial decimal wrapper.
+- [x] Add deterministic Luna/Terra/Sol routing, daily/monthly caps, exceptional-escalation rules, and a separately reserved controlled-web-research gate.
+- [x] Add a shadow proposal boundary that cannot create an order and an explicit live-paper boundary that can delegate only to the deterministic simulation service.
+- [x] Persist immutable run provenance, routing events, concise rationale, scenarios, and point-in-time evidence through an owner-only hosted contract.
+- [x] Replace the hosted Agent console mock with an owner-scoped read projection and truthful empty/disabled states.
+- [ ] Run application, database, browser, hosted rollback, Preview, and CI gates without enabling paid AI, Sol, web search, scheduling, or Production.
+
+Scope guard: the hosted environment remains `AGENT_ENABLED=false`, shadow by default, with Sol and web search disabled. This work cannot add brokerage connectivity, broker credentials, real-order paths, or direct fill/ledger writes.
+
+#### Application foundation review
+
+- Exact-decimal proposal validation, deterministic model/web routing, paid-run deduplication, and the shadow/simulation-only dispatcher are implemented without changing a hosted control or environment value.
+- Luna relevance and Terra/Sol shadow runners now reserve routing and quota atomically before any provider request, use only immutable database-pinned prompts/schema IDs, settle exact provider usage, reject candidate/evidence drift, and conservatively mark unreconciled calls as unknown cost. They remain dormant behind disabled server flags.
+- The owner-scoped hosted Agent console now projects real runs, concise decisions/scenarios, evidence, tool calls, and exact cost strings with truthful disabled/empty states; it receives no environment object or credential across the client boundary.
+- The additive migration sections compile against the hosted Capital-Lab schema inside rollback-only transactions, including canonical Luna/Terra/Sol prompts, immutable prompt pins and provider response provenance, atomic begin/finalize/fail contracts, point-in-time evidence enforcement, and the bounded owner console. No rehearsal schema or data persisted.
+- Repository verification passed zero-warning ESLint, strict TypeScript, 70 Vitest files / 531 tests, the PAPER TRADING ONLY scan, intended-slice formatting, `git diff --check`, and the Next.js 16.3 production build.
+- Shadow dispatch persists only a decision record through an injected writer and never invokes simulation. Explicit live-paper dispatch can call only the deterministic `PaperSimulationExecutionService` port; neither path contains a broker, fill, ledger, credential, or external-action capability.
+
 ### Hosted evidence statistics and reviewed pattern gates
 
 - [x] Define one owner-only, bounded `decisionAt` learning snapshot for confidence calibration, decision categories, evidence kinds, evaluated outcome horizons, and current pattern/strategy readiness.

@@ -112,6 +112,7 @@ export type Database = {
           model: string
           owner_id: string
           prompt_version_id: string | null
+          provider_response_id: string | null
           role: string
           routing_reason: string
           run_type: string
@@ -129,6 +130,7 @@ export type Database = {
           model: string
           owner_id: string
           prompt_version_id?: string | null
+          provider_response_id?: string | null
           role: string
           routing_reason: string
           run_type: string
@@ -146,6 +148,7 @@ export type Database = {
           model?: string
           owner_id?: string
           prompt_version_id?: string | null
+          provider_response_id?: string | null
           role?: string
           routing_reason?: string
           run_type?: string
@@ -4296,6 +4299,33 @@ export type Database = {
           window_start: string
         }[]
       }
+      begin_hosted_agent_run: {
+        Args: {
+          p_candidate_count: number
+          p_decision_at: string
+          p_expected_control_state_version: string
+          p_experiment_id: string
+          p_max_input_tokens: number
+          p_max_output_tokens: number
+          p_max_tool_calls: number
+          p_operation_id: string
+          p_owner_id: string
+          p_parent_agent_run_id: string | null
+          p_role: string
+          p_routing_reason: string
+        }
+        Returns: {
+          agent_run_id: string
+          allowed: boolean
+          model: string
+          output_schema: Json
+          prompt_version_id: string
+          reason: string
+          replayed: boolean
+          reservation_id: string | null
+          system_prompt: string
+        }[]
+      }
       bootstrap_first_owner: { Args: never; Returns: Json }
       commit_manual_hosted_market_ingestion: {
         Args: {
@@ -4394,6 +4424,82 @@ export type Database = {
           status: string
         }[]
       }
+      fail_hosted_agent_run: {
+        Args: {
+          p_agent_run_id: string
+          p_error_class: string
+          p_owner_id: string
+          p_reservation_id: string
+          p_reservation_outcome: string
+        }
+        Returns: {
+          agent_run_id: string
+          ledger_entries_created: number
+          model_calls: number
+          paper_fills_created: number
+          paper_orders_created: number
+          replayed: boolean
+          reservation_status: string
+          status: string
+        }[]
+      }
+      finalize_hosted_luna_run: {
+        Args: {
+          p_agent_run_id: string
+          p_cache_write_tokens: number
+          p_cached_input_tokens: number
+          p_finish_state: string
+          p_input_tokens: number
+          p_latency_ms: number
+          p_output: Json
+          p_output_tokens: number
+          p_owner_id: string
+          p_provider_response_id: string
+          p_reasoning_tokens: number
+          p_reservation_id: string
+        }
+        Returns: {
+          agent_run_id: string
+          ledger_entries_created: number
+          model_calls: number
+          paper_fills_created: number
+          paper_orders_created: number
+          replayed: boolean
+          status: string
+          terra_escalation_requested: boolean
+        }[]
+      }
+      finalize_hosted_shadow_proposal: {
+        Args: {
+          p_agent_run_id: string
+          p_cache_write_tokens: number
+          p_cached_input_tokens: number
+          p_concise_rationale: string
+          p_confidence: string
+          p_context_manifest: Json
+          p_evidence: Json
+          p_finish_state: string
+          p_input_tokens: number
+          p_latency_ms: number
+          p_output_tokens: number
+          p_owner_id: string
+          p_provider_response_id: string
+          p_reasoning_tokens: number
+          p_reservation_id: string
+          p_structured_output: Json
+        }
+        Returns: {
+          agent_run_id: string
+          context_snapshot_id: string
+          decision_id: string
+          ledger_entries_created: number
+          model_calls: number
+          paper_fills_created: number
+          paper_orders_created: number
+          proposal_status: string
+          replayed: boolean
+        }[]
+      }
       knowledge_chunks_as_of: {
         Args: { p_as_of: string }
         Returns: {
@@ -4479,6 +4585,17 @@ export type Database = {
           evidence_rows: Json
           outcome_rows: Json
           owner_id: string
+        }[]
+      }
+      hosted_agent_console_read: {
+        Args: { p_decision_at: string; p_run_limit?: number }
+        Returns: {
+          decision_at: string
+          decision_rows: Json
+          evidence_rows: Json
+          owner_id: string
+          run_rows: Json
+          tool_call_rows: Json
         }[]
       }
       hosted_learning_snapshot: {

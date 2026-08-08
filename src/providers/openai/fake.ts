@@ -4,6 +4,8 @@ import type {
   OpenAIGateway,
   StructuredGenerationRequest,
   StructuredGenerationResult,
+  WebResearchRequest,
+  WebResearchResult,
 } from './types'
 
 export class FakeOpenAIGateway implements OpenAIGateway {
@@ -26,6 +28,39 @@ export class FakeOpenAIGateway implements OpenAIGateway {
         outputTokens: '0',
         webSearchCalls: '0',
       },
+      providerInputTokens: '0',
+      reasoningTokens: '0',
+      latencyMs: 0,
+      finishState: 'completed',
+    }
+  }
+
+  async researchWeb(request: WebResearchRequest): Promise<WebResearchResult> {
+    void request
+    const fixture = this.fixtures.web_research
+    if (
+      !fixture ||
+      typeof fixture !== 'object' ||
+      !('summary' in fixture) ||
+      typeof fixture.summary !== 'string' ||
+      !('citations' in fixture) ||
+      !Array.isArray(fixture.citations)
+    ) {
+      throw new Error('Missing fake OpenAI fixture: web_research')
+    }
+    return {
+      responseId: 'fake-web-research',
+      summary: fixture.summary,
+      citations: fixture.citations as WebResearchResult['citations'],
+      usage: {
+        inputTokens: '0',
+        cachedInputTokens: '0',
+        cacheWriteTokens: '0',
+        outputTokens: '0',
+        webSearchCalls: '1',
+      },
+      providerInputTokens: '0',
+      reasoningTokens: '0',
       latencyMs: 0,
       finishState: 'completed',
     }
@@ -36,6 +71,11 @@ export class DisabledOpenAIGateway implements OpenAIGateway {
   async generateStructured<TSchema extends z.ZodType>(
     request: StructuredGenerationRequest<TSchema>,
   ): Promise<StructuredGenerationResult<z.infer<TSchema>>> {
+    void request
+    throw new Error('OpenAI gateway is disabled by configuration')
+  }
+
+  async researchWeb(request: WebResearchRequest): Promise<WebResearchResult> {
     void request
     throw new Error('OpenAI gateway is disabled by configuration')
   }

@@ -1,5 +1,19 @@
 import { z } from 'zod'
 
+import { decimal } from '@/domain/financial/decimal'
+
+export const TRADE_PROPOSAL_SCHEMA_ID = 'capital_lab_trade_proposal_v1'
+export const LUNA_DECISION_SCHEMA_ID = 'capital_lab_luna_decision_v1'
+
+const signedDecimalString = z
+  .string()
+  .regex(/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/, 'Must be a canonical decimal string')
+
+const expectedReturnBpsSchema = signedDecimalString.refine(
+  (value) => decimal(value).abs().lte('100000'),
+  'Expected return must be between -100000 and 100000 basis points',
+)
+
 export const lunaCandidateDecisionSchema = z.object({
   candidateId: z.string().min(1),
   relevant: z.boolean(),
@@ -54,8 +68,8 @@ export const tradeProposalSchema = z.object({
   confidencePercent: z.int().min(0).max(100),
   expectedDirection: z.enum(['up', 'down', 'flat', 'uncertain']),
   expectedReturnRangeBps: z.object({
-    minimum: z.int().min(-100_000).max(100_000),
-    maximum: z.int().min(-100_000).max(100_000),
+    minimum: expectedReturnBpsSchema,
+    maximum: expectedReturnBpsSchema,
   }),
   intendedHorizon: z.enum([
     '15_minutes',
@@ -95,8 +109,9 @@ export function validateProposalSemantics(
     throw new Error('Abstentions require a concise reason')
   }
   if (
-    proposal.expectedReturnRangeBps.minimum >
-    proposal.expectedReturnRangeBps.maximum
+    decimal(proposal.expectedReturnRangeBps.minimum).gt(
+      proposal.expectedReturnRangeBps.maximum,
+    )
   ) {
     throw new Error('Expected return range is inverted')
   }

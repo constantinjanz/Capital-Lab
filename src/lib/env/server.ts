@@ -15,6 +15,7 @@ const serverEnvironmentSchema = z
   .object({
     OWNER_EMAIL: z.email().optional(),
     OWNER_BOOTSTRAP_ENABLED: booleanString,
+    SUPABASE_SECRET_KEY: z.string().min(1).optional(),
     OPENAI_API_KEY: z.string().min(1).optional(),
     ALPACA_API_KEY_ID: z.string().min(1).optional(),
     ALPACA_API_SECRET_KEY: z.string().min(1).optional(),
@@ -64,6 +65,12 @@ const serverEnvironmentSchema = z
       context.addIssue({
         code: 'custom',
         message: 'OPENAI_API_KEY is required only when AGENT_ENABLED=true',
+      })
+    }
+    if (value.AGENT_ENABLED && !value.SUPABASE_SECRET_KEY) {
+      context.addIssue({
+        code: 'custom',
+        message: 'SUPABASE_SECRET_KEY is required only when AGENT_ENABLED=true',
       })
     }
   })
