@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { initialHostedDraftActionState } from './create-hosted-draft'
 import { initialHostedLifecycleActionState } from './mutate-hosted-lifecycle'
+import { initialHostedExperimentStartActionState } from './start-hosted-draft'
 import { initialHostedDraftUpdateActionState } from './update-hosted-draft'
 
 const mocks = vi.hoisted(() => ({
   createDraft: vi.fn(),
   mutateLifecycle: vi.fn(),
+  startDraft: vi.fn(),
   updateDraft: vi.fn(),
   getContext: vi.fn(),
   redirect: vi.fn((path: string) => {
@@ -24,12 +26,14 @@ vi.mock('@/lib/auth/hosted-owner-mutation', () => ({
 vi.mock('@/lib/supabase/experiment-write-repository', () => ({
   createHostedDraftExperiment: mocks.createDraft,
   mutateHostedLockedExperimentLifecycle: mocks.mutateLifecycle,
+  startHostedDraftExperiment: mocks.startDraft,
   updateHostedDraftExperiment: mocks.updateDraft,
 }))
 
 import {
   createHostedDraftExperiment,
   mutateHostedLockedExperimentLifecycle,
+  startHostedDraftExperiment,
   updateHostedDraftExperiment,
 } from './actions'
 
@@ -64,6 +68,17 @@ function validLifecycleForm(action = 'pause') {
   data.set('expectedControlStateVersion', '9007199254740993')
   data.set('action', action)
   if (action === 'pause') data.set('reason', ' Owner review ')
+  return data
+}
+
+function validStartForm(mode: 'replay' | 'shadow' = 'replay') {
+  const data = new FormData()
+  data.set('operationId', 'd4000000-0000-4000-8000-000000000001')
+  data.set('experimentId', experimentId)
+  data.set('expectedDraftRevision', '9007199254740993')
+  data.set('expectedControlStateVersion', '9007199254740994')
+  data.set('mode', mode)
+  data.set('confirmation', mode === 'replay' ? 'START REPLAY' : 'START SHADOW')
   return data
 }
 
@@ -319,6 +334,176 @@ describe('updateHostedDraftExperiment action', () => {
       updateHostedDraftExperiment(
         initialHostedDraftUpdateActionState,
         validUpdateForm(),
+      ),
+    ).rejects.toThrow(`NEXT_REDIRECT:/experiments/${experimentId}`)
+
+    expect(mocks.revalidatePath.mock.calls).toEqual([
+      ['/experiments'],
+      ['/dashboard'],
+      [`/experiments/${experimentId}`],
+    ])
+    expect(mocks.redirect).toHaveBeenCalledWith(`/experiments/${experimentId}`)
+  })
+})
+
+describe('startHostedDraftExperiment action', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getContext.mockResolvedValue(readyContext())
+    mocks.startDraft.mockResolvedValue({
+      ok: true,
+      result: {
+        experimentId,
+        experimentVersionId: 'e4000000-0000-4000-8000-000000000002',
+        simulationAccountId: 'e4000000-0000-4000-8000-000000000003',
+        lifecycleStatus: 'active',
+        executionMode: 'replay',
+        controlStateVersion: '9007199254740995',
+        replayed: false,
+      },
+    })
+  })
+
+  it('reauthorizes and forwards only strict start fields', async () => {
+    const data = validStartForm()
+    data.set('ownerId', '00000000-0000-4000-8000-000000000999')
+    data.set('schedulerEnabled', 'true')
+    data.set('agentEnabled', 'true')
+    data.set('executionMode', 'broker')
+    data.set('brokerCredential', 'forged')
+
+    await expect(
+      startHostedDraftExperiment(initialHostedExperimentStartActionState, data),
+    ).rejects.toThrow(`NEXT_REDIRECT:/experiments/${experimentId}`)
+    expect(mocks.startDraft).toHaveBeenCalledWith(readyContext().supabase, {
+      operationId: 'd4000000-0000-4000-8000-000000000001',
+      experimentId,
+      expectedDraftRevision: '9007199254740993',
+      expectedControlStateVersion: '9007199254740994',
+      mode: 'replay',
+      confirmation: 'START REPLAY',
+    })
+  })
+
+  it.each([
+    ['unauthenticated', '/login?reason=session-expired'],
+    ['unauthorized', '/login?reason=unauthorized'],
+  ] as const)('redirects a %s caller', async (status, destination) => {
+    mocks.getContext.mockResolvedValue({
+      status,
+      supabase: { auth: { signOut: mocks.signOut } },
+    })
+
+    await expect(
+      startHostedDraftExperiment(
+        initialHostedExperimentStartActionState,
+        validStartForm(),
+      ),
+    ).rejects.toThrow(`NEXT_REDIRECT:${destination}`)
+    expect(mocks.startDraft).not.toHaveBeenCalled()
+    expect(mocks.signOut).toHaveBeenCalledTimes(
+      status === 'unauthorized' ? 1 : 0,
+    )
+  })
+
+  it('fails closed when hosted Supabase is not configured', async () => {
+    mocks.getContext.mockResolvedValue({ status: 'unconfigured' })
+
+    await expect(
+      startHostedDraftExperiment(
+        initialHostedExperimentStartActionState,
+        validStartForm(),
+      ),
+    ).resolves.toEqual({
+      status: 'error',
+      message: 'Hosted experiment start is unavailable in local mock mode.',
+    })
+    expect(mocks.startDraft).not.toHaveBeenCalled()
+  })
+
+  it('returns a safe error when owner verification is unavailable', async () => {
+    mocks.getContext.mockResolvedValue({
+      status: 'unavailable',
+      supabase: { auth: { signOut: mocks.signOut } },
+    })
+
+    await expect(
+      startHostedDraftExperiment(
+        initialHostedExperimentStartActionState,
+        validStartForm(),
+      ),
+    ).resolves.toEqual({
+      status: 'error',
+      message: 'Owner verification is temporarily unavailable. Try again.',
+    })
+    expect(mocks.startDraft).not.toHaveBeenCalled()
+  })
+
+  it('returns validation errors before reaching the repository', async () => {
+    const data = validStartForm('shadow')
+    data.set('confirmation', 'START REPLAY')
+
+    const result = await startHostedDraftExperiment(
+      initialHostedExperimentStartActionState,
+      data,
+    )
+
+    expect(result.fieldErrors?.confirmation).toBe('Enter START SHADOW exactly')
+    expect(mocks.startDraft).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['conflict', 'This draft changed. Reload before starting it.'],
+    ['invalid', 'Review the start mode and exact confirmation phrase.'],
+    [
+      'transition',
+      'This draft is not ready to start. Reload and review its locked market and calendar prerequisites.',
+    ],
+    [
+      'rejected',
+      'The paper experiment start was rejected. No partial start was saved.',
+    ],
+    [
+      'unknown',
+      'The start result could not be confirmed. Reload this page before trying another action.',
+    ],
+  ] as const)('maps %s failures to a safe message', async (reason, message) => {
+    mocks.startDraft.mockResolvedValue({ ok: false, reason })
+
+    await expect(
+      startHostedDraftExperiment(
+        initialHostedExperimentStartActionState,
+        validStartForm(),
+      ),
+    ).resolves.toEqual({
+      status: reason === 'unknown' ? 'unknown' : 'error',
+      message,
+    })
+    expect(mocks.redirect).not.toHaveBeenCalled()
+  })
+
+  it('sanitizes an unexpected transport failure', async () => {
+    mocks.startDraft.mockRejectedValue(new Error('connection reset'))
+
+    await expect(
+      startHostedDraftExperiment(
+        initialHostedExperimentStartActionState,
+        validStartForm(),
+      ),
+    ).resolves.toEqual({
+      status: 'unknown',
+      message:
+        'The start result could not be confirmed. Reload this page before trying another action.',
+    })
+    expect(mocks.revalidatePath).not.toHaveBeenCalled()
+    expect(mocks.redirect).not.toHaveBeenCalled()
+  })
+
+  it('revalidates affected reads before redirecting to fresh detail', async () => {
+    await expect(
+      startHostedDraftExperiment(
+        initialHostedExperimentStartActionState,
+        validStartForm(),
       ),
     ).rejects.toThrow(`NEXT_REDIRECT:/experiments/${experimentId}`)
 

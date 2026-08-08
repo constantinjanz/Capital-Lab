@@ -4,6 +4,27 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Owner-reviewed hosted experiment start
+
+- [x] Define one fixed paper-only start manifest covering the simulator, risk, disabled model routing, reviewed data sources, Luna prompt, empty corpus, AI budget, hosted universe, and official calendar.
+- [x] Add one atomic owner-only, draft/control-revision-checked, idempotent replay/shadow start contract that locks an immutable experiment version and creates the paper simulation account, opening cash entry, and initial portfolio snapshot.
+- [x] Keep provider runtime fetches, scheduler, agent, Sol, web search, broker capabilities, orders, and fills disabled; expose no credential or environment state to the client.
+- [x] Cover readiness, exact owner authorization, direct-write denial, concurrent/stale inputs, retries, manifest drift, immutable evidence, exact decimals, and zero out-of-scope side effects with pgTAP and application tests.
+- [x] Add a strict readiness projection, repository boundary, re-authorizing Server Action, and hosted-only draft controls with explicit replay/shadow confirmation.
+- [x] Reconcile generated types and lifecycle/security/runbook/limitation documentation, then run the complete application/database/browser release gates before a protected Preview and reviewed merge.
+
+Scope guard: starting creates only deterministic paper-simulation initialization evidence. It cannot call a provider or model, enable ingestion/cron/agent controls, create an order or fill, add a broker integration, or promote Production.
+
+#### Review
+
+- The additive migration and the complete start test passed all 55 pgTAP assertions against the hosted Capital-Lab schema inside one rollback-only transaction. A post-rollback audit confirmed that the rehearsal left no start table, function, or draft fixture behind.
+- Local application gates are green: repository-wide zero-warning ESLint, strict TypeScript, 50 Vitest files / 390 tests, the PAPER TRADING ONLY safety scan, the Next.js 16.3 production build, slice formatting, and `git diff --check`.
+- GitHub PR #15 CI run 79 is green at application commit `17f79bc`: formatting, lint, strict TypeScript, 390 Vitest tests, the paper-only scan, the production build, all Chromium journeys, a fresh Supabase reset, and every pgTAP file passed. Run 77 exposed the deterministic seed's older AAPL metadata; the rollback-only fixture was aligned without weakening the production conflict check.
+- Hosted migration `20260808150423` was applied only after green exact-commit CI. Supabase-generated types match the checked table, version/view, and start-RPC contract; the four readiness identifiers remain intentionally nullable in the client because the function can return an unconfigured state that PostgreSQL function metadata cannot express.
+- Protected Vercel Preview `dpl_4gMfCv7mSpEi8CHsUAKsKQytF1At` is READY at exact application commit `17f79bc` with no Production target. The authenticated owner created experiment `c01b2400-0fd4-4242-a932-62f2563db96f`, confirmed `START REPLAY`, and reloaded the persisted Active/Replay detail with locked version `2153e382-04dd-40ad-bac1-d0bf39c20023`; browser and deployment warning/error scans are empty.
+- The hosted start created one immutable version, one active paper simulation account, one EUR `100000.00000000` opening ledger entry, and one opening snapshot with EUR `200000.00000000` buying power and zero exposure/P&L. Completed idempotency and redacted audit evidence reference the reviewed start, market, and 2026 calendar manifests.
+- Provider runtime fetches and every source/policy, scheduler slot, simulator/ingestion/agent run, agent decision, AI usage event, order, and fill remain zero or disabled. Forced RLS, direct-write denial, narrow authenticated start execution, anonymous/PUBLIC/service-role denial, and the fixed empty search path were rechecked. Security advisors retain only the known leaked-password-protection warning; performance advice is informational unused-index output. Production remains unpromoted.
+
 ### Owner-reviewed 2026 official market calendar
 
 - [x] Define one fixed 2026 XNAS/ARCX regular-session manifest from the official Nasdaq Trader and NYSE/NYSE Arca calendars, including the ten exchange holidays and the November 27 / December 24 early closes.
@@ -44,11 +65,11 @@ Scope guard: this slice checks in fixed calendar evidence only. It makes no exte
 - [x] Preserve the immutable locked experiment/version, simulation ledger, orders, fills, and historical status evidence; clone only configuration references and paper capital into a new disabled draft.
 - [x] Add strict application inputs, a re-authorizing Server Action, typed Supabase repository mapping, and hosted detail controls with explicit confirmation and truthful conflict/unknown-result states.
 - [x] Cover owner/non-owner/anonymous access, allowed and forbidden transitions, revision conflicts, retries, evidence integrity, clone isolation, and zero financial/order/AI/scheduler side effects with unit and pgTAP tests.
-- [ ] Reconcile generated types and lifecycle/security/runbook/limitation documentation, then run the complete application/database/browser release gates before a protected Preview and reviewed merge.
+- [x] Reconcile generated types and lifecycle/security/runbook/limitation documentation, then run the complete application/database/browser release gates before a protected Preview and reviewed merge.
 
 #### Scope note
 
-Draft-to-replay/shadow start follows in a separate reviewed slice because hosted start must first lock an owner-reviewed simulator, risk, routing, data-source, prompt/corpus, budget, universe, and calendar manifest. This slice must not synthesize those references or silently start a draft.
+Draft-to-replay/shadow start was completed in the separate owner-reviewed slice above. It locks the exact simulator, risk, routing, data-source, prompt/corpus, budget, universe, and calendar references without changing the independent locked-experiment lifecycle contract.
 
 #### Review in progress
 

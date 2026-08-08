@@ -44,6 +44,8 @@ const detailRow: HostedExperimentDetailRow = {
   locked_version_created_at: '2026-08-03T13:29:00.000Z',
   draft_revision: '9007199254740993',
   source_experiment_id: null,
+  start_manifest_id: null,
+  market_calendar_manifest_id: null,
 }
 
 describe('mapHostedExperimentDetail', () => {

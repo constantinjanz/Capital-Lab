@@ -15,10 +15,15 @@ import {
   type HostedDraftUpdateActionState,
   parseHostedDraftUpdateForm,
 } from '@/features/experiments/update-hosted-draft'
+import {
+  type HostedExperimentStartActionState,
+  parseHostedExperimentStartForm,
+} from '@/features/experiments/start-hosted-draft'
 import { getHostedOwnerMutationContext } from '@/lib/auth/hosted-owner-mutation'
 import {
   createHostedDraftExperiment as createHostedDraft,
   mutateHostedLockedExperimentLifecycle as mutateHostedLifecycle,
+  startHostedDraftExperiment as startHostedDraft,
   updateHostedDraftExperiment as updateHostedDraft,
 } from '@/lib/supabase/experiment-write-repository'
 
@@ -26,6 +31,8 @@ const UNKNOWN_DRAFT_UPDATE_MESSAGE =
   'The save result could not be confirmed. Reload this page before making another change.'
 const UNKNOWN_LIFECYCLE_MESSAGE =
   'The lifecycle result could not be confirmed. Reload this page before trying another action.'
+const UNKNOWN_START_MESSAGE =
+  'The start result could not be confirmed. Reload this page before trying another action.'
 
 export async function createHostedDraftExperiment(
   _previousState: HostedDraftActionState,
@@ -220,6 +227,78 @@ export async function mutateHostedLockedExperimentLifecycle(
   revalidatePath('/experiments')
   revalidatePath('/dashboard')
   revalidatePath(`/experiments/${parsed.data.experimentId}`)
+  revalidatePath(`/experiments/${mutation.result.experimentId}`)
+  redirect(`/experiments/${mutation.result.experimentId}`)
+}
+
+export async function startHostedDraftExperiment(
+  _previousState: HostedExperimentStartActionState,
+  formData: FormData,
+): Promise<HostedExperimentStartActionState> {
+  const context = await getHostedOwnerMutationContext()
+
+  if (context.status === 'unconfigured') {
+    return {
+      status: 'error',
+      message: 'Hosted experiment start is unavailable in local mock mode.',
+    }
+  }
+  if (context.status === 'unauthenticated') {
+    redirect('/login?reason=session-expired')
+  }
+  if (context.status === 'unauthorized') {
+    await context.supabase.auth.signOut()
+    redirect('/login?reason=unauthorized')
+  }
+  if (context.status === 'unavailable') {
+    return {
+      status: 'error',
+      message: 'Owner verification is temporarily unavailable. Try again.',
+    }
+  }
+
+  const parsed = parseHostedExperimentStartForm(formData)
+  if (!parsed.success) return parsed.state
+
+  let mutation: Awaited<ReturnType<typeof startHostedDraft>>
+  try {
+    mutation = await startHostedDraft(context.supabase, parsed.data)
+  } catch {
+    return { status: 'unknown', message: UNKNOWN_START_MESSAGE }
+  }
+
+  if (!mutation.ok) {
+    if (mutation.reason === 'conflict') {
+      return {
+        status: 'error',
+        message: 'This draft changed. Reload before starting it.',
+      }
+    }
+    if (mutation.reason === 'invalid') {
+      return {
+        status: 'error',
+        message: 'Review the start mode and exact confirmation phrase.',
+      }
+    }
+    if (mutation.reason === 'transition') {
+      return {
+        status: 'error',
+        message:
+          'This draft is not ready to start. Reload and review its locked market and calendar prerequisites.',
+      }
+    }
+    if (mutation.reason === 'unknown') {
+      return { status: 'unknown', message: UNKNOWN_START_MESSAGE }
+    }
+    return {
+      status: 'error',
+      message:
+        'The paper experiment start was rejected. No partial start was saved.',
+    }
+  }
+
+  revalidatePath('/experiments')
+  revalidatePath('/dashboard')
   revalidatePath(`/experiments/${mutation.result.experimentId}`)
   redirect(`/experiments/${mutation.result.experimentId}`)
 }

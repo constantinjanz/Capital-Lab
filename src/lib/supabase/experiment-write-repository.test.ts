@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createHostedDraftExperiment,
   mutateHostedLockedExperimentLifecycle,
+  startHostedDraftExperiment,
   updateHostedDraftExperiment,
 } from './experiment-write-repository'
 
@@ -10,6 +11,15 @@ const input = {
   operationId: 'd1000000-0000-4000-8000-000000000001',
   name: 'Hosted event study',
   objective: 'Evaluate a point-in-time event hypothesis safely.',
+}
+
+const startInput = {
+  operationId: 'd4000000-0000-4000-8000-000000000001',
+  experimentId: 'e4000000-0000-4000-8000-000000000001',
+  expectedDraftRevision: '9007199254740993',
+  expectedControlStateVersion: '9007199254740994',
+  mode: 'replay' as const,
+  confirmation: 'START REPLAY',
 }
 
 describe('hosted experiment write repository', () => {
@@ -295,6 +305,133 @@ describe('hosted experiment write repository', () => {
         lockedVersionId: null,
         cloneName: null,
       }),
+    ).resolves.toEqual({ ok: false, reason: 'unknown' })
+  })
+
+  it('calls only the strict hosted start RPC boundary', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          experiment_id: startInput.experimentId,
+          experiment_version_id: 'e4000000-0000-4000-8000-000000000002',
+          simulation_account_id: 'e4000000-0000-4000-8000-000000000003',
+          lifecycle_status: 'active',
+          execution_mode: 'replay',
+          control_state_version: '9007199254740995',
+          replayed: false,
+        },
+      ],
+      error: null,
+    })
+
+    await expect(
+      startHostedDraftExperiment({ rpc } as never, startInput),
+    ).resolves.toEqual({
+      ok: true,
+      result: {
+        experimentId: startInput.experimentId,
+        experimentVersionId: 'e4000000-0000-4000-8000-000000000002',
+        simulationAccountId: 'e4000000-0000-4000-8000-000000000003',
+        lifecycleStatus: 'active',
+        executionMode: 'replay',
+        controlStateVersion: '9007199254740995',
+        replayed: false,
+      },
+    })
+    expect(rpc).toHaveBeenCalledWith('start_hosted_draft_experiment', {
+      p_confirmation: 'START REPLAY',
+      p_expected_control_state_version: '9007199254740994',
+      p_expected_draft_revision: '9007199254740993',
+      p_experiment_id: startInput.experimentId,
+      p_mode: 'replay',
+      p_operation_id: startInput.operationId,
+    })
+  })
+
+  it.each([
+    ['40001', 'conflict'],
+    ['22023', 'invalid'],
+    ['55000', 'transition'],
+    ['42501', 'rejected'],
+    ['PGRST000', 'unknown'],
+  ] as const)('maps start database error %s to %s', async (code, reason) => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code, message: 'raw database detail' },
+    })
+
+    await expect(
+      startHostedDraftExperiment({ rpc } as never, startInput),
+    ).resolves.toEqual({ ok: false, reason })
+  })
+
+  it.each([
+    { data: [] },
+    {
+      data: [
+        {
+          experiment_id: startInput.experimentId,
+          experiment_version_id: 'not-a-uuid',
+          simulation_account_id: 'e4000000-0000-4000-8000-000000000003',
+          lifecycle_status: 'active',
+          execution_mode: 'replay',
+          control_state_version: '1',
+          replayed: false,
+        },
+      ],
+    },
+    {
+      data: [
+        {
+          experiment_id: startInput.experimentId,
+          experiment_version_id: 'e4000000-0000-4000-8000-000000000002',
+          simulation_account_id: 'e4000000-0000-4000-8000-000000000003',
+          lifecycle_status: 'active',
+          execution_mode: 'shadow',
+          control_state_version: '1',
+          replayed: false,
+        },
+      ],
+    },
+    {
+      data: [
+        {
+          experiment_id: startInput.experimentId,
+          experiment_version_id: 'e4000000-0000-4000-8000-000000000002',
+          simulation_account_id: 'e4000000-0000-4000-8000-000000000003',
+          lifecycle_status: 'active',
+          execution_mode: 'replay',
+          control_state_version: '01',
+          replayed: false,
+        },
+      ],
+    },
+  ])('fails closed on malformed start output', async ({ data }) => {
+    const rpc = vi.fn().mockResolvedValue({ data, error: null })
+
+    await expect(
+      startHostedDraftExperiment({ rpc } as never, startInput),
+    ).resolves.toEqual({ ok: false, reason: 'unknown' })
+  })
+
+  it('treats a mismatched experiment result as unknown', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          experiment_id: 'e4000000-0000-4000-8000-000000000099',
+          experiment_version_id: 'e4000000-0000-4000-8000-000000000002',
+          simulation_account_id: 'e4000000-0000-4000-8000-000000000003',
+          lifecycle_status: 'active',
+          execution_mode: 'replay',
+          control_state_version: '1',
+          replayed: true,
+        },
+      ],
+      error: null,
+    })
+
+    await expect(
+      startHostedDraftExperiment({ rpc } as never, startInput),
     ).resolves.toEqual({ ok: false, reason: 'unknown' })
   })
 })

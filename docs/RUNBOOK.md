@@ -14,6 +14,12 @@
 
 Emergency pause is idempotent. It blocks new model calls and paper orders while preserving positions and history. Record the owner, reason, correlation ID, and timestamp. Data ingestion may remain active if configured.
 
+## Start a hosted paper experiment
+
+Use the experiment detail page only for a clean disabled draft after the readiness panel attests the fixed market manifest, disabled Alpaca IEX source/policy, and complete official 2026 calendar. Review the displayed draft and control revisions. Choose `replay` or `shadow`, enter `START REPLAY` or `START SHADOW` exactly, and submit once.
+
+A successful start must lock one immutable version and report an active paper mode with a new simulation account. Verify the controls remain scheduler off, agent off, emergency pause clear; the new account has exactly EUR 100000.00000000 opening cash; and the opening snapshot has zero exposure, EUR 100000.00000000 NAV, and EUR 200000.00000000 paper buying power. The start itself launches no cycle, provider request, model call, order, or fill. If readiness is unavailable or blocked, do not bypass the RPC or modify manifest rows. If the page reports a revision conflict, reload and reassess. If the result is unknown, reload before any further operation and inspect the operation UUID's idempotency, status, audit, ledger, and snapshot evidence.
+
 ## Locked experiment lifecycle
 
 Use the experiment detail page only after confirming its locked version, execution mode, lifecycle state, and control revision. Promotion accepts only an active shadow experiment with the simulation account active, the emergency pause clear, and scheduler/agent controls disabled. Enter `PROMOTE TO LIVE PAPER` exactly; this changes only the simulation execution mode and does not enable a runtime loop or broker capability.
