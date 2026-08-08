@@ -591,7 +591,8 @@ select ok(
     select 1
     from jsonb_array_elements(console.evidence_rows) as evidence(value)
     cross join structured_runtime_fixture as fixture
-    where (evidence.value ->> 'knowledgeChunkId')::uuid = fixture.evidence_id
+    where evidence.value ->> 'evidenceKind' = 'knowledge'
+      and (evidence.value ->> 'evidenceId')::uuid = fixture.evidence_id
   ),
   'the owner console returns bounded runs, exact cost, decisions, and evidence'
 )
