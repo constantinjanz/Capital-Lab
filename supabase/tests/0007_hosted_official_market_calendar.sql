@@ -130,11 +130,15 @@ select
 -- The local seed intentionally includes two synthetic XNAS sessions used by
 -- earlier database contracts. Remove only those transaction-local fixtures so
 -- this test starts from the same empty target-year calendar as hosted setup.
+alter table public.market_sessions
+disable trigger market_sessions_reject_mutation;
 delete from public.market_sessions
 where id in (
   '80000000-0000-0000-0000-000000000001',
   '80000000-0000-0000-0000-000000000002'
 );
+alter table public.market_sessions
+enable trigger market_sessions_reject_mutation;
 
 create temporary table official_calendar_test_owner as
 select user_id
