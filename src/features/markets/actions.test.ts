@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { initialHostedMarketConfigurationActionState } from './configure-hosted-market'
+import { initialHostedOfficialCalendarConfigurationActionState } from './hosted-official-calendar'
 
 const mocks = vi.hoisted(() => ({
   getContext: vi.fn(),
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   }),
   revalidatePath: vi.fn(),
   signOut: vi.fn(),
+  writeCalendar: vi.fn(),
   writeConfiguration: vi.fn(),
 }))
 
@@ -20,8 +22,14 @@ vi.mock('@/lib/auth/hosted-owner-mutation', () => ({
 vi.mock('@/lib/supabase/market-configuration-write-repository', () => ({
   writeHostedMarketConfiguration: mocks.writeConfiguration,
 }))
+vi.mock('@/lib/supabase/official-calendar-write-repository', () => ({
+  writeHostedOfficialCalendarConfiguration: mocks.writeCalendar,
+}))
 
-import { configureHostedMarketManifest } from './actions'
+import {
+  configureHostedMarketManifest,
+  configureHostedOfficialCalendarManifest,
+} from './actions'
 
 const operationId = 'd3000000-0000-4000-8000-000000000001'
 
@@ -226,6 +234,132 @@ describe('configureHostedMarketManifest action', () => {
           'The configuration result could not be confirmed. Retry this same setup or reload Markets before continuing.',
       })
       expect(JSON.stringify(result)).not.toContain('raw transport detail')
+      expect(mocks.revalidatePath).not.toHaveBeenCalled()
+    },
+  )
+})
+
+describe('configureHostedOfficialCalendarManifest action', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getContext.mockResolvedValue(readyContext())
+    mocks.writeCalendar.mockResolvedValue({
+      ok: true,
+      operationId,
+      manifestRecordId: 'e3000000-0000-4000-8000-000000000001',
+      sourceCount: 2,
+      sessionCount: 522,
+      replayed: false,
+    })
+  })
+
+  it('re-authorizes and fails closed outside hosted owner mode', async () => {
+    mocks.getContext.mockResolvedValue({ status: 'unconfigured' })
+
+    await expect(
+      configureHostedOfficialCalendarManifest(
+        initialHostedOfficialCalendarConfigurationActionState,
+        form(),
+      ),
+    ).resolves.toEqual({
+      status: 'error',
+      message: 'Official calendar setup is unavailable in local mock mode.',
+    })
+    expect(mocks.writeCalendar).not.toHaveBeenCalled()
+  })
+
+  it('accepts only the operation id and ignores forged manifest/runtime fields', async () => {
+    const data = form()
+    data.set('ownerId', '00000000-0000-4000-8000-000000000999')
+    data.set('calendarYear', '2030')
+    data.set('sourceUrl', 'https://example.invalid')
+    data.set('schedulerEnabled', 'true')
+
+    await configureHostedOfficialCalendarManifest(
+      initialHostedOfficialCalendarConfigurationActionState,
+      data,
+    )
+
+    expect(mocks.writeCalendar).toHaveBeenCalledWith(readyContext().supabase, {
+      operationId,
+    })
+  })
+
+  it('rejects an invalid operation before persistence', async () => {
+    const data = form()
+    data.set('operationId', 'invalid')
+
+    await expect(
+      configureHostedOfficialCalendarManifest(
+        initialHostedOfficialCalendarConfigurationActionState,
+        data,
+      ),
+    ).resolves.toMatchObject({
+      status: 'error',
+      fieldErrors: { operationId: expect.any(String) },
+    })
+    expect(mocks.writeCalendar).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      false,
+      'Reviewed 2026 XNAS/ARCX calendar saved. No provider request was made and scheduling remains disabled.',
+    ],
+    [
+      true,
+      'This reviewed 2026 calendar was already saved. No provider or scheduler state changed.',
+    ],
+  ] as const)(
+    'returns a safe success for replayed=%s',
+    async (replayed, message) => {
+      mocks.writeCalendar.mockResolvedValue({
+        ok: true,
+        operationId,
+        manifestRecordId: 'e3000000-0000-4000-8000-000000000001',
+        sourceCount: 2,
+        sessionCount: 522,
+        replayed,
+      })
+
+      await expect(
+        configureHostedOfficialCalendarManifest(
+          initialHostedOfficialCalendarConfigurationActionState,
+          form(),
+        ),
+      ).resolves.toEqual({ status: 'success', message })
+      expect(mocks.revalidatePath).toHaveBeenCalledWith('/markets')
+    },
+  )
+
+  it.each([
+    [
+      { ok: false, reason: 'rejected' },
+      {
+        status: 'error',
+        message:
+          'The reviewed official calendar was rejected. No partial calendar configuration was accepted.',
+      },
+    ],
+    [
+      { ok: false, reason: 'unknown' },
+      {
+        status: 'unknown',
+        message:
+          'The calendar setup result could not be confirmed. Retry this same setup or reload Markets before continuing.',
+      },
+    ],
+  ] as const)(
+    'maps a safe %s failure state',
+    async (repositoryResult, expected) => {
+      mocks.writeCalendar.mockResolvedValue(repositoryResult)
+
+      const result = await configureHostedOfficialCalendarManifest(
+        initialHostedOfficialCalendarConfigurationActionState,
+        form(),
+      )
+
+      expect(result).toEqual(expected)
       expect(mocks.revalidatePath).not.toHaveBeenCalled()
     },
   )

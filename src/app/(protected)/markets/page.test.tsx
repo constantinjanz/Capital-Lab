@@ -5,6 +5,7 @@ import type { HostedMarketIngestionReadiness } from '@/features/markets/hosted-m
 
 const mocks = vi.hoisted(() => ({
   getEnvironment: vi.fn(),
+  readCalendarState: vi.fn(),
   readSnapshot: vi.fn(),
   requireOwner: vi.fn(),
 }))
@@ -17,6 +18,9 @@ vi.mock('@/lib/env/server', () => ({
 }))
 vi.mock('@/lib/supabase/market-snapshot-read-repository', () => ({
   readHostedMarketSnapshot: mocks.readSnapshot,
+}))
+vi.mock('@/lib/supabase/official-calendar-read-repository', () => ({
+  readHostedOfficialCalendarState: mocks.readCalendarState,
 }))
 vi.mock('@/features/markets/hosted-markets-view', () => ({
   HostedMarketsView: vi.fn(),
@@ -40,6 +44,11 @@ describe('hosted Markets page ingestion readiness', () => {
       id: '00000000-0000-4000-8000-000000000001',
     })
     mocks.readSnapshot.mockResolvedValue({})
+    mocks.readCalendarState.mockResolvedValue({
+      status: 'unconfigured',
+      decisionAt: '2026-08-07T12:00:00.000Z',
+      calendarYear: 2026,
+    })
   })
 
   it('keeps source deactivation reachable when environment parsing fails', async () => {

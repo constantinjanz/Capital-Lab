@@ -2507,9 +2507,54 @@ export type Database = {
           },
         ]
       }
+      market_calendar_manifests: {
+        Row: {
+          calendar_year: number
+          content_hash: string
+          created_at: string
+          definition: Json
+          id: string
+          manifest_id: string
+          owner_id: string
+          reviewed_at: string
+          timezone: string
+        }
+        Insert: {
+          calendar_year: number
+          content_hash: string
+          created_at?: string
+          definition: Json
+          id?: string
+          manifest_id: string
+          owner_id: string
+          reviewed_at: string
+          timezone: string
+        }
+        Update: {
+          calendar_year?: number
+          content_hash?: string
+          created_at?: string
+          definition?: Json
+          id?: string
+          manifest_id?: string
+          owner_id?: string
+          reviewed_at?: string
+          timezone?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'market_calendar_manifests_owner_id_fkey'
+            columns: ['owner_id']
+            isOneToOne: false
+            referencedRelation: 'app_users'
+            referencedColumns: ['user_id']
+          },
+        ]
+      }
       market_sessions: {
         Row: {
           available_at: string
+          calendar_manifest_id: string | null
           calendar_source_id: string | null
           closes_at: string | null
           created_at: string
@@ -2522,6 +2567,7 @@ export type Database = {
         }
         Insert: {
           available_at: string
+          calendar_manifest_id?: string | null
           calendar_source_id?: string | null
           closes_at?: string | null
           created_at?: string
@@ -2534,6 +2580,7 @@ export type Database = {
         }
         Update: {
           available_at?: string
+          calendar_manifest_id?: string | null
           calendar_source_id?: string | null
           closes_at?: string | null
           created_at?: string
@@ -2545,6 +2592,13 @@ export type Database = {
           source_identifier?: string
         }
         Relationships: [
+          {
+            foreignKeyName: 'market_sessions_calendar_manifest_id_fkey'
+            columns: ['calendar_manifest_id']
+            isOneToOne: false
+            referencedRelation: 'market_calendar_manifests'
+            referencedColumns: ['id']
+          },
           {
             foreignKeyName: 'market_sessions_calendar_source_id_fkey'
             columns: ['calendar_source_id']
@@ -4204,6 +4258,17 @@ export type Database = {
           status: string
         }[]
       }
+      configure_hosted_official_calendar_manifest: {
+        Args: { p_operation_id: string }
+        Returns: {
+          manifest_record_id: string
+          operation_id: string
+          replayed: boolean
+          session_count: number
+          source_count: number
+          status: string
+        }[]
+      }
       configure_hosted_market_manifest: {
         Args: { p_operation_id: string }
         Returns: {
@@ -4311,6 +4376,22 @@ export type Database = {
           source_id: string
           started_at: string
           status: string
+        }[]
+      }
+      hosted_official_calendar_state: {
+        Args: never
+        Returns: {
+          calendar_year: number
+          closed_session_count: number
+          configured: boolean
+          decision_at: string
+          early_close_session_count: number
+          exchange_count: number
+          manifest_id: string | null
+          manifest_record_id: string | null
+          owner_id: string
+          regular_session_count: number
+          session_count: number
         }[]
       }
       market_instrument_snapshot_at: {

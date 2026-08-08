@@ -4,6 +4,23 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Owner-reviewed 2026 official market calendar
+
+- [x] Define one fixed 2026 XNAS/ARCX regular-session manifest from the official Nasdaq Trader and NYSE/NYSE Arca calendars, including the ten exchange holidays and the November 27 / December 24 early closes.
+- [x] Add an atomic, owner-only, idempotent Supabase contract that persists disabled provenance sources and exact UTC session evidence, rejects conflicts, and attests the complete manifest without enabling a provider or scheduler.
+- [x] Add strict application mapping, a re-authorizing Server Action, a hosted-only `/markets` setup control, and truthful configured/unavailable states while preserving mock mode.
+- [x] Cover owner/non-owner/anonymous access, grants/search paths, manifest completeness, DST conversion, holiday/early-close rows, retries, conflict rollback, and zero ingestion/scheduler/agent/order/fill side effects with unit and pgTAP tests.
+- [ ] Reconcile generated database types and calendar/security/runbook/limitation documentation; run the complete application/database/browser gates and publish through a protected Preview and green reviewed PR without promoting Production.
+
+Scope guard: this slice checks in fixed calendar evidence only. It makes no external runtime request, stores no credentials, enables no data source, cron, agent, AI, experiment, or trading control, and cannot create orders, fills, or ledger entries.
+
+#### Review in progress
+
+- Official-source review fixes the 2026 XNAS and ARCX core calendar at 261 weekday records per exchange: 249 regular sessions, the November 27 / December 24 13:00 early closes, and ten holiday closures. The contract stores New York-local windows as exact UTC timestamps and rejects any extra or conflicting 2026 row.
+- The additive migration compiles against the hosted Capital-Lab PostgreSQL schema. Its combined rollback-only rehearsal passed all 55 pgTAP assertions, and a post-check confirmed that the manifest table, session column, functions, and all temporary rows were absent afterward. Hosted sessions, scheduler runs, orders, and fills remain zero.
+- Focused application tests pass (6 files / 57 tests). The complete clean-mirror `pnpm verify` pass is green: formatting, zero-warning ESLint, strict TypeScript, 47 Vitest files / 348 tests, the PAPER TRADING ONLY safety scan, and the Next.js 16.3 production build. All four mock Playwright journeys also pass.
+- The official provenance sources/policies are fixed disabled reference records with `runtime_fetch=false`. The owner action accepts only a UUID, all table writes remain behind RLS/narrow RPCs, and application failures expose no raw database or environment detail. Scheduler, agent, AI, experiment, market ingestion, order, fill, and ledger state are unchanged.
+
 ### Preview deployment control
 
 - [x] Diagnose the missing Vercel Git deployment without changing production, domains, billing, or environment secrets.

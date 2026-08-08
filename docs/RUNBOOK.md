@@ -26,6 +26,10 @@ If the page reports a revision conflict, reload and reassess before issuing a ne
 
 Keep the source disabled unless a reviewed batch is intended. Confirm `MARKET_DATA_PROVIDER=alpaca`, `ALPACA_DATA_FEED=iex`, `SCHEDULER_PROVIDER=manual`, `AGENT_ENABLED=false`, and a complete server-only data credential pair. Sign in as the owner, enable the reviewed source, then submit one bounded batch from Markets. A success must show database-confirmed inserted/reused counters and availability time. An unknown result must be retried with the same operation from the existing page before starting another operation. Provider failures are stored only as allowlisted classes. Disable the source after review; no scheduler or calendar population follows automatically.
 
+## Official 2026 market calendar
+
+Sign in as the owner and save the fixed calendar from Markets only after its migration and pgTAP contract pass. A success must attest 522 records across XNAS/ARCX: 498 regular, 4 early-close, and 20 holiday rows in total. Confirm the Nasdaq Trader and NYSE provenance sources remain disabled, scheduler/agent controls remain off, and no provider request or ingestion run was recorded. If setup reports a conflict, inspect the existing 2026 session/source/policy evidence; never overwrite or delete immutable rows to force acceptance. If the result is unknown, retry the same operation UUID from the unchanged page. This calendar is reference evidence only and must not be used to enable remote scheduling until the separate durable cycle review passes.
+
 ## Cost reconciliation
 
 Unknown OpenAI reservations are never auto-released. Compare stored response IDs and provider usage records; settle or release through an audited owner action. If actual cost exceeds the reservation, record the overage and pause.
