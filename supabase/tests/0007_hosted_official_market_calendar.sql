@@ -127,6 +127,15 @@ select
   (select count(*) from private.cash_ledger_entries) as ledger_entries,
   (select count(*) from private.ingestion_runs) as ingestion_runs;
 
+-- The local seed intentionally includes two synthetic XNAS sessions used by
+-- earlier database contracts. Remove only those transaction-local fixtures so
+-- this test starts from the same empty target-year calendar as hosted setup.
+delete from public.market_sessions
+where id in (
+  '80000000-0000-0000-0000-000000000001',
+  '80000000-0000-0000-0000-000000000002'
+);
+
 create temporary table official_calendar_test_owner as
 select user_id
 from public.app_users
