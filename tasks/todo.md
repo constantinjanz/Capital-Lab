@@ -4,6 +4,24 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Immutable hosted decision memory
+
+- [x] Enforce owner, experiment, version, portfolio, run, and decision-time alignment for every new immutable decision context and decision.
+- [x] Enforce deterministic outcome chronology and exact excursion-sign invariants without weakening append-only evidence.
+- [x] Add one bounded owner-only `decisionAt` read contract that returns exact financial values as text and excludes future evidence at every layer.
+- [x] Add strict application mapping, a server-only repository, and a truthful hosted `/memory` view while preserving deterministic mock mode.
+- [x] Cover authorization, grants, fixed search paths, lookahead exclusion, exact decimals, immutability, scope drift, and empty hosted state with pgTAP and application tests.
+- [ ] Run complete application/database/browser release gates, reconcile hosted types/advisors, and publish through a protected Preview and reviewed PR without enabling agents, AI, providers, orders, fills, or Production.
+
+Scope guard: this slice reads and validates persisted paper-only decision evidence. It cannot create a decision, call a model/provider, promote a pattern or strategy, enable a runtime control, or create an order, fill, position, ledger entry, or P&L mutation.
+
+#### Review in progress
+
+- The additive migration and self-contained pgTAP test pass all 33 assertions against the hosted Capital-Lab schema inside a rollback-only transaction. A post-rollback audit confirms that the read function and new indexes are absent, so the rehearsal retained no schema or fixture state.
+- The application boundary is green: slice formatting, zero-warning repository ESLint, strict TypeScript, 54 Vitest files / 442 tests, the PAPER TRADING ONLY scan, and the Next.js 16.3 production build all pass. The repository-wide formatter reports only the same 17 untouched OneDrive line-ending files recorded by the prior release.
+- The hosted page remains a Server Component with a server-only repository and a strict second owner/time/link/exact-decimal validation layer. React best-practices review found no client state, hydration boundary, serialized credential, or render waterfall.
+- The public read is stable, security-invoker, fixed-search-path, bounded to 100 contexts and 100 citations per decision, executable only by `authenticated`, and backed by forced RLS. It provides no mutation or pattern-promotion action.
+
 ### Durable owner-triggered paper cycle envelope
 
 - [x] Define one manual-only hosted scheduler contract with a database-stamped decision boundary, fixed 15-minute slots, official-calendar checks, overlap exclusion, and exact duplicate-result reuse.

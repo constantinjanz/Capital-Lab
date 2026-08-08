@@ -4470,6 +4470,17 @@ export type Database = {
           universe_id: string | null
         }[]
       }
+      hosted_decision_memory_read: {
+        Args: { p_context_limit?: number; p_decision_at: string }
+        Returns: {
+          context_rows: Json
+          decision_at: string
+          decision_rows: Json
+          evidence_rows: Json
+          outcome_rows: Json
+          owner_id: string
+        }[]
+      }
       hosted_manual_cycle_state: {
         Args: { p_experiment_id: string }
         Returns: {
