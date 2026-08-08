@@ -6,10 +6,15 @@ import { Panel } from '@/components/ui/panel'
 import { StatusPill } from '@/components/ui/status-pill'
 import { HostedDraftEditor } from '@/features/experiments/hosted-draft-editor'
 import {
+  HostedExperimentStartControls,
+  type HostedExperimentStartOperationIds,
+} from '@/features/experiments/hosted-experiment-start-controls'
+import {
   HostedLifecycleControls,
   type HostedLifecycleOperationIds,
 } from '@/features/experiments/hosted-lifecycle-controls'
 import type { HostedExperimentDetail } from '@/features/experiments/hosted-experiment-detail'
+import type { HostedExperimentStartReadiness } from '@/features/experiments/start-hosted-draft'
 import {
   getHostedLockedLifecycleAvailability,
   isHostedDraftMetadataEditable,
@@ -35,10 +40,14 @@ function enabledLabel(value: boolean): string {
 export function HostedExperimentDetailView({
   experiment,
   draftOperationId,
+  startReadiness,
+  startOperationIds,
   lifecycleOperationIds,
 }: {
   experiment: HostedExperimentDetail
   draftOperationId: string
+  startReadiness: HostedExperimentStartReadiness
+  startOperationIds: HostedExperimentStartOperationIds
   lifecycleOperationIds: HostedLifecycleOperationIds
 }) {
   const lockedVersion = experiment.lockedVersion
@@ -74,6 +83,17 @@ export function HostedExperimentDetailView({
               objective={experiment.objective}
             />
           </div>
+        </Panel>
+      ) : null}
+      {canEditDraft ? (
+        <Panel
+          eyebrow="Owner confirmation"
+          title="Lock and start paper experiment"
+        >
+          <HostedExperimentStartControls
+            readiness={startReadiness}
+            operationIds={startOperationIds}
+          />
         </Panel>
       ) : null}
       {hasLifecycleAction &&

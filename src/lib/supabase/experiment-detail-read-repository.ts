@@ -1,10 +1,16 @@
 import 'server-only'
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { cache } from 'react'
 
 import { mapHostedExperimentDetail } from '@/features/experiments/hosted-experiment-detail'
 import type { HostedExperimentDetail } from '@/features/experiments/hosted-experiment-detail'
+import {
+  mapHostedExperimentStartReadiness,
+  type HostedExperimentStartReadiness,
+} from '@/features/experiments/start-hosted-draft'
 import { createSupabaseServerClient } from '@/lib/auth/supabase/server'
+import type { Database } from '@/lib/supabase/database.types'
 
 export const readHostedExperimentDetail = cache(
   async (
@@ -38,5 +44,40 @@ export const readHostedExperimentDetail = cache(
     if (!detailResult.data) return null
 
     return mapHostedExperimentDetail(detailResult.data, eventsResult.data)
+  },
+)
+
+async function readStartReadinessWithClient(
+  supabase: SupabaseClient<Database>,
+  experimentId: string,
+): Promise<HostedExperimentStartReadiness> {
+  try {
+    const { data, error } = await supabase.rpc(
+      'hosted_experiment_start_readiness',
+      { p_experiment_id: experimentId },
+    )
+
+    if (error || !Array.isArray(data) || data.length !== 1) {
+      return { status: 'unavailable' }
+    }
+
+    return mapHostedExperimentStartReadiness(data[0], experimentId)
+  } catch {
+    return { status: 'unavailable' }
+  }
+}
+
+export async function readHostedExperimentStartReadinessWithClient(
+  supabase: SupabaseClient<Database>,
+  experimentId: string,
+): Promise<HostedExperimentStartReadiness> {
+  return readStartReadinessWithClient(supabase, experimentId)
+}
+
+export const readHostedExperimentStartReadiness = cache(
+  async (experimentId: string): Promise<HostedExperimentStartReadiness> => {
+    const supabase = await createSupabaseServerClient()
+    if (!supabase) return { status: 'unavailable' }
+    return readStartReadinessWithClient(supabase, experimentId)
   },
 )

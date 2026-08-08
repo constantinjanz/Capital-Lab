@@ -8,6 +8,7 @@ import type {
   HostedLifecycleInput,
 } from '@/features/experiments/mutate-hosted-lifecycle'
 import type { HostedDraftUpdateInput } from '@/features/experiments/update-hosted-draft'
+import type { HostedExperimentStartInput } from '@/features/experiments/start-hosted-draft'
 import type { Database } from '@/lib/supabase/database.types'
 
 const CANONICAL_UUID =
@@ -28,6 +29,16 @@ export type HostedLifecycleMutationResult = {
   sourceExperimentId: string | null
   lifecycleStatus: 'draft' | 'active' | 'paused' | 'completed'
   executionMode: 'replay' | 'shadow' | 'live_paper' | null
+  controlStateVersion: string
+  replayed: boolean
+}
+
+export type HostedExperimentStartResult = {
+  experimentId: string
+  experimentVersionId: string
+  simulationAccountId: string
+  lifecycleStatus: 'active'
+  executionMode: 'replay' | 'shadow'
   controlStateVersion: string
   replayed: boolean
 }
@@ -81,6 +92,68 @@ export async function updateHostedDraftExperiment(
   }
 
   return { ok: true, experimentId: data }
+}
+
+export async function startHostedDraftExperiment(
+  supabase: SupabaseClient<Database>,
+  input: HostedExperimentStartInput,
+): Promise<
+  | { ok: true; result: HostedExperimentStartResult }
+  | {
+      ok: false
+      reason: 'conflict' | 'invalid' | 'transition' | 'rejected' | 'unknown'
+    }
+> {
+  const { data, error } = await supabase.rpc('start_hosted_draft_experiment', {
+    p_confirmation: input.confirmation,
+    p_expected_control_state_version: input.expectedControlStateVersion,
+    p_expected_draft_revision: input.expectedDraftRevision,
+    p_experiment_id: input.experimentId,
+    p_mode: input.mode,
+    p_operation_id: input.operationId,
+  })
+
+  if (error) {
+    if (error.code === '40001') return { ok: false, reason: 'conflict' }
+    if (error.code === '22023') return { ok: false, reason: 'invalid' }
+    if (error.code === '55000') return { ok: false, reason: 'transition' }
+    if (DEFINITE_REJECTION_CODES.has(error.code)) {
+      return { ok: false, reason: 'rejected' }
+    }
+    return { ok: false, reason: 'unknown' }
+  }
+
+  if (!Array.isArray(data) || data.length !== 1) {
+    return { ok: false, reason: 'unknown' }
+  }
+
+  const row = data[0]
+  if (
+    !row ||
+    !CANONICAL_UUID.test(row.experiment_id) ||
+    row.experiment_id.toLowerCase() !== input.experimentId.toLowerCase() ||
+    !CANONICAL_UUID.test(row.experiment_version_id) ||
+    !CANONICAL_UUID.test(row.simulation_account_id) ||
+    row.lifecycle_status !== 'active' ||
+    row.execution_mode !== input.mode ||
+    !CANONICAL_BIGINT_TEXT.test(row.control_state_version) ||
+    typeof row.replayed !== 'boolean'
+  ) {
+    return { ok: false, reason: 'unknown' }
+  }
+
+  return {
+    ok: true,
+    result: {
+      experimentId: row.experiment_id,
+      experimentVersionId: row.experiment_version_id,
+      simulationAccountId: row.simulation_account_id,
+      lifecycleStatus: 'active',
+      executionMode: row.execution_mode,
+      controlStateVersion: row.control_state_version,
+      replayed: row.replayed,
+    },
+  }
 }
 
 function resultMatchesAction(

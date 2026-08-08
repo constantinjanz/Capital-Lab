@@ -42,6 +42,8 @@ export interface HostedExperimentDetailRow {
   locked_version_created_at: string | null
   draft_revision: string | null
   source_experiment_id: string | null
+  start_manifest_id: string | null
+  market_calendar_manifest_id: string | null
 }
 
 export interface HostedExperimentStatusEventRow {
@@ -318,6 +320,11 @@ export function mapHostedExperimentDetail(
               row.knowledge_corpus_version_id,
             ),
             ...optionalReference('Budget policy', row.budget_policy_id),
+            ...optionalReference('Start manifest', row.start_manifest_id),
+            ...optionalReference(
+              'Official calendar',
+              row.market_calendar_manifest_id,
+            ),
           ],
         }
       : null,

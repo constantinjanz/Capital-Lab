@@ -4,6 +4,23 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Owner-reviewed hosted experiment start
+
+- [x] Define one fixed paper-only start manifest covering the simulator, risk, disabled model routing, reviewed data sources, Luna prompt, empty corpus, AI budget, hosted universe, and official calendar.
+- [x] Add one atomic owner-only, draft/control-revision-checked, idempotent replay/shadow start contract that locks an immutable experiment version and creates the paper simulation account, opening cash entry, and initial portfolio snapshot.
+- [x] Keep provider runtime fetches, scheduler, agent, Sol, web search, broker capabilities, orders, and fills disabled; expose no credential or environment state to the client.
+- [x] Cover readiness, exact owner authorization, direct-write denial, concurrent/stale inputs, retries, manifest drift, immutable evidence, exact decimals, and zero out-of-scope side effects with pgTAP and application tests.
+- [x] Add a strict readiness projection, repository boundary, re-authorizing Server Action, and hosted-only draft controls with explicit replay/shadow confirmation.
+- [ ] Reconcile generated types and lifecycle/security/runbook/limitation documentation, then run the complete application/database/browser release gates before a protected Preview and reviewed merge.
+
+Scope guard: starting creates only deterministic paper-simulation initialization evidence. It cannot call a provider or model, enable ingestion/cron/agent controls, create an order or fill, add a broker integration, or promote Production.
+
+#### Review in progress
+
+- The additive migration and the complete start test passed all 55 pgTAP assertions against the hosted Capital-Lab schema inside one rollback-only transaction. A post-rollback audit confirmed that the rehearsal left no start table, function, or draft fixture behind.
+- Local application gates are green: repository-wide zero-warning ESLint, strict TypeScript, 50 Vitest files / 390 tests, the PAPER TRADING ONLY safety scan, the Next.js 16.3 production build, slice formatting, and `git diff --check`.
+- The hosted migration has not been applied. Generated hosted types, clean GitHub application/database/browser CI, protected Preview owner verification, permanent hosted evidence, and the reviewed merge remain release gates.
+
 ### Owner-reviewed 2026 official market calendar
 
 - [x] Define one fixed 2026 XNAS/ARCX regular-session manifest from the official Nasdaq Trader and NYSE/NYSE Arca calendars, including the ten exchange holidays and the November 27 / December 24 early closes.

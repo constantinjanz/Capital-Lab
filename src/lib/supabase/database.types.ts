@@ -1238,6 +1238,44 @@ export type Database = {
           },
         ]
       }
+      experiment_start_manifests: {
+        Row: {
+          content_hash: string
+          created_at: string
+          definition: Json
+          id: string
+          manifest_id: string
+          owner_id: string
+          reviewed_at: string
+        }
+        Insert: {
+          content_hash: string
+          created_at?: string
+          definition: Json
+          id?: string
+          manifest_id: string
+          owner_id: string
+          reviewed_at: string
+        }
+        Update: {
+          content_hash?: string
+          created_at?: string
+          definition?: Json
+          id?: string
+          manifest_id?: string
+          owner_id?: string
+          reviewed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'experiment_start_manifests_owner_id_fkey'
+            columns: ['owner_id']
+            isOneToOne: false
+            referencedRelation: 'app_users'
+            referencedColumns: ['user_id']
+          },
+        ]
+      }
       experiment_status_events: {
         Row: {
           actor_type: string
@@ -1310,6 +1348,7 @@ export type Database = {
           id: string
           initial_capital: number
           knowledge_corpus_version_id: string | null
+          market_calendar_manifest_id: string | null
           market_universe_id: string
           model_routing_version_id: string
           objective: string
@@ -1317,6 +1356,7 @@ export type Database = {
           resolved_rules: Json
           risk_config_version_id: string
           simulator_config_version_id: string
+          start_manifest_id: string | null
           version: number
         }
         Insert: {
@@ -1330,6 +1370,7 @@ export type Database = {
           id?: string
           initial_capital: number
           knowledge_corpus_version_id?: string | null
+          market_calendar_manifest_id?: string | null
           market_universe_id: string
           model_routing_version_id: string
           objective: string
@@ -1337,6 +1378,7 @@ export type Database = {
           resolved_rules: Json
           risk_config_version_id: string
           simulator_config_version_id: string
+          start_manifest_id?: string | null
           version: number
         }
         Update: {
@@ -1350,6 +1392,7 @@ export type Database = {
           id?: string
           initial_capital?: number
           knowledge_corpus_version_id?: string | null
+          market_calendar_manifest_id?: string | null
           market_universe_id?: string
           model_routing_version_id?: string
           objective?: string
@@ -1357,6 +1400,7 @@ export type Database = {
           resolved_rules?: Json
           risk_config_version_id?: string
           simulator_config_version_id?: string
+          start_manifest_id?: string | null
           version?: number
         }
         Relationships: [
@@ -1403,6 +1447,13 @@ export type Database = {
             referencedColumns: ['id', 'owner_id']
           },
           {
+            foreignKeyName: 'experiment_versions_market_calendar_manifest_fk'
+            columns: ['market_calendar_manifest_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'market_calendar_manifests'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
             foreignKeyName: 'experiment_versions_model_routing_version_id_owner_id_fkey'
             columns: ['model_routing_version_id', 'owner_id']
             isOneToOne: false
@@ -1428,6 +1479,13 @@ export type Database = {
             columns: ['simulator_config_version_id', 'owner_id']
             isOneToOne: false
             referencedRelation: 'configuration_versions'
+            referencedColumns: ['id', 'owner_id']
+          },
+          {
+            foreignKeyName: 'experiment_versions_start_manifest_fk'
+            columns: ['start_manifest_id', 'owner_id']
+            isOneToOne: false
+            referencedRelation: 'experiment_start_manifests'
             referencedColumns: ['id', 'owner_id']
           },
         ]
@@ -4145,6 +4203,7 @@ export type Database = {
           locked_version_content_hash: string | null
           locked_version_created_at: string | null
           locked_version_id: string | null
+          market_calendar_manifest_id: string | null
           market_universe_id: string | null
           model_routing_version_id: string | null
           name: string | null
@@ -4154,6 +4213,7 @@ export type Database = {
           scheduler_enabled: boolean | null
           simulator_config_version_id: string | null
           source_experiment_id: string | null
+          start_manifest_id: string | null
           starts_at: string | null
           updated_at: string | null
         }
@@ -4392,6 +4452,22 @@ export type Database = {
           owner_id: string
           regular_session_count: number
           session_count: number
+        }[]
+      }
+      hosted_experiment_start_readiness: {
+        Args: { p_experiment_id: string }
+        Returns: {
+          calendar_manifest_id: string | null
+          calendar_manifest_record_id: string | null
+          control_state_version: string
+          decision_at: string
+          draft_ready: boolean
+          draft_revision: string
+          experiment_id: string
+          market_manifest_id: string | null
+          ready: boolean
+          start_manifest_id: string
+          universe_id: string | null
         }[]
       }
       market_instrument_snapshot_at: {
@@ -4652,6 +4728,25 @@ export type Database = {
           replayed: boolean
           source_id: string
           status: string
+        }[]
+      }
+      start_hosted_draft_experiment: {
+        Args: {
+          p_confirmation: string
+          p_expected_control_state_version: string
+          p_expected_draft_revision: string
+          p_experiment_id: string
+          p_mode: string
+          p_operation_id: string
+        }
+        Returns: {
+          control_state_version: string
+          execution_mode: string
+          experiment_id: string
+          experiment_version_id: string
+          lifecycle_status: string
+          replayed: boolean
+          simulation_account_id: string
         }[]
       }
       settle_ai_budget: {

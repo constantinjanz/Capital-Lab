@@ -7,7 +7,10 @@ import { ExperimentDetailView } from '@/features/experiments/experiments-view'
 import { HostedExperimentDetailView } from '@/features/experiments/hosted-experiment-detail-view'
 import { requireOwner } from '@/lib/auth/require-owner'
 import { mockRepository } from '@/lib/mock/repository'
-import { readHostedExperimentDetail } from '@/lib/supabase/experiment-detail-read-repository'
+import {
+  readHostedExperimentDetail,
+  readHostedExperimentStartReadiness,
+} from '@/lib/supabase/experiment-detail-read-repository'
 
 export const metadata: Metadata = { title: 'Experiment' }
 
@@ -24,12 +27,17 @@ export default async function ExperimentPage({
     return <ExperimentDetailView experiment={experiment} />
   }
 
-  const experiment = await readHostedExperimentDetail(owner.id, id)
+  const [experiment, startReadiness] = await Promise.all([
+    readHostedExperimentDetail(owner.id, id),
+    readHostedExperimentStartReadiness(id),
+  ])
   if (!experiment) notFound()
   return (
     <HostedExperimentDetailView
       experiment={experiment}
       draftOperationId={randomUUID()}
+      startReadiness={startReadiness}
+      startOperationIds={{ replay: randomUUID(), shadow: randomUUID() }}
       lifecycleOperationIds={{
         promote_live_paper: randomUUID(),
         pause: randomUUID(),
