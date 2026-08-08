@@ -89,6 +89,20 @@ select ok(
   'owners may read prompt pins but cannot mutate them'
 );
 
+select has_index(
+  'public',
+  'experiment_agent_prompt_versions',
+  'experiment_agent_prompt_versions_experiment_owner_idx',
+  'experiment prompt pins cover their experiment owner foreign key'
+);
+
+select has_index(
+  'public',
+  'experiment_agent_prompt_versions',
+  'experiment_agent_prompt_versions_prompt_owner_idx',
+  'experiment prompt pins cover their prompt owner foreign key'
+);
+
 create temporary table structured_runtime_fixture as
 select
   '00000000-0000-0000-0000-000000000001'::uuid as owner_id,

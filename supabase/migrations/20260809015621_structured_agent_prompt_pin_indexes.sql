@@ -1,0 +1,9 @@
+begin;
+
+create index experiment_agent_prompt_versions_experiment_owner_idx
+on public.experiment_agent_prompt_versions(experiment_version_id, owner_id);
+
+create index experiment_agent_prompt_versions_prompt_owner_idx
+on public.experiment_agent_prompt_versions(prompt_version_id, owner_id);
+
+commit;
