@@ -192,6 +192,17 @@ create temporary table hosted_start_results (
 grant select on hosted_start_test_owner to authenticated;
 grant all on hosted_start_drafts, hosted_start_results to authenticated;
 
+-- The deterministic local seed predates the reviewed hosted manifest. Align
+-- its reused AAPL reference only inside this rollback-only test. The hosted
+-- project already has the exact reviewed instrument evidence.
+update public.instruments as instrument
+set is_shortable = false,
+    active_from = null
+from public.exchanges as exchange
+where exchange.id = instrument.primary_exchange_id
+  and exchange.mic = 'XNAS'
+  and instrument.symbol = 'AAPL';
+
 set local role authenticated;
 select set_config(
   'request.jwt.claims',
