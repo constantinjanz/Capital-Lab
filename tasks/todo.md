@@ -4,6 +4,20 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 
 ## Plan
 
+### Preview deployment control
+
+- [x] Diagnose the missing Vercel Git deployment without changing production, domains, billing, or environment secrets.
+- [x] Replace the repository-wide deployment shutdown with a branch rule that keeps `main` disabled and permits non-production Preview branches.
+- [x] Verify the configuration, publish only the scoped config/tracker change, and confirm Vercel creates a protected Preview from the Git push.
+- [x] Run the protected browser and runtime checks, merge only through green required checks, and leave Production unpromoted.
+
+#### Review
+
+- Root cause: the connected Git integration was healthy, but `vercel.json` explicitly disabled every Git-triggered deployment. The branch rule now disables only `main`, leaving normal non-production Preview branches enabled.
+- Git push `8f38550` automatically created protected Preview `dpl_ArTMWe7K4nqnqHqCZu1Rz5Qo2yk2` from the exact commit. It reached `READY` with no Production target and no build errors.
+- The owner gate rendered with meaningful content, no Next.js error overlay, and no browser warnings/errors. Preview runtime logs returned `200` for `/`, `/dashboard`, `/login`, `/experiments`, and `/api/health`, with no warning/error entries.
+- Both the push and pull-request CI runs passed the application, fresh Supabase reset/pgTAP, and Chromium browser jobs before merge approval. No environment variable, credential, domain, billing, Supabase data, or Production alias was changed.
+
 ### Hosted locked-experiment lifecycle controls
 
 - [x] Define one owner-only, revision-checked, idempotent lifecycle contract for explicit shadow-to-live-paper simulation promotion, pause, resume, completion, and clone-to-draft; keep scheduler, agent, and all broker capabilities disabled.
