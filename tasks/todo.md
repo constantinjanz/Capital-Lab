@@ -11,16 +11,20 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 - [x] Add one bounded owner-only `decisionAt` read contract that returns exact financial values as text and excludes future evidence at every layer.
 - [x] Add strict application mapping, a server-only repository, and a truthful hosted `/memory` view while preserving deterministic mock mode.
 - [x] Cover authorization, grants, fixed search paths, lookahead exclusion, exact decimals, immutability, scope drift, and empty hosted state with pgTAP and application tests.
-- [ ] Run complete application/database/browser release gates, reconcile hosted types/advisors, and publish through a protected Preview and reviewed PR without enabling agents, AI, providers, orders, fills, or Production.
+- [x] Run complete application/database/browser release gates, reconcile hosted types/advisors, and publish through a protected Preview and reviewed PR without enabling agents, AI, providers, orders, fills, or Production.
 
 Scope guard: this slice reads and validates persisted paper-only decision evidence. It cannot create a decision, call a model/provider, promote a pattern or strategy, enable a runtime control, or create an order, fill, position, ledger entry, or P&L mutation.
 
-#### Review in progress
+#### Review
 
 - The additive migration and self-contained pgTAP test pass all 33 assertions against the hosted Capital-Lab schema inside a rollback-only transaction. A post-rollback audit confirms that the read function and new indexes are absent, so the rehearsal retained no schema or fixture state.
 - The application boundary is green: slice formatting, zero-warning repository ESLint, strict TypeScript, 54 Vitest files / 442 tests, the PAPER TRADING ONLY scan, and the Next.js 16.3 production build all pass. The repository-wide formatter reports only the same 17 untouched OneDrive line-ending files recorded by the prior release.
 - The hosted page remains a Server Component with a server-only repository and a strict second owner/time/link/exact-decimal validation layer. React best-practices review found no client state, hydration boundary, serialized credential, or render waterfall.
 - The public read is stable, security-invoker, fixed-search-path, bounded to 100 contexts and 100 citations per decision, executable only by `authenticated`, and backed by forced RLS. It provides no mutation or pattern-promotion action.
+- GitHub PR #17 CI run 91 is green at exact application commit `f5ccae9`: clean-checkout formatting, zero-warning lint, strict TypeScript, all 442 Vitest tests, the paper-only scan, the Next.js build, all Chromium journeys, a fresh Supabase start/reset, and every pgTAP file passed. The first database run exposed the synthetic experiment version's default present-day `created_at`; the seed now records its canonical historical creation time without weakening the production point-in-time invariant.
+- Hosted migration `20260808193957` is applied to Capital-Lab. Generated hosted types match the checked-in memory RPC signature; the function remains stable, security-invoker, fixed-empty-search-path, granted only to `authenticated`, and backed by all four owner/timeline indexes. Security advisors retain only the known leaked-password-protection warning, and performance findings remain informational unused-index notices.
+- Protected Vercel Preview `dpl_8oQ4DZ6bsiMrTHjKbKxidGqwUPSf` is READY as Next.js at exact commit `f5ccae9` with no Production target. The authenticated owner `/memory` route renders the database decision boundary and honest zero contexts, decisions, citations, and outcomes; browser diagnostics are empty and deployment runtime logs contain only successful `200`/`204` requests with no warning/error entries.
+- The hosted project still has zero decision contexts, agent decisions, decision evidence, trade outcomes, orders, and fills. The one pre-existing opening cash-ledger entry is unchanged; market ingestion, scheduler, agents, paid calls, broker connections, and pattern promotion remain disabled, and Production remains unpromoted.
 
 ### Durable owner-triggered paper cycle envelope
 
