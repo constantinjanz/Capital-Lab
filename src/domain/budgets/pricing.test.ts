@@ -56,4 +56,27 @@ describe('model pricing', () => {
       ),
     ).toThrow('Overlapping effective pricing')
   })
+
+  it('rejects unverified and expired price records', () => {
+    const current = CURRENT_MODEL_PRICING['gpt-5.6-luna']
+    expect(() =>
+      resolveEffectivePricing(
+        [{ ...current, isVerified: false }],
+        current.model,
+        '2026-08-09T12:00:00.000Z',
+      ),
+    ).toThrow('No effective pricing')
+    expect(() =>
+      resolveEffectivePricing(
+        [
+          {
+            ...current,
+            verificationExpiresAt: '2026-08-09T12:00:00.000Z',
+          },
+        ],
+        current.model,
+        '2026-08-09T12:00:00.000Z',
+      ),
+    ).toThrow('No effective pricing')
+  })
 })

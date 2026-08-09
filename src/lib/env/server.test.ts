@@ -7,6 +7,9 @@ const environmentKeys = [
   'ALPACA_API_KEY_ID',
   'ALPACA_API_SECRET_KEY',
   'AGENT_ENABLED',
+  'AGENT_EXECUTION_MODE',
+  'PAID_MODEL_CALLS_ENABLED',
+  'REAL_BROKER_ENABLED',
   'OPENAI_API_KEY',
   'SUPABASE_SECRET_KEY',
 ] as const
@@ -58,6 +61,8 @@ describe('server environment Alpaca readiness', () => {
 
   it('requires both server-only provider and database keys only when the agent is enabled', () => {
     process.env.AGENT_ENABLED = 'true'
+    process.env.AGENT_EXECUTION_MODE = 'shadow'
+    process.env.PAID_MODEL_CALLS_ENABLED = 'true'
     process.env.OPENAI_API_KEY = 'provider-key'
 
     expect(() => getServerEnvironment()).toThrow(
@@ -69,12 +74,29 @@ describe('server environment Alpaca readiness', () => {
 
     expect(getServerEnvironment()).toMatchObject({
       AGENT_ENABLED: true,
+      AGENT_EXECUTION_MODE: 'shadow',
+      PAID_MODEL_CALLS_ENABLED: true,
       OPENAI_API_KEY: 'provider-key',
       SUPABASE_SECRET_KEY: 'server-only-database-key',
     })
   })
 
   it('keeps the database mutation key optional while the agent is disabled', () => {
-    expect(getServerEnvironment()).toMatchObject({ AGENT_ENABLED: false })
+    expect(getServerEnvironment()).toMatchObject({
+      AGENT_ENABLED: false,
+      AGENT_EXECUTION_MODE: 'mock',
+      PAID_MODEL_CALLS_ENABLED: false,
+      SCHEDULER_ENABLED: false,
+      SCHEDULER_PROVIDER: 'supabase',
+      REAL_BROKER_ENABLED: false,
+    })
+  })
+
+  it('rejects every permanently unsupported execution flag', () => {
+    process.env.REAL_BROKER_ENABLED = 'true'
+
+    expect(() => getServerEnvironment()).toThrow(
+      'Real broker connectivity is permanently unsupported',
+    )
   })
 })

@@ -12,17 +12,21 @@ import {
 } from './pricing'
 
 export type BudgetPolicy = {
+  tradingDaySoftTargetUsd: DecimalValue
   tradingDayHardLimitUsd: DecimalValue
   monthlySoftTargetUsd: DecimalValue
   monthlyHardLimitUsd: DecimalValue
+  experimentHardLimitUsd: DecimalValue
   lifetimeHardLimitUsd: DecimalValue
   timezone: 'America/New_York'
 }
 
 export const DEFAULT_BUDGET_POLICY: BudgetPolicy = {
-  tradingDayHardLimitUsd: '0.30',
-  monthlySoftTargetUsd: '6.30',
+  tradingDaySoftTargetUsd: '0.25',
+  tradingDayHardLimitUsd: '0.40',
+  monthlySoftTargetUsd: '8.00',
   monthlyHardLimitUsd: '10.00',
+  experimentHardLimitUsd: '30.00',
   lifetimeHardLimitUsd: '50.00',
   timezone: 'America/New_York',
 }
@@ -34,6 +38,7 @@ export type BudgetReservation = {
   id: string
   idempotencyKey: string
   model: ModelId
+  experimentId: string
   tradingDay: string
   month: string
   worstCaseUsd: DecimalValue
@@ -45,6 +50,7 @@ export type BudgetReservation = {
 export type ReservationRequest = {
   idempotencyKey: string
   model: ModelId
+  experimentId?: string
   at: string
   worstCaseUsage: TokenUsage
 }
@@ -53,14 +59,15 @@ export type ReservationResult =
   | { accepted: true; reservation: BudgetReservation; duplicate: boolean }
   | {
       accepted: false
-      reason: 'daily_limit' | 'monthly_limit' | 'lifetime_limit'
+      reason:
+        'daily_limit' | 'monthly_limit' | 'experiment_limit' | 'lifetime_limit'
       worstCaseUsd: DecimalValue
     }
 
 export type BudgetAlertLevel = '70_percent' | '90_percent' | '100_percent'
 
 export type BudgetAlert = {
-  period: 'trading_day' | 'month' | 'lifetime'
+  period: 'trading_day' | 'month' | 'experiment' | 'lifetime'
   level: BudgetAlertLevel
 }
 
@@ -127,6 +134,7 @@ export class InMemoryBudgetGuard {
         return { accepted: true, reservation: previous, duplicate: true }
 
       const { tradingDay, month } = budgetKeys(request.at)
+      const experimentId = request.experimentId ?? 'default'
       const worstCaseUsd = calculateUsageCost(
         CURRENT_MODEL_PRICING[request.model],
         request.worstCaseUsage,
@@ -134,6 +142,9 @@ export class InMemoryBudgetGuard {
       const worst = decimal(worstCaseUsd)
       const dayTotal = this.total((item) => item.tradingDay === tradingDay)
       const monthTotal = this.total((item) => item.month === month)
+      const experimentTotal = this.total(
+        (item) => item.experimentId === experimentId,
+      )
       const lifetimeTotal = this.total(() => true)
 
       if (dayTotal.plus(worst).gt(this.policy.tradingDayHardLimitUsd)) {
@@ -141,6 +152,9 @@ export class InMemoryBudgetGuard {
       }
       if (monthTotal.plus(worst).gt(this.policy.monthlyHardLimitUsd)) {
         return { accepted: false, reason: 'monthly_limit', worstCaseUsd }
+      }
+      if (experimentTotal.plus(worst).gt(this.policy.experimentHardLimitUsd)) {
+        return { accepted: false, reason: 'experiment_limit', worstCaseUsd }
       }
       if (lifetimeTotal.plus(worst).gt(this.policy.lifetimeHardLimitUsd)) {
         return { accepted: false, reason: 'lifetime_limit', worstCaseUsd }
@@ -150,6 +164,7 @@ export class InMemoryBudgetGuard {
         id: `reservation-${this.reservations.size + 1}`,
         idempotencyKey: request.idempotencyKey,
         model: request.model,
+        experimentId,
         tradingDay,
         month,
         worstCaseUsd,
@@ -205,15 +220,19 @@ export class InMemoryBudgetGuard {
     return updated
   }
 
-  snapshot(at: string) {
+  snapshot(at: string, experimentId = 'default') {
     const { tradingDay, month } = budgetKeys(at)
     const dailyUsed = this.total((item) => item.tradingDay === tradingDay)
     const monthlyUsed = this.total((item) => item.month === month)
     const lifetimeUsed = this.total(() => true)
+    const experimentUsed = this.total(
+      (item) => item.experimentId === experimentId,
+    )
     const alerts: BudgetAlert[] = []
     const periods = [
       ['trading_day', dailyUsed, this.policy.tradingDayHardLimitUsd],
       ['month', monthlyUsed, this.policy.monthlyHardLimitUsd],
+      ['experiment', experimentUsed, this.policy.experimentHardLimitUsd],
       ['lifetime', lifetimeUsed, this.policy.lifetimeHardLimitUsd],
     ] as const
     for (const [period, used, limit] of periods) {
@@ -225,9 +244,13 @@ export class InMemoryBudgetGuard {
       month,
       dailyUsedUsd: decimalValue(dailyUsed),
       monthlyUsedUsd: decimalValue(monthlyUsed),
+      experimentUsedUsd: decimalValue(experimentUsed),
       lifetimeUsedUsd: decimalValue(lifetimeUsed),
       monthlySoftTargetExceeded: monthlyUsed.gte(
         this.policy.monthlySoftTargetUsd,
+      ),
+      tradingDaySoftTargetExceeded: dailyUsed.gte(
+        this.policy.tradingDaySoftTargetUsd,
       ),
       hardLimitExhausted: alerts.some((alert) => alert.level === '100_percent'),
       alerts,

@@ -972,10 +972,12 @@ select throws_ok(
 insert into public.model_pricing(
   id, provider, model, pricing_mode, context_tier, input_per_million,
   cached_input_per_million, cache_write_per_million, output_per_million,
-  tool_call_price, source_url, effective_from, is_verified
+  tool_call_price, source_url, verified_at, verification_expires_at,
+  pricing_version, checksum, effective_from, is_verified
 ) values (
-  '60100000-0000-0000-0000-000000000101', 'test', 'test-budget-model', 'tokens',
-  'standard', 2.00, 0.20, 2.50, 12.00, 0, 'local://database-test', '2026-01-01', true
+  '60100000-0000-0000-0000-000000000101', 'openai', 'gpt-5.6-terra', 'tokens',
+  'database-test', 2.00, 0.20, 2.50, 12.00, 0, 'local://database-test',
+  '2026-01-01', '2027-01-01', 'database-test-v1', repeat('a', 64), '2026-01-01', true
 );
 
 select is(

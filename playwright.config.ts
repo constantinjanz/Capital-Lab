@@ -19,6 +19,7 @@ export default defineConfig({
       ...process.env,
       NEXT_PUBLIC_SUPABASE_URL: '',
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: '',
+      SCHEDULER_PROVIDER: 'manual',
     },
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

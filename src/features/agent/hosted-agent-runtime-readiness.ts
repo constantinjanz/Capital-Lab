@@ -12,6 +12,7 @@ type RuntimeEnvironment = Pick<
   ServerEnvironment,
   | 'AGENT_ENABLED'
   | 'AGENT_EXECUTION_MODE'
+  | 'PAID_MODEL_CALLS_ENABLED'
   | 'OPENAI_API_KEY'
   | 'SUPABASE_SECRET_KEY'
 >
@@ -19,12 +20,12 @@ type RuntimeEnvironment = Pick<
 export function deriveHostedAgentRuntimeReadiness(
   environment: RuntimeEnvironment,
 ): HostedAgentRuntimeReadiness {
-  if (!environment.AGENT_ENABLED) {
+  if (!environment.AGENT_ENABLED || !environment.PAID_MODEL_CALLS_ENABLED) {
     return {
       ready: false,
       code: 'disabled',
       message:
-        'Agent calls are disabled by the server. Persisted runs remain owner-readable and no paid provider call can start.',
+        'Agent or paid model calls are disabled by the server. Persisted runs remain owner-readable and no paid provider call can start.',
     }
   }
   if (!environment.OPENAI_API_KEY || !environment.SUPABASE_SECRET_KEY) {

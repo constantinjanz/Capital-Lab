@@ -15,6 +15,11 @@
     "test:e2e": "playwright test",
     "test:db": "node scripts/run-database-tests.mjs",
     "test:safety": "node scripts/check-paper-only.mjs",
+    "openai:models:check": "node --conditions=react-server --import tsx scripts/check-openai-model-access.ts",
+    "openai:canary": "node --conditions=react-server --import tsx scripts/run-openai-paid-canary.ts",
+    "pricing:verify": "node --import tsx scripts/verify-model-pricing.ts",
+    "backup:critical": "node scripts/export-critical-tables.mjs",
+    "backup:restore:test": "node scripts/verify-backup-restore.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:safety && pnpm build"

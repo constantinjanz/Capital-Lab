@@ -187,11 +187,6 @@ join structured_runtime_fixture as fixture
 where routing.id = version.model_routing_version_id
   and routing.owner_id = fixture.owner_id;
 
-update public.model_pricing
-set is_verified = true
-where model = 'gpt-5.6-terra'
-  and currency = 'USD';
-
 update public.experiment_controls as controls
 set agent_enabled = true,
     emergency_paused = false,

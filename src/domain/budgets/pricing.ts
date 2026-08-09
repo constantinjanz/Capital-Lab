@@ -14,7 +14,14 @@ export type ModelPricing = {
   cachedInputPerMillionUsd: DecimalValue
   cacheWritePerMillionUsd: DecimalValue
   outputPerMillionUsd: DecimalValue
+  toolCallPriceUsd: DecimalValue
+  currency: 'USD'
   sourceUrl: string
+  verifiedAt: string
+  verificationExpiresAt: string
+  version: string
+  checksum: string
+  isVerified: boolean
   effectiveFrom: string
   effectiveTo?: string
 }
@@ -28,7 +35,15 @@ export const CURRENT_MODEL_PRICING: Readonly<Record<ModelId, ModelPricing>> = {
     cachedInputPerMillionUsd: '0.02',
     cacheWritePerMillionUsd: '0.25',
     outputPerMillionUsd: '1.20',
-    sourceUrl: 'https://developers.openai.com/api/docs/pricing',
+    toolCallPriceUsd: '0',
+    currency: 'USD',
+    sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-5.6-luna',
+    verifiedAt: '2026-08-09T09:30:00.000Z',
+    verificationExpiresAt: '2026-09-08T09:30:00.000Z',
+    version: 'openai-2026-08-09-v1',
+    checksum:
+      'e07583b08166d4caf8dd558b5c78dc84a8074bbd30ea04726128b6a1bd9375be',
+    isVerified: true,
     effectiveFrom: '2026-08-06T00:00:00.000Z',
   },
   'gpt-5.6-terra': {
@@ -39,7 +54,15 @@ export const CURRENT_MODEL_PRICING: Readonly<Record<ModelId, ModelPricing>> = {
     cachedInputPerMillionUsd: '0.20',
     cacheWritePerMillionUsd: '2.50',
     outputPerMillionUsd: '12.00',
-    sourceUrl: 'https://developers.openai.com/api/docs/pricing',
+    toolCallPriceUsd: '0',
+    currency: 'USD',
+    sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-5.6-terra',
+    verifiedAt: '2026-08-09T09:30:00.000Z',
+    verificationExpiresAt: '2026-09-08T09:30:00.000Z',
+    version: 'openai-2026-08-09-v1',
+    checksum:
+      '359ecd53cac150625dd1a626e6edaa2caab005406a4a75a99db1b026e19df131',
+    isVerified: true,
     effectiveFrom: '2026-08-06T00:00:00.000Z',
   },
   'gpt-5.6-sol': {
@@ -50,7 +73,15 @@ export const CURRENT_MODEL_PRICING: Readonly<Record<ModelId, ModelPricing>> = {
     cachedInputPerMillionUsd: '0.50',
     cacheWritePerMillionUsd: '6.25',
     outputPerMillionUsd: '30.00',
-    sourceUrl: 'https://developers.openai.com/api/docs/pricing',
+    toolCallPriceUsd: '0',
+    currency: 'USD',
+    sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-5.6-sol',
+    verifiedAt: '2026-08-09T09:30:00.000Z',
+    verificationExpiresAt: '2026-09-08T09:30:00.000Z',
+    version: 'openai-2026-08-09-v1',
+    checksum:
+      '90bb0dff76a5ef66bcc71015808f05fc2b53ba3fa44fa6a867419ca05a120567',
+    isVerified: true,
     effectiveFrom: '2026-08-06T00:00:00.000Z',
   },
 }
@@ -83,7 +114,15 @@ export function resolveEffectivePricing(
       const endsAt = price.effectiveTo
         ? new Date(price.effectiveTo).getTime()
         : Number.POSITIVE_INFINITY
-      return startsAt <= requestedAt && requestedAt < endsAt
+      const verificationExpiresAt = new Date(
+        price.verificationExpiresAt,
+      ).getTime()
+      return (
+        price.isVerified &&
+        startsAt <= requestedAt &&
+        requestedAt < endsAt &&
+        requestedAt < verificationExpiresAt
+      )
     })
     .sort(
       (left, right) =>
