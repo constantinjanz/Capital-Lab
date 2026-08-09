@@ -89,6 +89,19 @@ select ok(exists (
     and contype = 'f' and array_length(conkey, 1) = 2
 ), 'response evidence has a composite owner boundary');
 
+insert into private.application_settings (owner_id, setting_key, value, is_secret)
+select app_user.user_id, setting.setting_key, 'false'::jsonb, false
+from public.app_users as app_user
+cross join (values
+  ('scheduler_enabled'), ('agent_enabled'),
+  ('autonomous_paper_execution_enabled'), ('paid_model_calls_enabled'),
+  ('openai_canary_enabled'), ('openai_web_search_enabled'),
+  ('sol_challenger_enabled'), ('sol_live_execution_enabled'),
+  ('real_broker_enabled')
+) as setting(setting_key)
+where app_user.role = 'owner' and app_user.is_active
+on conflict (owner_id, setting_key) do update set value = excluded.value;
+
 select lives_ok(
   $$select private.prepare_no_ai_shadow_dry_run_v2(
     pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
@@ -218,7 +231,7 @@ select throws_ok(
     (select jobid from activation_jobs where job_role = 'dispatcher'),
     username := 'authenticator', active := false
   )$$,
-  '42501', 'must be superuser to alter username',
+  'XX000', 'must be superuser to alter username',
   'documented Cron API rejects unauthorized username tampering before arm'
 );
 select isnt(

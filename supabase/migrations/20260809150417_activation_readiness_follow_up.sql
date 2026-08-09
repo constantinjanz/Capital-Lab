@@ -3119,6 +3119,7 @@ begin
     end if;
     stored_count := stored_count + 1;
   end loop;
+  perform set_config('capital_lab.internal_event_write', 'off', true);
   return stored_count;
 end;
 $$;
@@ -3421,7 +3422,6 @@ begin
   then
     raise exception using errcode = '22023', message = 'scheduler RPC envelope is invalid';
   end if;
-  perform set_config('capital_lab.internal_event_write', 'on', true);
   select * into campaign from private.no_ai_shadow_dry_runs
   where id = p_campaign_id and state in ('armed', 'running')
     and scheduler_control_enabled for update;
@@ -3470,8 +3470,10 @@ begin
       'budget_reservations', 0, 'paper_orders_created', 0,
       'paper_fills_created', 0, 'ledger_entries_created', 0);
   end if;
+  perform set_config('capital_lab.internal_event_write', 'on', true);
   update private.no_ai_shadow_dry_run_events
   set authenticated_count = 1 where id = event_row.id;
+  perform set_config('capital_lab.internal_event_write', 'off', true);
   if campaign.state = 'armed' then
     perform private.transition_no_ai_shadow_dry_run(
       campaign.id, 'armed', 'running', 'scheduler', campaign.prepared_commit_sha,
@@ -3522,15 +3524,19 @@ begin
         'budget_reservations', 0, 'paper_orders_created', 0,
         'paper_fills_created', 0, 'ledger_entries_created', 0);
     end if;
+    perform set_config('capital_lab.internal_event_write', 'on', true);
     update private.no_ai_shadow_dry_run_events
     set claimed_cycle_count = 1, terminal_reason = 'no_ai_shadow_cycle_recorded'
     where id = event_row.id;
+    perform set_config('capital_lab.internal_event_write', 'off', true);
   else
     reconciled_count := private.capture_activation_http_responses();
+    perform set_config('capital_lab.internal_event_write', 'on', true);
     update private.no_ai_shadow_dry_run_events
     set claimed_cycle_count = reconciled_count,
       terminal_reason = 'dry_run_evidence_reconciled'
     where id = event_row.id;
+    perform set_config('capital_lab.internal_event_write', 'off', true);
   end if;
   return jsonb_build_object('status', 'completed',
     'reason', case when p_job = 'market_dispatcher' then 'no_ai_shadow_cycle_recorded'
@@ -3698,12 +3704,12 @@ declare
   valid_responses integer;
   invalid_responses integer;
   missing_responses integer;
+  submitted_count integer;
   required_drain_at timestamptz;
 begin
   if p_job not in ('market_dispatcher', 'reconciler') then
     raise exception using errcode = '22023', message = 'scheduler event type is invalid';
   end if;
-  perform set_config('capital_lab.internal_event_write', 'on', true);
   select * into campaign from private.no_ai_shadow_dry_runs
   where state in ('armed', 'running', 'auto_stopped')
   order by prepared_at desc limit 1 for update;
@@ -3802,11 +3808,14 @@ begin
     'expected_deployment_id', campaign.production_deployment_id,
     'expected_commit_sha', campaign.prepared_commit_sha
   ), campaign.max_request_seconds * 1000;
+  perform set_config('capital_lab.internal_event_write', 'on', true);
   update private.no_ai_shadow_dry_run_events
   set pg_net_request_id = transport_id, cron_trigger_count = 1,
       request_submitted_at = statement_timestamp()
   where id = event_row.id and pg_net_request_id is null;
-  if not found then
+  get diagnostics submitted_count = row_count;
+  perform set_config('capital_lab.internal_event_write', 'off', true);
+  if submitted_count <> 1 then
     raise exception using errcode = '55000', message = 'scheduler request identity was concurrently claimed';
   end if;
   return transport_id;

@@ -79,8 +79,16 @@ select ok(
     select 1 from pg_proc as p
     join pg_namespace as n on n.oid = p.pronamespace
     where n.nspname in ('public','graphql_public') and p.prosecdef
+      and (
+        p.oid not in (
+          'public.run_hosted_scheduler_request(uuid,uuid,uuid,text,uuid,uuid,timestamptz)'::regprocedure,
+          'public.claim_paid_canary(uuid,uuid)'::regprocedure,
+          'public.paid_canary_context(timestamptz)'::regprocedure
+        )
+        or array_to_string(p.proconfig, ',') not in ('search_path=', 'search_path=""')
+      )
   ),
-  'no security-definer function exists in an exposed schema'
+  'no unallowlisted or search-path-unsafe security-definer function exists in an exposed schema'
 );
 
 select ok(

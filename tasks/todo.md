@@ -51,6 +51,15 @@ and on a non-superuser Cron-owner tamper fixture. The grant change is now an
 exact activation-function allowlist; username tamper is covered by the
 documented API rejection plus versioned hash inequality. A fresh exact-head
 pgTAP/restore run remains mandatory.
+Run `31341809083` passed application, browser, migration compile, and reset;
+1,816 of 1,836 pgTAP assertions passed. The remaining failures reduced to an
+older blanket exposed-schema SECURITY-DEFINER assertion, a missing explicit
+safe-control test fixture, a transaktionsweit offenbleibendes internal-writer
+flag, and one pg_cron SQLSTATE mismatch. The contract now allowlists only the
+three narrow fixed-search-path public wrappers, the fixture creates every
+required false setting explicitly, and internal writers open the mutation gate
+only around individual writes and close it before return. Exact-head rerun is
+still mandatory.
 
 ## Activation readiness follow-up (2026-08-09)
 
