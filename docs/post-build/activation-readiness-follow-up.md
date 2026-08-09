@@ -55,6 +55,7 @@ still a manual gate.
 
 ```text
 .github/workflows/ci.yml
+.gitignore
 .prettierignore
 docs/BACKUP_AND_RESTORE.md
 docs/post-build/activation-readiness-follow-up.md
@@ -167,6 +168,10 @@ The canonical phase contract additionally binds every phase file:
 | exact-head browser CI, run `31342252647`                 |           0 | Playwright critical flows                                                                                           | verified on `2de5a146...`                                                                                                             |
 | exact-head Supabase start/reset/pgTAP, run `31342252647` |           0 | pinned CLI `2.113.0`; 14 files / 1,836 assertions                                                                   | full deterministic database contract verified on `2de5a146...`                                                                        |
 | exact-head seed-free export/restore, run `31342252647`   |           1 | exporter stopped before dump because post-toolchain Git status was non-clean                                        | path-only redacted diagnosis added without weakening clean-tree rejection; rerun required                                             |
+| exact-head application CI, run `31342485611`             |           0 | complete application gate                                                                                           | verified on `377704ea...`                                                                                                             |
+| exact-head Supabase start/reset/pgTAP, run `31342485611` |           0 | pinned CLI and all 1,836 assertions                                                                                 | database contract remains green                                                                                                       |
+| exact-head seed-free export/restore, run `31342485611`   |           1 | path-only evidence identified `supabase/.branches/_current_branch` as the sole dirty entry                          | exact generated CLI state root ignored; all other dirt remains blocking                                                               |
+| exact-head browser CI, run `31342485611`                 |           1 | one unchanged Research-import assertion timed out; 3/4 passed                                                       | no retry/timeout weakening; fresh exact-head run required                                                                             |
 
 ## Manual gates and stop conditions
 

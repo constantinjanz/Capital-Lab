@@ -28,6 +28,11 @@ The exporter requires pinned Supabase CLI `2.113.0`, a fully clean working tree
 including untracked files, and an output directory whose canonical path is
 outside the repository. It creates:
 
+The repository ignores only the Supabase CLI's generated local state roots
+`supabase/.temp` and `supabase/.branches`; every other tracked or untracked path
+still makes the export fail closed. Dirty-path diagnostics contain status and
+path only, with credential-file paths redacted.
+
 - a roles dump;
 - a schema dump;
 - a data dump;

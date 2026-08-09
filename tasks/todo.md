@@ -74,6 +74,13 @@ before any dump. The exporter now reports only Git status plus repository path
 (with `.env*`/`.npmrc` path redaction), never contents or credentials, so the
 next ephemeral run can identify and explicitly ignore or eliminate only the
 actual generated path. Clean-tree rejection remains unchanged.
+Run `31342485611` proved the only dirty path is the Supabase CLI-generated
+`supabase/.branches/_current_branch`; exactly `/supabase/.branches` is now
+ignored alongside `/supabase/.temp`, while every other dirty path remains
+blocking. Application and all database assertions stayed green. One unchanged
+Research-import browser assertion timed out after earlier green runs; no retry,
+timeout, or assertion was weakened, and a fresh exact-head browser pass remains
+mandatory.
 
 ## Activation readiness follow-up (2026-08-09)
 
