@@ -1189,7 +1189,7 @@ alter table private.no_ai_shadow_dry_run_events
   add unique (request_id),
   add unique (cycle_id);
 
-drop trigger no_ai_shadow_dry_run_events_reject_mutation
+drop trigger if exists no_ai_shadow_dry_run_events_reject_mutation
 on private.no_ai_shadow_dry_run_events;
 
 create function private.protect_activation_event_mutation()

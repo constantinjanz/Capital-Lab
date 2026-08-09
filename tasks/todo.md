@@ -8,7 +8,7 @@ Safety status: implementation-only. Production migration/deployment/activation, 
 
 ### Preflight and evidence boundaries
 
-- [x] Derive local HEAD/branch/remote from Git, inspect the complete working tree, and preserve the 20 pre-existing unrelated modified files unstaged and unchanged.
+- [x] Derive local HEAD/branch/remote from Git, inspect the complete working tree, and preserve the 21 unrelated modified files observed in the shared working tree unstaged and unchanged.
 - [x] Confirm Draft PR #21 points to `codex/activation-readiness-follow-up` at `f23c8e4a98338e2546497d53ab77238f51c09691`; no later PR commits exist.
 - [x] Read current official Supabase migration, backup/restore, Cron/pg_cron, pg_net, Vault, RLS, security-definer, and breaking-change guidance; direct `cron.job` mutation and extension version pins remain forbidden.
 - [x] Prove read-only that linked Capital-Lab Hosted migration history contains neither `20260809150000` nor `20260809150417`; `pg_cron`/`pg_net`, planned Vault names, activation relations, and scheduler jobs are absent. Existing Vault extension is platform baseline with zero entries.

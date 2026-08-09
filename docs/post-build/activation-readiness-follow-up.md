@@ -24,7 +24,8 @@ execute a Canary, connect a broker, or create a real order/fill/ledger entry.
 PR #21 remains draft, unmerged, and not marked ready for review.
 
 Read-only preflight derived the branch, remote, Git HEAD, PR head, and complete
-working tree independently. Twenty pre-existing unrelated modified files were
+working tree independently. Twenty-one unrelated modified files observed in the
+shared working tree were
 preserved and excluded from this change. Hosted migration history ended before
 both PR migrations; `20260809150000` and `20260809150417` were absent. The
 linked project had no `pg_cron` or `pg_net`, no activation tables/jobs, no
@@ -101,7 +102,7 @@ tasks/todo.md
 
 | Artifact                                            | SHA-256                                                            |
 | --------------------------------------------------- | ------------------------------------------------------------------ |
-| `20260809150417_activation_readiness_follow_up.sql` | `af97d9c5c8b7620f4ee492564e9b6dc05e3fd29a83a009605e8495070e4e08c6` |
+| `20260809150417_activation_readiness_follow_up.sql` | `6b35a4ee3f46b2666f9a5185b4f5d786147df2f758fe7a7d0e27a85731c574e8` |
 | `phase-contract.json`                               | `d795b4b100f932479e183316e82710bb5bc25693fee49163f6d1fc019bcb07f8` |
 | `critical-relations.v2.json`                        | `ce65298a8b8e93954ca787b610bcedc988f04ce7645ba971395227aff6ba306d` |
 | `run-activation-phase.mjs`                          | `90d943f61a22e18236912d635438f25490e21838a6a9ff862c654d3251c25b0d` |
@@ -142,7 +143,9 @@ The canonical phase contract additionally binds every phase file:
 | local credentials                          | not claimed | ignored `.env.local` contains redacted credential categories | expected local owner gate; values never emitted |
 | local Supabase/pgTAP                       | unavailable | Docker, Supabase CLI, and psql absent                        | exact clean CI required                         |
 | local seed-free export/restore             | unavailable | Docker/psql absent                                           | exact clean CI required                         |
-| exact-head application/browser/database CI |     pending | first hardened candidate not yet pushed                      | blocking                                        |
+| exact-head application CI, run `31341237570` |           0 | format, lint, typecheck, 589 tests, safety, credentials, build | verified on `1a97c215...`                       |
+| exact-head browser CI, run `31341237570`     |           0 | Playwright critical flows                                     | verified on `1a97c215...`                       |
+| exact-head database CI, run `31341237570`    |           1 | first migration compile exposed non-idempotent trigger drop    | fixed with `DROP TRIGGER IF EXISTS`; rerun required |
 
 ## Manual gates and stop conditions
 
