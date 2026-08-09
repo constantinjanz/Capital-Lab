@@ -46,12 +46,20 @@ const exitCode = await new Promise((resolve) => {
   child.on('close', (code) => resolve(code ?? 1))
 })
 
-const vitestFiles = combinedOutput.match(/Test Files\s+(\d+) passed/i)
-const vitestTests = combinedOutput.match(/Tests\s+(\d+) passed/i)
-const pgTap = combinedOutput.match(/Files=(\d+),\s+Tests=(\d+)/i)
-const playwright = combinedOutput.match(/(?:^|\n)\s*(\d+) passed\b/i)
+const normalizedOutput = combinedOutput.replace(
+  /\u001b\[[0-?]*[ -/]*[@-~]/g,
+  '',
+)
+const vitestFiles = normalizedOutput.match(/Test Files\s+(\d+)\s+passed/i)
+const vitestTests = normalizedOutput.match(/Tests\s+(\d+)\s+passed/i)
+const pgTap = normalizedOutput.match(/Files=(\d+),\s+Tests=(\d+)/i)
+const playwrightPassed = normalizedOutput.match(/(?:^|\n)\s*(\d+)\s+passed\b/i)
+const playwrightFlaky = normalizedOutput.match(/(?:^|\n)\s*(\d+)\s+flaky\b/i)
+const passedTests =
+  Number(vitestTests?.[1] ?? pgTap?.[2] ?? playwrightPassed?.[1]) || null
+const flakyTests = Number(playwrightFlaky?.[1]) || 0
 const evidence = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   gate: id,
   commitSha: process.env.CAPITAL_LAB_CI_COMMIT_SHA ?? null,
   startedAt,
@@ -59,7 +67,9 @@ const evidence = {
   exitCode,
   counts: {
     files: Number(vitestFiles?.[1] ?? pgTap?.[1]) || null,
-    tests: Number(vitestTests?.[1] ?? pgTap?.[2] ?? playwright?.[1]) || null,
+    tests: passedTests === null ? null : passedTests + flakyTests,
+    passed: passedTests,
+    flaky: flakyTests,
   },
 }
 

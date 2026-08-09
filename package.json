@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --fail-on-flaky-tests",
     "test:db": "node scripts/run-database-tests.mjs",
     "test:safety": "node scripts/check-paper-only.mjs",
     "test:credentials": "node scripts/check-credential-patterns.mjs",
