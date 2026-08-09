@@ -81,6 +81,13 @@ blocking. Application and all database assertions stayed green. One unchanged
 Research-import browser assertion timed out after earlier green runs; no retry,
 timeout, or assertion was weakened, and a fresh exact-head browser pass remains
 mandatory.
+Run `31342645890` passed application, all four browser flows, Supabase startup,
+reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
+canonical evidence query fails before any dump. The exporter now emits only
+the first PostgreSQL `ERROR` line with all single-quoted literals and URLs
+redacted and a hard 400-character cap. It still never prints query output,
+rows, credentials, headers, or connection details. A fresh exact-head run is
+required to identify the SQL contract defect.
 
 ## Activation readiness follow-up (2026-08-09)
 

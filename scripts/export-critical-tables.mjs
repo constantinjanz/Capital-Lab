@@ -51,6 +51,18 @@ function redactedDirtyPathSummary(status) {
     .join(', ')
 }
 
+function redactedPostgresError(stderr) {
+  const errorLine = stderr
+    .split(/\r?\n/u)
+    .find((line) => /(?:^|:\s)ERROR:/u.test(line))
+  if (!errorLine) return 'postgres-error-unclassified'
+  return errorLine
+    .replace(/'[^']*'/gu, "'[redacted-literal]'")
+    .replace(/(?:postgres(?:ql)?|https?):\/\/\S+/giu, '[redacted-url]')
+    .replace(/\s+/gu, ' ')
+    .slice(0, 400)
+}
+
 async function spawnBounded(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     let stdout = ''
@@ -118,8 +130,11 @@ async function psqlEvidence(psql, databaseUrl, sql) {
       input: sql,
     },
   )
-  if (result.code !== 0 || result.signal)
-    fail('Critical backup evidence query failed')
+  if (result.code !== 0 || result.signal) {
+    fail(
+      `Critical backup evidence query failed; redacted database error: ${redactedPostgresError(result.stderr)}`,
+    )
+  }
   return JSON.parse(result.stdout.trim())
 }
 
