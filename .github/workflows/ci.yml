@@ -15,7 +15,7 @@ jobs:
   application:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
@@ -26,10 +26,10 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git status --porcelain)"
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@d15e628ca66d93ee5f352c71671a7bc6a97af5c9 # v6.0.8
         with:
           version: 10.33.2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -44,7 +44,7 @@ jobs:
       - name: Publish application evidence summary
         if: always()
         run: cat .ci-evidence/*.json >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()
         with:
           name: application-evidence-${{ github.event.pull_request.head.sha || github.sha }}
@@ -55,7 +55,7 @@ jobs:
   database:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
@@ -66,17 +66,31 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git status --porcelain)"
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
         with:
           version: 2.113.0
       - run: supabase --version
       - run: node scripts/run-ci-gate.mjs --id supabase-start -- supabase start
       - run: node scripts/run-ci-gate.mjs --id database-reset -- supabase db reset
       - run: node scripts/run-ci-gate.mjs --id database-pgtap -- supabase test db
+      - name: Seed-free critical backup and disposable restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          backup_dir="$(mktemp -d)"
+          export CAPITAL_LAB_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+          node scripts/export-critical-tables.mjs "--output-dir=${backup_dir}"
+          psql -X --no-psqlrc "$CAPITAL_LAB_DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -c 'create database capital_lab_restore template template0'
+          manifest_path="$(find "$backup_dir" -maxdepth 1 -name '*-manifest.json' -print -quit)"
+          test -n "$manifest_path"
+          export CAPITAL_LAB_RESTORE_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:54322/capital_lab_restore'
+          export CAPITAL_LAB_RESTORE_CONFIRM_DISPOSABLE='seed-free-disposable-database-confirmed'
+          node scripts/verify-backup-restore.mjs "--manifest=${manifest_path}"
       - name: Publish database evidence summary
         if: always()
         run: cat .ci-evidence/*.json >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()
         with:
           name: database-evidence-${{ github.event.pull_request.head.sha || github.sha }}
@@ -87,7 +101,7 @@ jobs:
   browser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
@@ -98,10 +112,10 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git status --porcelain)"
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@d15e628ca66d93ee5f352c71671a7bc6a97af5c9 # v6.0.8
         with:
           version: 10.33.2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -111,7 +125,7 @@ jobs:
       - name: Publish browser evidence summary
         if: always()
         run: cat .ci-evidence/*.json >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: always()
         with:
           name: browser-evidence-${{ github.event.pull_request.head.sha || github.sha }}

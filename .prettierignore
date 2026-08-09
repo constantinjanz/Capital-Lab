@@ -7,3 +7,6 @@ playwright-report
 test-results
 pnpm-lock.yaml
 supabase/.temp
+# Security contracts are canonical compact JSON; whitespace is checksummed.
+supabase/activation/phase-contract.json
+supabase/backup/critical-relations.v2.json

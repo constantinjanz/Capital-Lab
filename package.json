@@ -17,7 +17,7 @@
     "test:safety": "node scripts/check-paper-only.mjs",
     "test:credentials": "node scripts/check-credential-patterns.mjs",
     "openai:models:check": "node --conditions=react-server --import tsx scripts/check-openai-model-access.ts",
-    "openai:canary": "node --conditions=react-server --import tsx scripts/run-openai-paid-canary.ts",
+    "openai:canary": "node scripts/run-openai-paid-canary-child.mjs",
     "pricing:verify": "node --import tsx scripts/verify-model-pricing.ts",
     "backup:critical": "node scripts/export-critical-tables.mjs",
     "backup:restore:test": "node scripts/verify-backup-restore.mjs",

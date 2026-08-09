@@ -1,178 +1,175 @@
-# Capital Lab activation-readiness follow-up
+# PR #21 activation-readiness hardening report
 
-- Date: 2026-08-09
-- Scope: code, schema, scripts, tests, and evidence preparation only
-- Audit input: [`hosting-safety-audit.md`](./hosting-safety-audit.md)
+Date: 2026-08-10
 
-Verdict: **GO FOR MIGRATION REVIEW**. This authorizes review only and is not authorization to apply a migration or activate anything.
+Repository: `constantinjanz/Capital-Lab`
 
-## Immutable scope and credential handling
+Branch: `codex/activation-readiness-follow-up`
 
-- `key_rotation_completed=owner_attested`.
-- `server_consumer_scope_sync=pending`.
-- The rotation attestation does not prove that intended server-side Production consumers use the new credential generation or that obsolete Preview/Development consumers were removed or replaced.
-- No old or new credential value was requested, read, compared, logged, hashed, or written. A later Owner gate may confirm environment-variable names and Production scopes, never values.
-- No hosted secret, Vault entry, Cron job, extension, Vercel environment, Production deployment, model configuration, provider, research corpus, order, fill, or ledger row was changed by this follow-up.
-- The redacted repository scanner reports only file path, rule ID, and finding class. Current result: zero findings.
+Draft PR: `#21`
 
-## Starting point and Git evidence
+Derived starting SHA: `f23c8e4a98338e2546497d53ab77238f51c09691`
 
-| Evidence                    | Value                                                                                       | Classification  |
-| --------------------------- | ------------------------------------------------------------------------------------------- | --------------- |
-| Merged audit base           | `70ed610d5e0e5c08bf523d0d160a7b76f5fe2e51`                                                  | `code_verified` |
-| Audit branch tip            | `a3bf18439d2bcdcf512976ff55a4879d88f3abbd`                                                  | `code_verified` |
-| Shared audit tree           | `ca969f8887b36200ece84c65221881ee8fa465f2`                                                  | `code_verified` |
-| Follow-up branch            | `codex/activation-readiness-follow-up`                                                      | `code_verified` |
-| Verified implementation SHA | `88295e0fe1b51c5bcea4a17ac4129911a72ba51d`                                                  | `code_verified` |
-| Exact-head PR CI            | [run `31324382247`](https://github.com/constantinjanz/Capital-Lab/actions/runs/31324382247) | `code_verified` |
-| Draft PR                    | [PR #21](https://github.com/constantinjanz/Capital-Lab/pull/21), open and unmerged          | `code_verified` |
+End SHA: the exact Draft-PR HEAD identified in the final handoff and CI evidence;
+embedding a commit's own SHA in that commit is self-referential.
 
-The audit tip, merged base, and `origin/main` have the same tree. The verified implementation SHA is the exact code checkpoint covered by the evidence below. A later report-only commit necessarily changes the PR head and cannot self-embed its own SHA; the authoritative final report-head SHA is therefore the exact PR head shown by GitHub and repeated in the handoff. Unrelated user working-tree changes were preserved and are excluded from this follow-up's staged-file allowlist. No reset, broad checkout, or `git add -A` is permitted.
+## Authorization and non-execution
 
-## Prior audit claim register
+This work changed repository artifacts only. It did not apply a Hosted or
+Production migration, run `supabase db push`, create/promote a Production
+deployment, alter Production environment variables, install/change/delete a
+Hosted extension, Vault value, or Cron job, send a scheduler HTTP request,
+invoke OpenAI, inspect/configure an OpenAI key, call a market/news provider,
+execute a Canary, connect a broker, or create a real order/fill/ledger entry.
+PR #21 remains draft, unmerged, and not marked ready for review.
 
-Every inherited audit claim is interpreted under one of the required evidence classes:
+Read-only preflight derived the branch, remote, Git HEAD, PR head, and complete
+working tree independently. Twenty pre-existing unrelated modified files were
+preserved and excluded from this change. Hosted migration history ended before
+both PR migrations; `20260809150000` and `20260809150417` were absent. The
+linked project had no `pg_cron` or `pg_net`, no activation tables/jobs, no
+planned Vault names, zero Vault rows, and no enabled scheduler/agent controls.
+The platform-provided Vault extension itself was present. Vercel observations
+found only Preview deployments (`target=null`), no live Production project, and
+tracked `vercel.json` disables deployment from `main`; the connector did not
+provide a complete Production environment-variable listing, so scope parity is
+still a manual gate.
 
-| Claim group                                                                                                                                                                                                         | Classification        | Current interpretation                                                                               |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------- |
-| Repository boundaries, PAPER-only scan, fail-closed application flags, migration contents, activation scripts, backup scripts, Canary code                                                                          | `code_verified`       | Verified source behavior, not Hosted activation evidence                                             |
-| Exact protected Preview deployment, Preview health, authenticated Preview pages, Preview browser/runtime logs                                                                                                       | `preview_verified`    | Applies only to the cited Preview deployment, never to Production                                    |
-| Prior combined migration/pgTAP execution inside a transaction ending in rollback                                                                                                                                    | `rollback_rehearsed`  | Proves compilation/assertions against the then-current Hosted schema; no schema or fixture persisted |
-| Hosted migration list, absent post-build migrations, absent `pg_cron`/`pg_net`, disabled persisted controls, zero agent/AI/order/fill activity at inspection time                                                   | `production_verified` | Narrow Hosted database observation only; not a Production application or activation pass             |
-| Owner statement that the disclosed server credential was rotated                                                                                                                                                    | `owner_attested`      | Recorded without credential inspection                                                               |
-| Server-consumer names/scopes, Vercel Production deployment, Production environment, backup restore, Production migration, extensions, Vault, jobs, authorized no-op, baseline, dry run, OpenAI access/credit/Canary | `pending`             | Requires later manual evidence; none is inferred                                                     |
+## Finding disposition
 
-Prepared RLS, explicit grants, price rows, backup tooling, extension scripts, job scripts, state-machine functions, and dry-run tables are classified `prepared` or `rollback_rehearsed` until separately applied and verified. They are not Production passes.
+| Finding                                            | Root cause                                                                       | Remediation                                                                                                                                                                                              | Evidence                                                                                      | Residual risk                                                                                      |
+| -------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Cron identity trusted names                        | v1 stop/install paths could adopt same-name jobs                                 | Persist versioned schedule-returned IDs and full name/schedule/command/database/username/active hash; compare before every mutation; use only `cron.schedule`, `cron.alter_job`, `cron.unschedule` by ID | pgTAP covers command, schedule, database, username, wrong ID, collision, extra job, and retry | Hosted install/arm remains manual and unauthorized                                                 |
+| Bearer could target arbitrary HTTPS                | regex URL check and any 2xx were treated as evidence                             | Canonical parsed Production origin/path with no port/userinfo/query/fragment; exact Deployment/commit/environment; strict 401 and auth-noop response schemas; persistent sanitized evidence              | Route tests and pgTAP fixture reconciliation                                                  | No real Hosted request was sent by design                                                          |
+| Emergency stop depended on downstream systems      | Vercel/Cron/audit work shared the stop path                                      | Phase 1 commits all nine settings false, pauses experiment controls, and stops the campaign without Cron/Vercel/audit; later ID-reverified disable/audit/unschedule phases are retryable                 | Idempotent pgTAP kill and split phase artifacts                                               | Operator still must verify the later phases during a future authorized run                         |
+| Caller asserted commit/target                      | runner accepted supplied hashes and substring project checks                     | Derive Git root/HEAD/clean tree; exact canonical manifest/phase checksums; structural TLS URL/host/user/db/port/mode parsing; server fingerprint on every phase; `shell:false`, `psql -X`, timeouts      | runner unit tests, TypeScript, activation artifact tests                                      | Pooler/direct fingerprints must be separately frozen; no silent switch                             |
+| pg_net evidence could expire                       | reconciler read ephemeral response rows only when work was due                   | Every tick first persists allowlisted response fields, validates complete JSON identity/counters, refreshes full snapshots, and marks missing evidence inconclusive                                      | SQL happy path uses 104 persistent responses; malformed/mismatch route tests                  | Real transport TTL/DB-restart behavior requires the later authorized rehearsal                     |
+| Finalization could strand offline owner            | manual timing conflicted with final response drain                               | Server-time schedule, last-submit + 120s + 180s drain, 300s post-stop gate, automatic reconciler finalizer, exact 52/104 requirements, terminal evidence before unschedule                               | deterministic pgTAP 52/104 auto-finalize path                                                 | Production time/market-calendar evidence remains a later gate                                      |
+| Backup omitted critical/evidence state             | exporter and verifier had independent partial lists                              | One canonical v2 relation contract drives full-row hashes, column signatures, counts, sorting, exporter manifest, and restore verification; roles/schema/data share one URL/fingerprint                  | unit tamper tests; CI seed-free restore gate                                                  | No Production export/restore was authorized                                                        |
+| Excess privilege and mutable evidence              | broad service grants and row-only guards                                         | No `GRANT ALL`; forced RLS; private transitions not service-executable; narrow public wrappers; actor matrix; composite owner FKs; UPDATE/DELETE/TRUNCATE guards including Canary/audit/evidence         | pgTAP privileges, fixed search paths, composite FK and mutation tests                         | Database owner necessarily retains DDL authority                                                   |
+| Count-only baselines missed compensating mutations | a few counters represented side effects                                          | Full owner-row canonical hashes, column/state watermarks, cash/order/fill/position totals, fresh control/storage snapshots, retry equality                                                               | relation-contract and pgTAP baseline tests                                                    | Hashing cost must be observed before any authorized activation                                     |
+| Credentials/actions/Canary/health were weak        | narrow current-tree scan, moving action tags, parent env flags, ambiguous health | Redacted broader current/history scan, bounded history, immutable Action SHAs with release comments, child-only Canary env, exact disabled/mock health booleans                                          | scanner/unit/health tests and CI                                                              | Local ignored `.env.local` is intentionally not printed and prevents a local credential-gate claim |
 
-## Findings closed in code
+## Complete changed-file list
 
-1. Supabase CLI is pinned to exactly `2.113.0` in CI. The version was reconstructed from the setup action used by the last green audit run and confirmed locally with the exact package version. No `latest` or moving CLI reference remains.
-2. All CI jobs checkout the exact push/PR-head SHA with depth one and disabled persisted credentials, assert a clean checkout, capture each gate's exit code and applicable test counts as JSON, publish them to the job summary, and retain them as exact-SHA artifacts.
-3. Credential-pattern scanning is independent of the PAPER-only scan and emits no matching text, entropy string, fragment, prefix, or credential hash.
-4. The app/schema migration contains no extension creation, Vault operation, Cron job, or HTTP request.
-5. Extension preparation, Vault name/shape verification, disabled job installation, auth/no-op, planning/baseline, arming, and shutdown are separate versioned scripts. The standard runner verifies target identity and file checksum and invokes `psql` with `ON_ERROR_STOP=1`; SQL Editor copy/paste is fallback-only.
-6. Extension preparation uses bare `create extension if not exists pg_cron` and `pg_net`, with no version pins. Cron jobs are managed only through `cron.schedule`, `cron.alter_job`, and `cron.unschedule`; `cron.job` is read-only evidence.
-7. New persistence is in the non-exposed `private` schema, forces RLS, grants no client access, and grants only the server role. No new Data API table or client mutation was added.
-8. The dedicated stable run class is `no_ai_shadow_infrastructure_dry_run`, with stable ID `6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d001`. It is not a `public.experiments` row, cannot count as the three-month research experiment, cannot promote a strategy, and has no research, provider, model, execution, order, fill, or ledger capability.
-9. Planning selects exactly two consecutive complete XNAS `regular` sessions available at `decisionAt`. Activation at or after an open skips that session. Weekday calendar gaps fail closed; weekends, recorded holidays, DST timestamps, and early closes are handled from the versioned official calendar.
-10. Two complete 6.5-hour sessions preregister 26 15-minute slots each: 52 dispatcher slots plus 52 five-minute reconciler events, for 104 expected events. Planned end is the second regular close plus a fixed 10-minute reconciliation grace period.
-11. Expected-vs-actual evidence records Cron trigger count, pg_net request ID, HTTP status/timeout, authenticated route count, claimed cycle count, terminal no-AI reason, and exact zero model/budget/order/fill/ledger counters. No jobs or missing slots is failure, never success.
-12. Deduplicated alarms atomically close the database scheduler control, every dangerous persisted flag, every experiment scheduler/agent control, and both expected Cron jobs on forbidden database delta, missing/duplicate slot, auth failure, non-2xx, timeout/possibly-charged result, stale lease, unexpected controls, planned end, or storage/security boundary.
-13. The Canary lock uses immutable campaign `openai_postbuild_canary_v1`, exact-model uniqueness, and a campaign advisory transaction lock. One claim creates all three model locks atomically; the operation UUID is correlation evidence only. Claimed, unknown, or possibly charged evidence cannot be bypassed by another UUID.
-14. The Canary launcher forces temporary flags only in an isolated child process. The environment disappears on normal exit, error, or interruption. No route, UI, Cron, or Canary execution was added.
-15. Backup export now records exact commit, pinned CLI, dump checksum, critical row counts, deterministic content checksums, exact ledger currency totals, and duplicate-ledger-ID evidence. Restore succeeds only if a local/disposable database reproduces all preregistered evidence exactly.
+```text
+.github/workflows/ci.yml
+.prettierignore
+docs/BACKUP_AND_RESTORE.md
+docs/post-build/activation-readiness-follow-up.md
+docs/post-build/hosting-safety-audit.md
+package.json
+scripts/activation-artifacts.test.ts
+scripts/check-credential-patterns.mjs
+scripts/critical-backup-contract.mjs
+scripts/critical-backup-contract.test.ts
+scripts/export-critical-tables.mjs
+scripts/run-activation-phase.mjs
+scripts/run-activation-phase.test.ts
+scripts/run-openai-paid-canary-child.mjs
+scripts/verify-backup-restore.mjs
+src/app/api/health/route.test.ts
+src/app/api/health/route.ts
+src/app/api/internal/scheduler/route.test.ts
+src/app/api/internal/scheduler/route.ts
+src/lib/supabase/scheduler-runtime-repository.ts
+supabase/activation/disable-hosted-scheduler.sql
+supabase/activation/drain-reconcile.sql
+supabase/activation/emergency-disable-jobs.sql
+supabase/activation/emergency-kill.sql
+supabase/activation/enable-hosted-scheduler.sql
+supabase/activation/finalize-no-ai-dry-run.sql
+supabase/activation/install-hosted-scheduler-jobs-disabled.sql
+supabase/activation/phase-contract.json
+supabase/activation/plan-and-freeze-no-ai-dry-run.sql
+supabase/activation/prepare-no-ai-dry-run.sql
+supabase/activation/prepare-scheduler-infrastructure.sql
+supabase/activation/request-scheduler-auth-failures.sql
+supabase/activation/request-scheduler-auth-noop.sql
+supabase/activation/unschedule-terminal-jobs.sql
+supabase/activation/verify-scheduler-auth-failures.sql
+supabase/activation/verify-scheduler-auth-noop.sql
+supabase/activation/verify-scheduler-vault.sql
+supabase/backup/critical-relations.v2.json
+supabase/backup/critical-restore-evidence.sql
+supabase/migrations/20260809150417_activation_readiness_follow_up.sql
+supabase/tests/activation_readiness_follow_up_test.sql
+tasks/todo.md
+```
 
-Relevant current platform rules were checked against primary sources: [extension version pinning](https://supabase.com/changelog/extension-version-pinning-ignored), [explicit Data API grants](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically), [pg_net response evidence](https://supabase.com/docs/guides/database/extensions/pg_net), and [Supabase Cron](https://supabase.com/docs/guides/cron).
+## Checksums from final candidate bytes
 
-## Migration and activation checksums
+| Artifact                                            | SHA-256                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------ |
+| `20260809150417_activation_readiness_follow_up.sql` | `af97d9c5c8b7620f4ee492564e9b6dc05e3fd29a83a009605e8495070e4e08c6` |
+| `phase-contract.json`                               | `d795b4b100f932479e183316e82710bb5bc25693fee49163f6d1fc019bcb07f8` |
+| `critical-relations.v2.json`                        | `ce65298a8b8e93954ca787b610bcedc988f04ce7645ba971395227aff6ba306d` |
+| `run-activation-phase.mjs`                          | `90d943f61a22e18236912d635438f25490e21838a6a9ff862c654d3251c25b0d` |
+| `export-critical-tables.mjs`                        | `4d67e60ba4dd43e02a951a0177b084287d669a5277098a3cb3e10aa9d5061077` |
+| `verify-backup-restore.mjs`                         | `6d9550b154654171830e9360f64fef3b33b9b0563a1a1673e12d39c350730e16` |
 
-| File                                                                    | SHA-256                                                            |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `supabase/migrations/20260809150000_post_build_hosting_safety.sql`      | `ee9a1390a6cf1abfca9a8664d6dfe492bc217741265f2d0d5e8b010af6c0352e` |
-| `supabase/migrations/20260809150417_activation_readiness_follow_up.sql` | `3e41522e59e2f319bcf74623747d390095990a6925a168c84b9eecea35b1ad91` |
-| `supabase/activation/prepare-no-ai-dry-run.sql`                         | `1a8a921e835a2dee65064773f5ca874804f0ed000ba6fb67cc7bbcbe54314257` |
-| `supabase/activation/prepare-scheduler-infrastructure.sql`              | `9af3f8c597fd62b0bf174e3a654927d8df82a8377e442c255ef8dbfaf23a60c0` |
-| `supabase/activation/verify-scheduler-vault.sql`                        | `2bb34de5402fc50d35aa76948004d054cacdbd759d386580cd2e447b45478d78` |
-| `supabase/activation/install-hosted-scheduler-jobs-disabled.sql`        | `47c1f9ac1e6a37fbf20217b6c7e20f45cf35bcd96d8e5f7b4415f30b76c1ccc1` |
-| `supabase/activation/request-scheduler-auth-noop.sql`                   | `8a9cd31d9562e221cfcd43dbd9b857a5a86c03b8e17f9d0dfcd05dcbff5d1d07` |
-| `supabase/activation/verify-scheduler-auth-noop.sql`                    | `2233a7d01d0ca15a69e866ac4d82a6911e4a04f1617aa5076e6b7716e0a77753` |
-| `supabase/activation/plan-and-freeze-no-ai-dry-run.sql`                 | `78444c0f34666a36b479e171f4f09ed80a67ac10d07cc174ecca7111970bdc0f` |
-| `supabase/activation/enable-hosted-scheduler.sql`                       | `942001b4d8b3405bdb8b7915249e4b1e1cbbd7fa4833d2680b7495f0d11ea00b` |
-| `supabase/activation/disable-hosted-scheduler.sql`                      | `ebd6551991a9bff58ac6e66b933ba3a97e8e6c3902e593e74f39c2337c3db523` |
+The canonical phase contract additionally binds every phase file:
 
-Checksums must be regenerated after any file change. The versioned runner refuses a mismatched reviewed checksum.
-
-## State machine
-
-| State                         | Required evidence and allowed next state                                                                                                                                                                |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `prepared`                    | Stable run ID, exact commit/config, all flags false -> `infra_installed`                                                                                                                                |
-| `infra_installed`             | `pg_cron` and `pg_net` present without version pins; zero jobs/requests -> `vault_verified`                                                                                                             |
-| `vault_verified`              | Exact required Vault names and minimum secret length verified without output; Production consumer scopes separately confirmed -> `jobs_installed_disabled`                                              |
-| `jobs_installed_disabled`     | Exactly two expected inactive jobs; Vercel scheduler false; zero requests -> `auth_noop_verified`                                                                                                       |
-| `auth_noop_verified`          | One authorized pg_net request, 2xx, route no-op, zero side effects -> `baseline_frozen`                                                                                                                 |
-| `baseline_frozen`             | Future two-session plan, 52 slots/104 events, storage and forbidden-effect baselines -> `armed`                                                                                                         |
-| `armed`                       | Database control and jobs armed before the future start while Vercel remains false -> `running` only after the last Production kill-switch is enabled and the first preregistered request authenticates |
-| `running`                     | Only preregistered no-AI events; any deviation -> `failed`; planned end -> `auto_stopped`                                                                                                               |
-| `auto_stopped`                | Database control false and jobs inactive -> `reconciled` after drain and response/lease reconciliation                                                                                                  |
-| `reconciled`                  | Exact expected-vs-actual evidence -> `passed`, otherwise `failed`                                                                                                                                       |
-| `passed`, `failed`, `aborted` | Immutable archived terminal states; no next state                                                                                                                                                       |
-
-Every transition requires the expected current state, actor, timestamp, commit SHA, config version, correlation ID, and append-only evidence. State skipping is rejected.
-
-## Safe later activation order
-
-1. Externally confirm backup and successful disposable restore evidence.
-2. Review and apply only the app/schema migrations, then verify RLS/grants and off-state.
-3. Install/verify extensions with the separate infrastructure script; verify zero jobs.
-4. Verify an exact Production deployment is READY at the migration-reviewed commit with every dangerous flag false and no OpenAI key.
-5. Confirm Vault names and server-consumer environment names/scopes without reading values.
-6. Install exactly two jobs inactive while Vercel scheduler remains false.
-7. Run one authorized auth/no-op request; verify 2xx and zero side effects.
-8. Plan two future complete sessions and freeze 52 slots, 104 events, storage, and forbidden-effect baselines.
-9. Arm the database control and jobs while no expected slot is yet due and Vercel scheduler remains false.
-10. Enable the Vercel scheduler control as the last kill-switch, verify the new exact Production deployment READY, and allow only the preregistered window to start.
-
-## Safe later stop order
-
-1. Set Vercel scheduler false.
-2. Prove a new exact Production deployment READY.
-3. Disable the database dry-run control and all dangerous flags.
-4. Unschedule only the two exact expected jobs through `cron.unschedule`.
-5. Drain at least 300 seconds, covering maximum HTTP and lease duration.
-6. Reconcile pg_net responses and open leases.
-7. Compare final counts with baseline and all 52 slots/104 expected events.
-
-The automatic end independently disables the database control and both jobs after the second close plus grace, so forgetting the manual stop cannot leave the run unbounded.
+| Phase file                                   | SHA-256                                                            |
+| -------------------------------------------- | ------------------------------------------------------------------ |
+| `enable-hosted-scheduler.sql`                | `6cbbb8eab716ee5e6fbc7702d17982847de0a6d61817b652170c542b08f0506b` |
+| `verify-scheduler-auth-failures.sql`         | `7129e5a10baf51622b917e497039a030570fb1641b17f9e520f818a617f03db5` |
+| `request-scheduler-auth-failures.sql`        | `fd1417acc208e536c20dd29568975fe25a2b4c502461e1e7033111c2d3c44cf4` |
+| `verify-scheduler-auth-noop.sql`             | `c462504bb5a59ab72c849db60ddddd8514e5f3c84024f1101dfec0daf861c2f9` |
+| `request-scheduler-auth-noop.sql`            | `a813eb81d1536c99ec5ccf7cd69ca5b57ec11c3eb4cb624afcc57eef4459fdfd` |
+| `plan-and-freeze-no-ai-dry-run.sql`          | `f467a4cecac6af4eeddcd255bdc28e31c198ecd43b01ee636f18ce920e128dc2` |
+| `drain-reconcile.sql`                        | `b4f799909161cd3cd05d0b5876255c39178446568097bc547e7c2ab33a1d4a80` |
+| `emergency-disable-jobs.sql`                 | `ed20ca43bee72dcb8bd7f20288c0b023404f0142a74a42554741a8e8a0d128a1` |
+| `emergency-kill.sql`                         | `5aa4b1b775322cdc5641c944830774c1e2c92cf764019adfbbef1ecc5037df34` |
+| `install-hosted-scheduler-jobs-disabled.sql` | `27226009f6b4845013732f9c2971a7c28c764e596b83a2ed8538fa3aaeef5588` |
+| `finalize-no-ai-dry-run.sql`                 | `2c62c980c063cbc20c5bd5007452d89c000f544aaab89464ef017344d7f5453a` |
+| `disable-hosted-scheduler.sql`               | `1a88c394e14349084ce2d4274b43643c78bbeec3f2db3a3bacb2bdcd4a7408c4` |
+| `prepare-no-ai-dry-run.sql`                  | `64b6089eac37c7ccb7f55a5c4cd9c1f8d3597116d23a6af338858b0ef3c91925` |
+| `prepare-scheduler-infrastructure.sql`       | `d4610aa204f91eb64538535a6a79f7262e8f099f1d8c71f4d757f9ba5e0f0514` |
+| `unschedule-terminal-jobs.sql`               | `f771bfe937d9729d14ff4860cd65952a993e2c022a84e845bb680d184ed613d7` |
+| `verify-scheduler-vault.sql`                 | `41c5ef2edb010fee881d9535464aaf23bbacd4c76e8f2499270583055e627af1` |
 
 ## Verification ledger
 
-| Command/evidence                                                           |    Exit |                                   Count | Classification                                                                                    |
-| -------------------------------------------------------------------------- | ------: | --------------------------------------: | ------------------------------------------------------------------------------------------------- |
-| Exact-head CI `pnpm format:check`                                          |       0 |                          clean checkout | `code_verified`                                                                                   |
-| Exact-head CI `pnpm lint`                                                  |       0 |                              0 warnings | `code_verified`                                                                                   |
-| Exact-head CI `pnpm typecheck`                                             |       0 |                                  strict | `code_verified`                                                                                   |
-| Exact-head CI `pnpm test`                                                  |       0 |         76 files / 571 passed / 0 flaky | `code_verified`                                                                                   |
-| Exact-head CI redacted credential-pattern scan                             |       0 |                              0 findings | `code_verified`                                                                                   |
-| Exact-head CI PAPER-only scan                                              |       0 |                              0 findings | `code_verified`                                                                                   |
-| Exact-head CI `pnpm build`                                                 |       0 |            14 static/dynamic app routes | `code_verified`                                                                                   |
-| Exact-head CI `pnpm test:e2e` with fail-on-flaky                           |       0 |                      4 passed / 0 flaky | `code_verified`                                                                                   |
-| Exact-head CI Supabase CLI                                                 |       0 |                               `2.113.0` | `code_verified`                                                                                   |
-| Exact-head CI `supabase start`                                             |       0 |                       local stack ready | `code_verified`                                                                                   |
-| Exact-head CI `supabase db reset`                                          |       0 |                    migrations reapplied | `code_verified`                                                                                   |
-| Exact-head CI `supabase test db`                                           |       0 |        14 files / 1692 passed / 0 flaky | `code_verified`                                                                                   |
-| Combined audit + follow-up migration Hosted transaction ending in rollback |       0 |                                compiled | `rollback_rehearsed`                                                                              |
-| Follow-up pgTAP in the same rollback-only transaction                      |       0 |                           62 assertions | `rollback_rehearsed`                                                                              |
-| Post-rollback table and migration-record check                             |       0 |                             both absent | `production_verified` narrow absence check                                                        |
-| Local database reset/pgTAP                                                 |       2 |       unavailable: Docker not installed | `pending`; exact-head clean CI supplies the reproducible database gate, not a local-restore claim |
-| Local mock browser                                                         |       0 |                      4 passed / 0 flaky | `code_verified`; initial sandbox launch returned `EPERM`, approved Chromium launch passed         |
-| Real backup restore                                                        | not run | no disposable Docker/Postgres available | `pending`                                                                                         |
-| Production browser/runtime verification                                    | not run |         no Production deployment exists | `pending`                                                                                         |
+| Command/evidence                           |        Exit | Result                                                       | Status                                          |
+| ------------------------------------------ | ----------: | ------------------------------------------------------------ | ----------------------------------------------- |
+| direct `tsc --noEmit`                      |           0 | strict                                                       | locally verified                                |
+| direct `eslint . --max-warnings=0`         |           0 | zero warnings                                                | locally verified                                |
+| focused security Vitest                    |           0 | 5 files / 34 tests                                           | locally verified                                |
+| complete Vitest                            |           0 | 79 files / 589 tests                                         | locally verified                                |
+| `node scripts/check-paper-only.mjs`        |           0 | PAPER-only scan passed                                       | locally verified                                |
+| `git diff --check`                         |           0 | no whitespace errors                                         | locally verified                                |
+| local credentials                          | not claimed | ignored `.env.local` contains redacted credential categories | expected local owner gate; values never emitted |
+| local Supabase/pgTAP                       | unavailable | Docker, Supabase CLI, and psql absent                        | exact clean CI required                         |
+| local seed-free export/restore             | unavailable | Docker/psql absent                                           | exact clean CI required                         |
+| exact-head application/browser/database CI |     pending | first hardened candidate not yet pushed                      | blocking                                        |
 
-The authoritative machine-readable evidence is attached to exact-head PR run `31324382247`; every recorded gate has commit SHA `88295e0fe1b51c5bcea4a17ac4129911a72ba51d` and exit code `0`.
+## Manual gates and stop conditions
 
-## Gate status and exact manual evidence still required
+- Independent second review of SQL, runner, response contract, backup contract,
+  and CI evidence.
+- Exact Draft-PR-head green application, browser, database, pgTAP, and seed-free
+  restore jobs with no skipped/flaky security test.
+- Production environment-name/scope review without values, exact Production
+  deployment identity, consumer scope parity, and auto-deploy impact review.
+- Separate authorization for any migration apply, extension/Vault/job change,
+  Production deployment, scheduler request, arm, provider/OpenAI/Canary action,
+  or trading-affecting operation.
+- Immediate NO-GO on Hosted drift, migration-history ambiguity, checksum/HEAD/
+  target mismatch, unexpected Capital-Lab job, missing transport evidence,
+  nonzero side-effect evidence, or any dangerous control not explicitly false.
 
-| Gate                           | Status           | Required later evidence                                                                                                                         |
-| ------------------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Key rotation                   | `owner_attested` | Owner attestation already recorded; never request value evidence                                                                                |
-| Exact-head clean CI            | `verified`       | PR run `31324382247`: application, browser, database, and exact-SHA evidence all passed                                                         |
-| Current dangerous controls     | `verified`       | Repository scan and narrow Hosted database inspection both found zero enabled dangerous controls                                                |
-| Server consumer scope sync     | `pending`        | Production server variable names/scopes point to the new generation; obsolete Preview/Development consumers removed/replaced; names/scopes only |
-| Follow-up app/schema migration | `prepared`       | Rollback rehearsal passed; review, approved apply, migration-list entry, checksum, RLS/grant postflight remain later                            |
-| Extensions                     | `prepared`       | Separate install/verify evidence, no version pins, zero jobs                                                                                    |
-| Vault                          | `prepared`       | Required names, scopes, random-secret length gate; no value output                                                                              |
-| Jobs                           | `prepared`       | Exactly two expected inactive jobs before arming                                                                                                |
-| Production deployment          | `pending`        | Exact deployment ID, URL, commit, `READY`, Production environment names/scopes                                                                  |
-| Production off-state           | `pending`        | Every dangerous flag false, no privileged public variable, no OpenAI key, health paper-only/mock/agent-off                                      |
-| Scheduler auth/no-op           | `prepared`       | Invalid/missing bearer 401/403 with zero effects; one valid no-op 2xx with request ID and zero effects                                          |
-| Runtime logs                   | `pending`        | No credential leak and no warning/error/fatal during gates                                                                                      |
-| Backup/restore                 | `pending`        | Tooling is prepared; real local/disposable restore with exact row-count/checksum/ledger match is still required; no dump in Git or CI           |
-| No-AI dry run                  | `prepared`       | Later state-machine execution across two complete sessions                                                                                      |
-| OpenAI/Canary                  | `prepared`       | Execution remains pending; stays off and unconfigured during no-AI run; any later paid gate requires separate approval                          |
+All dangerous controls remain false in Hosted observations: scheduler, agent,
+autonomous paper execution, paid models, Canary, web search, Sol challenger, Sol
+execution, and real broker. Data mode remains mock/paper-only.
 
-Production apply, extension installation, Vault changes, job creation/activation, Production deployment/promotion, PR merge, model/provider calls, Canary, research import, scheduler/agent activation, and financial side effects remain explicitly unauthorized by this report.
+## Current status
 
-## Verdict
+**NO-GO — REMEDIATION INCOMPLETE**
 
-**GO FOR MIGRATION REVIEW**. Code, checksums, exact-head clean-checkout CI, and the unmerged Draft PR are ready for controlled review. Server-consumer scope sync, real disposable restore, Production deployment/off-state/runtime evidence, and every later activation phase remain manual blockers. This verdict does not authorize migration apply, extensions, Production, Vault, jobs, OpenAI, the no-AI dry run, PR merge, or any provider/financial side effect.
+This candidate cannot advance until the exact committed migration compiles,
+the pgTAP suite and seed-free disposable restore pass in ephemeral CI, every
+exact-commit check is green, checksums are reverified after commit, and the
+Draft PR head is reconciled. Even a later positive result may be no stronger
+than `READY FOR SECOND INDEPENDENT REVIEW` and never authorizes merge, migration
+apply, Production deployment, or activation.

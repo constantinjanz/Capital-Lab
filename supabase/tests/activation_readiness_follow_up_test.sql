@@ -2,135 +2,496 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, private, extensions;
-select plan(62);
+select no_plan();
 
-create temporary table activation_experiment_baseline as
-select count(*)::bigint as experiment_count from public.experiments;
-
-create function pg_temp.pg_net_activity_count()
-returns bigint
-language plpgsql
-as $$
-declare
-  activity_count bigint := 0;
-  relation_count bigint;
-begin
-  if to_regclass('net.http_request_queue') is not null then
-    execute 'select count(*) from net.http_request_queue' into relation_count;
-    activity_count := activity_count + relation_count;
-  end if;
-  if to_regclass('net._http_response') is not null then
-    execute 'select count(*) from net._http_response' into relation_count;
-    activity_count := activity_count + relation_count;
-  end if;
-  return activity_count;
-end;
+create function pg_temp.campaign_id()
+returns uuid language sql immutable as $$
+  select '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d201'::uuid;
 $$;
 
-select has_table('private', 'no_ai_shadow_dry_runs', 'dedicated dry-run class exists');
-select has_table('private', 'no_ai_shadow_dry_run_transitions', 'state transitions persist');
-select has_table('private', 'no_ai_shadow_dry_run_events', 'expected and actual events persist');
-select has_table('private', 'no_ai_shadow_dry_run_baselines', 'zero-side-effect baseline persists');
-select has_table('private', 'no_ai_shadow_dry_run_alarms', 'deduplicated alarms persist');
-select has_function('private', 'prepare_no_ai_shadow_dry_run', array['text', 'text', 'uuid'], 'stable preparation exists');
-select has_function('private', 'plan_no_ai_shadow_dry_run', array['uuid', 'timestamp with time zone', 'timestamp with time zone'], 'session planner exists');
-select has_function('private', 'transition_no_ai_shadow_dry_run', array['uuid', 'text', 'text', 'text', 'text', 'text', 'uuid', 'jsonb'], 'state transition guard exists');
-select has_function('private', 'freeze_no_ai_shadow_dry_run_baseline', array['uuid', 'text', 'text', 'uuid'], 'baseline freezer exists');
-select has_function('private', 'stop_no_ai_shadow_dry_run', array['uuid', 'text', 'text', 'jsonb', 'boolean'], 'atomic stop exists');
-select has_function('private', 'dispatch_no_ai_shadow_dry_run_event', array['text', 'timestamp with time zone'], 'pg_net dispatch envelope exists');
-select has_function('private', 'reconcile_no_ai_shadow_dry_run', array['uuid', 'timestamp with time zone'], 'reconciler exists');
-select has_function('private', 'finalize_no_ai_shadow_dry_run', array['uuid', 'text', 'text', 'uuid', 'timestamp with time zone'], 'expected-vs-actual finalizer exists');
+create function pg_temp.zero_counters()
+returns jsonb language sql immutable as $$
+  select jsonb_build_object(
+    'agent_decisions', 0, 'agent_proposals', 0, 'agent_runs', 0,
+    'broker_requests', 0, 'budget_reservations', 0, 'canary_runs', 0,
+    'fills', 0, 'ledger_entries', 0, 'market_data_requests', 0,
+    'model_calls', 0, 'news_requests', 0, 'orders', 0,
+    'position_mutations', 0, 'provider_requests', 0, 'sol_executions', 0,
+    'web_search_requests', 0
+  );
+$$;
 
-select ok((select relrowsecurity and relforcerowsecurity from pg_class where oid = 'private.no_ai_shadow_dry_runs'::regclass), 'dry runs force RLS');
-select ok((select relrowsecurity and relforcerowsecurity from pg_class where oid = 'private.no_ai_shadow_dry_run_transitions'::regclass), 'transitions force RLS');
-select ok((select relrowsecurity and relforcerowsecurity from pg_class where oid = 'private.no_ai_shadow_dry_run_events'::regclass), 'events force RLS');
-select ok((select relrowsecurity and relforcerowsecurity from pg_class where oid = 'private.no_ai_shadow_dry_run_baselines'::regclass), 'baselines force RLS');
-select ok((select relrowsecurity and relforcerowsecurity from pg_class where oid = 'private.no_ai_shadow_dry_run_alarms'::regclass), 'alarms force RLS');
-select ok(not has_table_privilege('authenticated', 'private.no_ai_shadow_dry_runs', 'SELECT'), 'authenticated has no dry-run table privilege');
-select ok(not has_table_privilege('authenticated', 'private.no_ai_shadow_dry_run_transitions', 'SELECT'), 'authenticated has no transition table privilege');
-select ok(not has_table_privilege('authenticated', 'private.no_ai_shadow_dry_run_events', 'SELECT'), 'authenticated has no event table privilege');
-select ok(not has_table_privilege('authenticated', 'private.no_ai_shadow_dry_run_baselines', 'SELECT'), 'authenticated has no baseline table privilege');
-select ok(not has_table_privilege('authenticated', 'private.no_ai_shadow_dry_run_alarms', 'SELECT'), 'authenticated has no alarm table privilege');
-select is((select count(*) from pg_extension where extname = 'pg_cron'), 0::bigint, 'schema migration installs no pg_cron');
-select is(pg_temp.pg_net_activity_count(), 0::bigint, 'schema migration creates no pg_net request activity');
-select is((select count(*) from private.application_settings where setting_key in ('scheduler_enabled', 'agent_enabled', 'paid_model_calls_enabled', 'openai_canary_enabled', 'openai_web_search_enabled', 'sol_challenger_enabled', 'sol_live_execution_enabled', 'real_broker_enabled') and value <> 'false'::jsonb), 0::bigint, 'migration leaves dangerous flags false');
-select is((select count(*) from private.no_ai_shadow_dry_runs), 0::bigint, 'migration does not start a dry run');
-select has_column('private', 'paid_canary_runs', 'campaign_key', 'Canary has an immutable campaign key');
-select has_column('private', 'paid_canary_runs', 'model', 'Canary lock is exact-model scoped');
-select ok(exists (select 1 from pg_indexes where schemaname = 'private' and tablename = 'paid_canary_runs' and indexdef like '%campaign_key, model%'), 'campaign and exact model are unique');
-select ok((select prosrc like '%pg_advisory_xact_lock%' from pg_proc where oid = 'private.claim_paid_canary(uuid,uuid)'::regprocedure), 'parallel Canary claims serialize on the campaign');
+create function pg_temp.campaign_manifest()
+returns jsonb language sql stable as $$
+  select jsonb_build_object(
+    'campaign_id', pg_temp.campaign_id(),
+    'config_version', 'activation-readiness-v2',
+    'prepared_commit_sha', repeat('a', 40),
+    'phase_contract_sha256', repeat('c', 64),
+    'relation_contract_sha256', private.activation_relation_contract_hash(),
+    'production_origin', 'https://capital-lab.example',
+    'production_host', 'capital-lab.example',
+    'scheduler_path', '/api/internal/scheduler',
+    'scheduler_url', 'https://capital-lab.example/api/internal/scheduler',
+    'production_deployment_id', 'dpl_12345678901234567890',
+    'vercel_commit_sha', repeat('a', 40),
+    'vercel_environment', 'production',
+    'database_target', jsonb_build_object(
+      'database_fingerprint', private.activation_database_fingerprint()
+    ),
+    'providers', jsonb_build_object(
+      'market_data', 'mock', 'news', 'mock', 'execution', 'paper'
+    ),
+    'expected_slot_count', 52,
+    'expected_event_count', 104,
+    'max_request_seconds', 120,
+    'drain_safety_seconds', 180,
+    'minimum_lead_seconds', 900
+  );
+$$;
+
+select has_table('private', 'activation_job_spec_versions', 'versioned Cron identities persist');
+select has_table('private', 'activation_auth_noop_requests', 'auth no-op claims persist');
+select has_table('private', 'activation_auth_failure_requests', 'auth failure probes persist');
+select has_table('private', 'activation_http_responses', 'sanitized transport evidence persists');
+select has_table('private', 'activation_relation_snapshots', 'full-row side-effect snapshots persist');
+select has_table('private', 'activation_control_snapshots', 'control snapshots persist');
+select has_table('private', 'activation_terminal_evidence', 'terminal evidence persists');
+select has_function('private', 'emergency_kill_activation_controls', array['uuid'], 'DB-first kill exists');
+select has_function('private', 'assert_activation_job_specs', array['uuid', 'boolean'], 'full Cron comparator exists');
+select has_function('private', 'finalize_activation_campaign', array[
+  'uuid', 'text', 'text', 'text', 'text', 'text', 'uuid', 'uuid'
+], 'strict finalizer exists');
+
+select ok((
+  select bool_and(class.relrowsecurity and class.relforcerowsecurity)
+  from pg_class as class
+  where class.oid = any(array[
+    'private.no_ai_shadow_dry_runs'::regclass,
+    'private.activation_job_spec_versions'::regclass,
+    'private.activation_http_responses'::regclass,
+    'private.activation_terminal_evidence'::regclass
+  ])
+), 'all activation control and evidence tables force RLS');
+select ok(not has_table_privilege('anon', 'private.activation_http_responses', 'SELECT'), 'anon cannot read transport evidence');
+select ok(not has_table_privilege('authenticated', 'private.activation_http_responses', 'INSERT'), 'authenticated cannot forge transport evidence');
+select ok(not has_table_privilege('service_role', 'private.activation_job_spec_versions', 'UPDATE'), 'service role cannot rewrite Cron identities');
+select ok(not has_function_privilege('service_role', 'private.transition_no_ai_shadow_dry_run(uuid,text,text,text,text,text,uuid,jsonb)', 'EXECUTE'), 'service role cannot invoke generic transitions');
+select ok(has_function_privilege('service_role', 'public.run_hosted_scheduler_request(uuid,uuid,uuid,text,uuid,uuid,timestamptz)', 'EXECUTE'), 'service role has only the narrow scheduler wrapper');
+select ok(not has_function_privilege('authenticated', 'public.run_hosted_scheduler_request(uuid,uuid,uuid,text,uuid,uuid,timestamptz)', 'EXECUTE'), 'authenticated cannot execute scheduler wrapper');
+select ok((
+  select proconfig = array['search_path=']
+  from pg_proc where oid = 'private.emergency_kill_activation_controls(uuid)'::regprocedure
+), 'emergency kill has an empty fixed search_path');
+select ok(exists (
+  select 1 from pg_constraint
+  where conrelid = 'private.activation_http_responses'::regclass
+    and contype = 'f' and array_length(conkey, 1) = 2
+), 'response evidence has a composite owner boundary');
 
 select lives_ok(
-  $$select private.prepare_no_ai_shadow_dry_run(repeat('a', 40), 'activation-readiness-v1', '10000000-0000-4000-8000-000000000001')$$,
-  'stable dry-run preparation succeeds'
+  $$select private.prepare_no_ai_shadow_dry_run_v2(
+    pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
+    repeat('b', 64), repeat('c', 64), private.activation_relation_contract_hash(),
+    pg_temp.campaign_manifest(), '10000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000002'
+  )$$,
+  'prepare derives and persists the server database identity'
 );
-select is((select state from private.no_ai_shadow_dry_runs), 'prepared', 'preparation begins at prepared');
-select is((select id from private.no_ai_shadow_dry_runs), '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d001'::uuid, 'dry-run ID is stable');
+select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'prepared', 'campaign begins prepared');
+select is((select database_fingerprint from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), private.activation_database_fingerprint(), 'prepared target fingerprint is server-derived');
 select lives_ok(
-  $$select private.prepare_no_ai_shadow_dry_run(repeat('a', 40), 'activation-readiness-v1', '10000000-0000-4000-8000-000000000002')$$,
-  'preparation is idempotent'
+  $$select private.prepare_no_ai_shadow_dry_run_v2(
+    pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
+    repeat('b', 64), repeat('c', 64), private.activation_relation_contract_hash(),
+    pg_temp.campaign_manifest(), '10000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000002'
+  )$$,
+  'prepare retry reuses the identical campaign'
 );
-select is((select count(*) from private.no_ai_shadow_dry_runs), 1::bigint, 'idempotency does not duplicate the run');
+select is((select count(*) from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 1::bigint, 'prepare retry creates no duplicate');
 select throws_ok(
-  $$select private.transition_no_ai_shadow_dry_run('6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d001', 'prepared', 'armed', 'owner', repeat('a', 40), 'activation-readiness-v1', gen_random_uuid(), '{}'::jsonb)$$,
-  '55000', 'activation state transition is forbidden', 'state skipping fails closed'
+  $$select private.prepare_no_ai_shadow_dry_run_v2(
+    pg_temp.campaign_id(), repeat('d', 40), 'activation-readiness-v2',
+    repeat('b', 64), repeat('c', 64), private.activation_relation_contract_hash(),
+    pg_temp.campaign_manifest(), '10000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000002'
+  )$$,
+  '22023', 'activation campaign manifest is invalid', 'commit mismatch fails before mutation'
 );
-select lives_ok($$select private.transition_no_ai_shadow_dry_run('6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d001', 'prepared', 'infra_installed', 'admin_script', repeat('a', 40), 'activation-readiness-v1', gen_random_uuid(), '{}'::jsonb)$$, 'prepared advances once');
-select lives_ok($$select private.transition_no_ai_shadow_dry_run('6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d001', 'infra_installed', 'vault_verified', 'owner', repeat('a', 40), 'activation-readiness-v1', gen_random_uuid(), '{}'::jsonb)$$, 'infrastructure advances once');
-select lives_ok($$select private.transition_no_ai_shadow_dry_run('6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d001', 'vault_verified', 'jobs_installed_disabled', 'admin_script', repeat('a', 40), 'activation-readiness-v1', gen_random_uuid(), '{}'::jsonb)$$, 'Vault evidence advances once');
-select lives_ok($$select private.transition_no_ai_shadow_dry_run('6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d001', 'jobs_installed_disabled', 'auth_noop_verified', 'owner', repeat('a', 40), 'activation-readiness-v1', gen_random_uuid(), '{}'::jsonb)$$, 'auth no-op advances once');
+select throws_ok(
+  $$select private.transition_no_ai_shadow_dry_run(
+    pg_temp.campaign_id(), 'prepared', 'infra_installed', 'owner', repeat('a', 40),
+    'activation-readiness-v2', gen_random_uuid(), '{}'::jsonb
+  )$$,
+  '55000', 'actor is forbidden for activation transition', 'actor matrix rejects an owner-only bypass'
+);
+select lives_ok(
+  $$select private.transition_no_ai_shadow_dry_run(
+    pg_temp.campaign_id(), 'prepared', 'infra_installed', 'admin_script', repeat('a', 40),
+    'activation-readiness-v2', gen_random_uuid(), '{}'::jsonb
+  )$$,
+  'prepare advances only through the allowed actor'
+);
 
+create extension if not exists pg_cron with schema pg_catalog;
+select lives_ok($$select private.assert_unmanaged_activation_jobs_safe()$$, 'empty Cron inventory is safe');
+
+create temporary table activation_collision_job as
+select cron.schedule(
+  'capital-lab-no-ai-dispatcher', '@hourly', 'select 1;'
+)::bigint as jobid;
+select throws_ok(
+  $$select private.assert_unmanaged_activation_jobs_safe()$$,
+  '55000', 'unmanaged expected-name Cron job has drifted', 'expected-name collision with a foreign command fails closed'
+);
+select cron.unschedule(jobid) from activation_collision_job;
+
+select vault.create_secret(
+  'https://capital-lab.example/api/internal/scheduler',
+  'capital_lab_scheduler_url', 'local activation test fixture'
+);
+select vault.create_secret(
+  repeat('x', 48), 'capital_lab_scheduler_shared_secret',
+  'local activation test fixture'
+);
+select lives_ok($$select private.verify_activation_vault_scope(pg_temp.campaign_id())$$, 'Vault URL and secret scope verify without disclosure');
+select lives_ok(
+  $$select private.transition_no_ai_shadow_dry_run(
+    pg_temp.campaign_id(), 'infra_installed', 'vault_verified', 'owner', repeat('a', 40),
+    'activation-readiness-v2', gen_random_uuid(), '{}'::jsonb
+  )$$,
+  'verified infrastructure advances to Vault verified'
+);
+
+create temporary table activation_jobs (job_role text primary key, jobid bigint not null);
+insert into activation_jobs values
+  ('dispatcher', cron.schedule(
+    'capital-lab-no-ai-dispatcher', '*/15 * * * 1-5',
+    $$select private.dispatch_no_ai_shadow_dry_run_event('market_dispatcher', statement_timestamp());$$
+  )),
+  ('reconciler', cron.schedule(
+    'capital-lab-no-ai-reconciler', '5,20,35,50 * * * 1-5',
+    $$select private.dispatch_no_ai_shadow_dry_run_event('reconciler', statement_timestamp());$$
+  ));
+select lives_ok(
+  $$select private.register_activation_job_spec(
+    pg_temp.campaign_id(), job_role, jobid, true,
+    '20000000-0000-4000-8000-000000000001',
+    '20000000-0000-4000-8000-000000000002'
+  ) from activation_jobs order by job_role$$,
+  'cron.schedule return IDs are persisted with complete definitions'
+);
+select lives_ok(
+  $$select private.set_activation_jobs_active(
+    pg_temp.campaign_id(), false,
+    '20000000-0000-4000-8000-000000000003',
+    '20000000-0000-4000-8000-000000000004'
+  )$$,
+  'jobs are disabled only through persisted IDs'
+);
+select lives_ok(
+  $$select private.set_activation_jobs_active(
+    pg_temp.campaign_id(), false,
+    '20000000-0000-4000-8000-000000000003',
+    '20000000-0000-4000-8000-000000000004'
+  )$$,
+  'disabled job operation is idempotent'
+);
+select is((select count(*) from private.activation_job_spec_versions where campaign_id = pg_temp.campaign_id()), 4::bigint, 'each supported state change records a new version per job');
+
+select cron.alter_job((select jobid from activation_jobs where job_role = 'dispatcher'), command := 'select 1;', active := false);
+select throws_ok($$select private.assert_activation_job_specs(pg_temp.campaign_id(), false)$$, '55000', 'Cron job definition drift or tampering detected', 'command tampering fails before arm');
+select cron.alter_job(
+  (select jobid from activation_jobs where job_role = 'dispatcher'),
+  command := $$select private.dispatch_no_ai_shadow_dry_run_event('market_dispatcher', statement_timestamp());$$,
+  active := false
+);
+select cron.alter_job((select jobid from activation_jobs where job_role = 'dispatcher'), schedule := '@hourly', active := false);
+select throws_ok($$select private.assert_activation_job_specs(pg_temp.campaign_id(), false)$$, '55000', 'Cron job definition drift or tampering detected', 'schedule tampering fails before arm');
+select cron.alter_job((select jobid from activation_jobs where job_role = 'dispatcher'), schedule := '*/15 * * * 1-5', active := false);
+select cron.alter_job((select jobid from activation_jobs where job_role = 'dispatcher'), database := 'template1', active := false);
+select throws_ok($$select private.assert_activation_job_specs(pg_temp.campaign_id(), false)$$, '55000', 'Cron job definition drift or tampering detected', 'database tampering fails before arm');
+select cron.alter_job((select jobid from activation_jobs where job_role = 'dispatcher'), database := current_database(), active := false);
+select cron.alter_job((select jobid from activation_jobs where job_role = 'dispatcher'), username := 'authenticator', active := false);
+select throws_ok($$select private.assert_activation_job_specs(pg_temp.campaign_id(), false)$$, '55000', 'Cron job definition drift or tampering detected', 'username tampering fails before arm');
+select cron.alter_job((select jobid from activation_jobs where job_role = 'dispatcher'), username := current_user, active := false);
+select throws_ok(
+  $$select private.register_activation_job_spec(
+    pg_temp.campaign_id(), 'dispatcher', 9223372036854775800, false,
+    gen_random_uuid(), gen_random_uuid()
+  )$$,
+  '55000', 'Cron job cannot be registered because its full definition differs', 'wrong job ID cannot be registered'
+);
+create temporary table activation_extra_job as
+select cron.schedule('capital-lab-unexpected', '@hourly', 'select 1;')::bigint as jobid;
+select throws_ok($$select private.assert_activation_job_specs(pg_temp.campaign_id(), false)$$, '55000', 'unexpected Capital Lab Cron job detected', 'additional Capital Lab job fails closed');
+select cron.unschedule(jobid) from activation_extra_job;
+select lives_ok($$select private.assert_activation_job_specs(pg_temp.campaign_id(), false)$$, 'restored exact jobs verify');
+
+select lives_ok(
+  $$select private.transition_no_ai_shadow_dry_run(
+    pg_temp.campaign_id(), 'vault_verified', 'jobs_installed_disabled', 'admin_script', repeat('a', 40),
+    'activation-readiness-v2', gen_random_uuid(), '{}'::jsonb
+  )$$,
+  'disabled exact jobs complete infrastructure preparation'
+);
+select lives_ok(
+  $$select private.claim_activation_auth_noop(
+    pg_temp.campaign_id(), '30000000-0000-4000-8000-000000000001',
+    '30000000-0000-4000-8000-000000000002',
+    '30000000-0000-4000-8000-000000000003',
+    '30000000-0000-4000-8000-000000000004', repeat('a', 40),
+    'activation-readiness-v2', repeat('b', 64), repeat('c', 64),
+    private.activation_database_fingerprint()
+  )$$,
+  'auth no-op identity is atomically claimed once'
+);
+select throws_ok(
+  $$select private.claim_activation_auth_noop(
+    pg_temp.campaign_id(), '30000000-0000-4000-8000-000000000011',
+    '30000000-0000-4000-8000-000000000012',
+    '30000000-0000-4000-8000-000000000013',
+    '30000000-0000-4000-8000-000000000014', repeat('a', 40),
+    'activation-readiness-v2', repeat('b', 64), repeat('c', 64),
+    private.activation_database_fingerprint()
+  )$$,
+  '55000', 'auth no-op identity is immutable; reconcile the original request', 'unknown outcome cannot be resent with a new identity'
+);
+update private.activation_auth_noop_requests
+set pg_net_request_id = 90001, status = 'transport_terminal', terminal_at = statement_timestamp()
+where campaign_id = pg_temp.campaign_id();
+insert into private.activation_http_responses (
+  request_id, campaign_id, owner_id, mode, pg_net_request_id, http_status,
+  timed_out, schema_valid, correlation_id, nonce, response_campaign_id,
+  response_request_id, response_environment, response_deployment_id,
+  response_commit_sha, response_status, response_terminal_reason,
+  scheduler_disabled, agent_disabled, counters
+)
+select request.request_id, request.campaign_id, request.owner_id, 'auth_noop',
+  request.pg_net_request_id, 200, false, true, request.correlation_id,
+  request.nonce, request.campaign_id, request.request_id, 'production',
+  request.expected_deployment_id, request.expected_commit_sha,
+  'authenticated_noop', 'auth_noop_verified', true, true,
+  pg_temp.zero_counters()
+from private.activation_auth_noop_requests as request
+where request.campaign_id = pg_temp.campaign_id();
+select lives_ok(
+  $$select private.verify_activation_auth_noop(
+    pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
+    repeat('b', 64), repeat('c', 64), private.activation_database_fingerprint(),
+    '30000000-0000-4000-8000-000000000004'
+  )$$,
+  'only the persisted exact auth no-op response verifies'
+);
+select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auth_noop_verified', 'auth verification advances through the guarded transition');
+
+insert into public.market_calendar_manifests (
+  id, owner_id, manifest_id, calendar_year, timezone, definition,
+  content_hash, reviewed_at
+) values (
+  '40000000-0000-4000-8000-000000000001',
+  (select user_id from public.app_users where role = 'owner' and is_active),
+  'activation_dynamic_fixture', extract(year from statement_timestamp())::integer,
+  'America/New_York', '{"fixture":"local-only"}'::jsonb, repeat('d', 64),
+  statement_timestamp()
+);
+insert into public.market_sessions (
+  id, exchange_id, session_date, opens_at, closes_at, session_type,
+  calendar_source_id, source_identifier, available_at, calendar_manifest_id
+)
+select gen_random_uuid(), exchange.id, day::date,
+  (day::date + time '13:30') at time zone 'UTC',
+  ((day::date + time '13:30') at time zone 'UTC') + interval '6 hours 30 minutes',
+  'regular', null, 'activation-' || day::date::text,
+  statement_timestamp() - interval '1 day',
+  '40000000-0000-4000-8000-000000000001'
+from generate_series(
+  (statement_timestamp() at time zone 'America/New_York')::date,
+  (statement_timestamp() at time zone 'America/New_York')::date + 30,
+  interval '1 day'
+) as day
+cross join lateral (select id from public.exchanges where mic = 'XNAS') as exchange
+where extract(isodow from day) between 1 and 5
+on conflict (exchange_id, session_date) do update
+set calendar_manifest_id = excluded.calendar_manifest_id,
+    available_at = excluded.available_at,
+    opens_at = excluded.opens_at,
+    closes_at = excluded.closes_at,
+    session_type = excluded.session_type;
+update public.experiments set lifecycle_status = 'paused'
+where owner_id = (select owner_id from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id())
+  and lifecycle_status = 'active';
+
+select lives_ok(
+  $$select private.freeze_activation_baseline(
+    pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
+    repeat('b', 64), repeat('c', 64), private.activation_database_fingerprint(),
+    '40000000-0000-4000-8000-000000000002'
+  )$$,
+  'server-time planning freezes the two-session baseline'
+);
+select is((select count(*) from private.no_ai_shadow_dry_run_events where dry_run_id = pg_temp.campaign_id()), 104::bigint, 'freeze derives exactly 104 complete events');
+select is((select count(distinct (session_date, slot_number)) from private.no_ai_shadow_dry_run_events where dry_run_id = pg_temp.campaign_id()), 52::bigint, 'freeze derives exactly 52 slots');
+select lives_ok(
+  $$select private.freeze_activation_baseline(
+    pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
+    repeat('b', 64), repeat('c', 64), private.activation_database_fingerprint(),
+    '40000000-0000-4000-8000-000000000002'
+  )$$,
+  'baseline retry verifies byte-equivalent persisted evidence'
+);
+select throws_ok(
+  $$update private.no_ai_shadow_dry_run_baselines set order_count = order_count + 1
+    where dry_run_id = pg_temp.campaign_id()$$,
+  '55000', 'private.no_ai_shadow_dry_run_baselines is append-only', 'baseline evidence cannot be updated'
+);
+select throws_ok(
+  $$update private.no_ai_shadow_dry_run_events set http_status = 299
+    where dry_run_id = pg_temp.campaign_id()$$,
+  '55000', 'activation event identity is immutable', 'direct event mutation is rejected outside internal writers'
+);
+select throws_ok(
+  $$truncate table private.activation_http_responses$$,
+  '55000', 'private.activation_http_responses is append-only', 'transport evidence rejects truncate'
+);
+
+select lives_ok(
+  $$select private.arm_activation_campaign(
+    pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
+    repeat('b', 64), repeat('c', 64), private.activation_database_fingerprint(),
+    '50000000-0000-4000-8000-000000000001',
+    '50000000-0000-4000-8000-000000000002'
+  )$$,
+  'local-only arm requires exact controls, target, Vault, baseline, and job identities'
+);
+select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'armed', 'arm transition is persisted');
+select lives_ok($$select private.assert_activation_job_specs(pg_temp.campaign_id(), true)$$, 'armed jobs still match the persisted full definitions');
+
+select set_config('capital_lab.internal_event_write', 'on', true);
+with numbered as (
+  select id, 100000 + row_number() over (order by expected_at, event_type) as transport_id
+  from private.no_ai_shadow_dry_run_events where dry_run_id = pg_temp.campaign_id()
+)
+update private.no_ai_shadow_dry_run_events as event
+set pg_net_request_id = numbered.transport_id,
+    request_submitted_at = statement_timestamp()
+from numbered where numbered.id = event.id;
+select set_config('capital_lab.internal_event_write', 'off', true);
+insert into private.scheduler_slots (
+  slot_key, owner_id, experiment_id, job_type, scheduler_provider,
+  exchange_session_id, slot_at, lease_until, attempt_count, status,
+  result, session_date, slot_number, lease_owner, heartbeat_at, max_attempts
+)
+select 'no-ai-infrastructure:' || event.dry_run_id::text || ':'
+    || event.session_date::text || ':' || event.slot_number::text,
+  event.owner_id, null, 'no_ai_shadow_infrastructure_dry_run', 'supabase',
+  event.exchange_session_id, event.expected_at, event.expected_at + interval '2 minutes',
+  1, 'skipped', '{"fixture":"preclaimed"}'::jsonb, event.session_date,
+  event.slot_number, event.cycle_id, statement_timestamp(), 1
+from private.no_ai_shadow_dry_run_events as event
+where event.dry_run_id = pg_temp.campaign_id() and event.event_type = 'market_dispatcher';
 select lives_ok(
   $test$
-  do $fixture$
+  do $body$
+  declare event private.no_ai_shadow_dry_run_events%rowtype;
   begin
-    insert into public.market_calendar_manifests (
-      id, owner_id, manifest_id, calendar_year, timezone,
-      definition, content_hash, reviewed_at
-    ) values (
-      '11000000-0000-4000-8000-000000000001',
-      (select user_id from public.app_users where role = 'owner' and is_active),
-      'activation_readiness_fixture', 2026, 'America/New_York',
-      '{"fixture":true}'::jsonb, repeat('b', 64), '2026-01-01 00:00:00+00'
-    ) on conflict (id) do nothing;
-    insert into public.market_sessions (
-      id, exchange_id, session_date, opens_at, closes_at, session_type,
-      calendar_source_id, source_identifier, available_at, calendar_manifest_id
-    ) values
-      ('11000000-0000-4000-8000-000000000010', (select id from public.exchanges where mic = 'XNAS'), '2026-08-10', '2026-08-10 13:30:00+00', '2026-08-10 20:00:00+00', 'regular', null, 'activation-2026-08-10', '2026-01-01 00:00:00+00', '11000000-0000-4000-8000-000000000001'),
-      ('11000000-0000-4000-8000-000000000011', (select id from public.exchanges where mic = 'XNAS'), '2026-08-11', '2026-08-11 13:30:00+00', '2026-08-11 20:00:00+00', 'regular', null, 'activation-2026-08-11', '2026-01-01 00:00:00+00', '11000000-0000-4000-8000-000000000001')
-    on conflict (exchange_id, session_date) do nothing;
+    for event in select * from private.no_ai_shadow_dry_run_events
+      where dry_run_id = pg_temp.campaign_id()
+      order by expected_at, event_type
+    loop
+      perform public.run_hosted_scheduler_request(
+        event.dry_run_id, event.id, event.request_id, event.event_type,
+        event.correlation_id, event.cycle_id, statement_timestamp()
+      );
+    end loop;
   end;
-  $fixture$;
+  $body$;
   $test$,
-  'versioned regular-session fixtures are installed'
+  'all 104 locally mocked route calls traverse the narrow scheduler wrapper'
 );
-update public.experiments set lifecycle_status = 'paused'
-where lifecycle_status = 'active';
-select lives_ok(
-  $$select private.plan_no_ai_shadow_dry_run('6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d001', '2026-08-10 12:00:00+00', '2026-08-10 12:00:00+00')$$,
-  'two full regular sessions are planned'
-);
-select is((select expected_slot_count from private.no_ai_shadow_dry_runs), 52, 'two regular sessions contain 52 quarter-hour slots');
-select is((select count(*) from private.no_ai_shadow_dry_run_events), 104::bigint, 'dispatcher and reconciler expectations are preregistered');
-select is((select count(*) from public.experiments), (select experiment_count from activation_experiment_baseline), 'dedicated dry run does not create or count as a research experiment');
+select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'running', 'first authenticated event advances armed to running');
+select is((select count(*) from private.no_ai_shadow_dry_run_events where dry_run_id = pg_temp.campaign_id() and authenticated_count = 1 and terminal_reason is not null), 104::bigint, 'all 104 route events have terminal no-side-effect evidence');
 
-select is(public.claim_paid_canary((select user_id from public.app_users where role = 'owner' and is_active), '12000000-0000-4000-8000-000000000001'), true, 'first global Canary campaign claim succeeds');
-select is((select count(*) from private.paid_canary_runs), 3::bigint, 'one campaign creates one lock per exact model');
-select is((select count(distinct model) from private.paid_canary_runs), 3::bigint, 'all exact models are locked');
-select is(public.claim_paid_canary((select user_id from public.app_users where role = 'owner' and is_active), '12000000-0000-4000-8000-000000000001'), false, 'same operation ID cannot repeat');
-select is(public.claim_paid_canary((select user_id from public.app_users where role = 'owner' and is_active), '12000000-0000-4000-8000-000000000002'), false, 'different operation ID cannot repeat');
-select lives_ok($$update private.paid_canary_runs set status = 'unknown' where model = 'gpt-5.6-luna'$$, 'unknown/possibly-charged state persists');
-select is(public.claim_paid_canary((select user_id from public.app_users where role = 'owner' and is_active), '12000000-0000-4000-8000-000000000003'), false, 'unknown state cannot be bypassed by a new UUID');
-select is((select count(distinct campaign_key) from private.paid_canary_runs), 1::bigint, 'only the immutable global campaign exists');
-select is((select count(distinct operation_id) from private.paid_canary_runs), 1::bigint, 'all model locks retain one correlation operation');
-select is((select count(*) from private.no_ai_shadow_dry_run_events where model_call_count <> 0 or budget_reservation_count <> 0 or order_count <> 0 or fill_count <> 0 or ledger_entry_count <> 0), 0::bigint, 'planned events have exactly zero forbidden effects');
-select lives_ok($$select private.freeze_no_ai_shadow_dry_run_baseline('6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d001', repeat('a', 40), 'activation-readiness-v1', gen_random_uuid())$$, 'baseline freezes independently of research');
-select lives_ok($$select private.stop_no_ai_shadow_dry_run('6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d001', 'forbidden_database_delta', 'forbidden_delta', '{"test":true}'::jsonb, false)$$, 'first forbidden delta invokes atomic stop');
-select is((select state from private.no_ai_shadow_dry_runs), 'failed', 'atomic stop persists terminal failure');
-select is((select count(*) from private.no_ai_shadow_dry_run_alarms where alarm_class = 'forbidden_delta'), 1::bigint, 'atomic stop deduplicates durable alarm evidence');
-select is((select count(*) from private.application_settings where setting_key in ('scheduler_enabled', 'agent_enabled', 'paid_model_calls_enabled', 'openai_canary_enabled') and value <> 'false'::jsonb), 0::bigint, 'atomic stop leaves runtime controls false');
-select is((select count(*) from private.scheduler_slots where slot_key like 'no-ai-infrastructure:%'), 0::bigint, 'planning and stopping create no scheduler cycle');
+insert into private.activation_http_responses (
+  request_id, campaign_id, owner_id, event_id, mode, pg_net_request_id,
+  http_status, timed_out, schema_valid, correlation_id,
+  response_campaign_id, response_event_id, response_request_id,
+  response_cycle_id, response_environment, response_deployment_id,
+  response_commit_sha, response_status, response_terminal_reason,
+  response_job, response_slot_number, scheduler_disabled, agent_disabled,
+  cycles_claimed, cycles_reconciled, counters
+)
+select event.request_id, event.dry_run_id, event.owner_id, event.id, 'dry_run',
+  event.pg_net_request_id, 200, false, true, event.correlation_id,
+  event.dry_run_id, event.id, event.request_id, event.cycle_id, 'production',
+  campaign.production_deployment_id, campaign.prepared_commit_sha, 'completed',
+  case when event.event_type = 'market_dispatcher'
+    then 'no_ai_shadow_cycle_recorded' else 'dry_run_evidence_reconciled' end,
+  event.event_type, event.slot_number, false, true,
+  case when event.event_type = 'market_dispatcher' then 1 else 0 end,
+  0, pg_temp.zero_counters()
+from private.no_ai_shadow_dry_run_events as event
+join private.no_ai_shadow_dry_runs as campaign on campaign.id = event.dry_run_id
+where event.dry_run_id = pg_temp.campaign_id();
+select is((select count(*) from private.activation_http_responses where campaign_id = pg_temp.campaign_id() and mode = 'dry_run' and schema_valid), 104::bigint, '104 sanitized exact responses persist independently of pg_net TTL');
+
+select lives_ok($$select private.emergency_kill_activation_controls(pg_temp.campaign_id())$$, 'phase one emergency kill commits only database gates');
+select lives_ok($$select private.emergency_kill_activation_controls(pg_temp.campaign_id())$$, 'repeated emergency kill is idempotent');
+select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auto_stopped', 'emergency kill reaches server-side stopped state');
+select is((select count(*) from private.application_settings where owner_id = (select owner_id from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()) and setting_key in (
+  'scheduler_enabled', 'agent_enabled', 'autonomous_paper_execution_enabled',
+  'paid_model_calls_enabled', 'openai_canary_enabled', 'openai_web_search_enabled',
+  'sol_challenger_enabled', 'sol_live_execution_enabled', 'real_broker_enabled'
+) and value = 'false'::jsonb), 9::bigint, 'all nine dangerous controls are false after phase one');
+select lives_ok(
+  $$select private.disable_activation_jobs_after_emergency(
+    pg_temp.campaign_id(), '60000000-0000-4000-8000-000000000001',
+    '60000000-0000-4000-8000-000000000002'
+  )$$,
+  'phase two disables only reverified persisted job IDs'
+);
+select lives_ok($$select private.assert_activation_job_specs(pg_temp.campaign_id(), false)$$, 'both exact jobs are inactive after phase two');
+select ok(exists (
+  select 1 from private.no_ai_shadow_dry_run_transitions
+  where dry_run_id = pg_temp.campaign_id() and to_state = 'auto_stopped'
+    and evidence ->> 'phase_one_controls_committed' = 'true'
+), 'retryable phase two records the already-committed emergency outcome');
+
+update private.no_ai_shadow_dry_runs
+set stopped_at = statement_timestamp() - interval '301 seconds',
+    finalize_not_before_at = statement_timestamp() - interval '1 second'
+where id = pg_temp.campaign_id();
+select lives_ok(
+  $$select private.dispatch_no_ai_shadow_dry_run_event('reconciler', statement_timestamp())$$,
+  'owner-offline reconciler automatically persists terminal evidence and finalizes'
+);
+select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'passed', '52-slot 104-event deterministic happy path reaches passed');
+select is((select terminal_status from private.activation_terminal_evidence where campaign_id = pg_temp.campaign_id()), 'passed', 'terminal evidence records passed before job removal');
+select is((select complete_response_count from private.activation_terminal_evidence where campaign_id = pg_temp.campaign_id()), 104, 'finalizer uses all 104 persisted responses');
+select lives_ok($$select private.unschedule_terminal_activation_jobs(pg_temp.campaign_id())$$, 'terminal jobs unschedule only after terminal evidence');
+
+select is(public.claim_paid_canary(
+  (select owner_id from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()),
+  '70000000-0000-4000-8000-000000000001'
+), true, 'first global Canary claim succeeds only after the dry run is terminal');
+select is((select count(*) from private.paid_canary_runs), 3::bigint, 'global Canary claim freezes all three exact models');
+select is(public.claim_paid_canary(
+  (select owner_id from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()),
+  '70000000-0000-4000-8000-000000000002'
+), false, 'new operation or campaign UUID cannot bypass the global Canary lock');
+select throws_ok(
+  $$update private.paid_canary_runs set status = 'unknown'$$,
+  '55000', 'private.paid_canary_runs is append-only', 'Canary evidence rejects update'
+);
+select throws_ok(
+  $$delete from private.paid_canary_runs$$,
+  '55000', 'private.paid_canary_runs is append-only', 'Canary evidence rejects delete'
+);
+select throws_ok(
+  $$truncate table private.paid_canary_runs$$,
+  '55000', 'private.paid_canary_runs is append-only', 'Canary evidence rejects truncate'
+);
 
 select * from finish();
 rollback;

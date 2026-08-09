@@ -1,141 +1,259 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, realpath, readdir, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 
-const outputFlag = process.argv.find((argument) =>
-  argument.startsWith('--output-dir='),
-)
-if (!outputFlag) {
-  throw new Error(
-    'Usage: pnpm backup:critical -- --output-dir=<external-directory>',
-  )
+import {
+  buildCriticalEvidenceSql,
+  canonicalJson,
+  loadCriticalRelationContract,
+  sha256,
+} from './critical-backup-contract.mjs'
+
+const SUPABASE_CLI_VERSION = '2.113.0'
+const PROCESS_TIMEOUT_MS = 600_000
+
+function fail(message) {
+  throw new Error(message)
 }
 
-const outputDirectory = resolve(outputFlag.slice('--output-dir='.length))
-const workspace = resolve(process.cwd())
-if (
-  outputDirectory === workspace ||
-  outputDirectory.startsWith(
-    `${workspace}${process.platform === 'win32' ? '\\' : '/'}`,
-  )
-) {
-  throw new Error('Backup output must be outside the Capital Lab repository')
-}
-const databaseUrl = process.env.CAPITAL_LAB_DATABASE_URL
-if (!databaseUrl) {
-  throw new Error('CAPITAL_LAB_DATABASE_URL is required and is never printed')
-}
-const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-const dumpPath = resolve(
-  outputDirectory,
-  `capital-lab-critical-${timestamp}.sql`,
-)
-const manifestPath = resolve(
-  outputDirectory,
-  `capital-lab-critical-${timestamp}.json`,
-)
-
-await mkdir(outputDirectory, { recursive: true })
-
-const criticalRelations = [
-  'public.experiments',
-  'public.experiment_versions',
-  'public.experiment_controls',
-  'public.orders',
-  'public.fills',
-  'public.positions',
-  'public.agent_runs',
-  'public.agent_decisions',
-  'public.model_pricing',
-  'public.ai_budget_policies',
-  'public.budget_alerts',
-  'public.budget_threshold_alerts',
-  'public.model_comparisons',
-  'private.cash_ledger_entries',
-  'private.ai_budget_periods',
-  'private.ai_budget_reservations',
-  'private.ai_usage_events',
-  'private.scheduler_slots',
-  'private.scheduler_runs',
-  'private.audit_log',
-]
-
-const command = process.platform === 'win32' ? 'supabase.cmd' : 'supabase'
-const version = spawnSync(command, ['--version'], {
-  encoding: 'utf8',
-  shell: false,
-})
-if (version.status !== 0 || version.stdout.trim() !== '2.113.0') {
-  throw new Error('Supabase CLI 2.113.0 is required for backup evidence')
-}
-const args = [
-  'db',
-  'dump',
-  '--linked',
-  '--data-only',
-  '--use-copy',
-  '--file',
-  dumpPath,
-]
-const exitCode = await new Promise((resolveExit, reject) => {
-  const child = spawn(command, args, { stdio: 'inherit', shell: false })
-  child.once('error', reject)
-  child.once('exit', (code) => resolveExit(code ?? 1))
-})
-if (exitCode !== 0) throw new Error(`supabase db dump exited ${exitCode}`)
-
-const dumpSha256 = createHash('sha256')
-  .update(await readFile(dumpPath))
-  .digest('hex')
-const git = spawnSync('git', ['rev-parse', 'HEAD'], {
-  encoding: 'utf8',
-  shell: false,
-})
-if (git.status !== 0 || !/^[0-9a-f]{40}$/.test(git.stdout.trim())) {
-  throw new Error('Exact Git commit could not be recorded')
+function onlyOption(name) {
+  const prefix = `--${name}=`
+  const values = process.argv
+    .slice(2)
+    .filter((value) => value.startsWith(prefix))
+  if (values.length !== 1 || process.argv.length !== 3) return undefined
+  return values[0].slice(prefix.length)
 }
 
-const psql = process.platform === 'win32' ? 'psql.exe' : 'psql'
-const evidenceSqlPath = resolve(
-  'supabase',
-  'backup',
-  'critical-restore-evidence.sql',
-)
-const evidenceResult = spawnSync(
-  psql,
-  ['--tuples-only', '--no-align', '--file', evidenceSqlPath],
-  {
-    env: { ...process.env, PGDATABASE: databaseUrl, PGCONNECT_TIMEOUT: '10' },
+function git(args, cwd) {
+  const result = spawnSync('git', args, {
+    cwd,
     encoding: 'utf8',
     shell: false,
-  },
-)
-if (evidenceResult.status !== 0) {
-  throw new Error('Critical relation evidence query failed')
+    windowsHide: true,
+  })
+  if (result.status !== 0) fail('Git evidence could not be derived')
+  return result.stdout.trim()
 }
-const restoreEvidence = JSON.parse(evidenceResult.stdout.trim())
 
-await writeFile(
-  manifestPath,
-  `${JSON.stringify(
+async function spawnBounded(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    let stdout = ''
+    let stderr = ''
+    let settled = false
+    const { input, ...spawnOptions } = options
+    const child = spawn(command, args, {
+      ...spawnOptions,
+      shell: false,
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    child.stdout.on('data', (chunk) => (stdout += chunk.toString()))
+    child.stderr.on('data', (chunk) => (stderr += chunk.toString()))
+    child.once('error', (error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      reject(error)
+    })
+    const timer = setTimeout(() => child.kill('SIGTERM'), PROCESS_TIMEOUT_MS)
+    child.once('exit', (code, signal) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve({ code, signal, stdout, stderr })
+    })
+    if (input) child.stdin.end(input)
+    else child.stdin.end()
+  })
+}
+
+function validateDatabaseUrl(value) {
+  const parsed = new URL(value)
+  if (parsed.protocol !== 'postgresql:' || parsed.hash) {
+    fail('CAPITAL_LAB_DATABASE_URL must be a PostgreSQL URL')
+  }
+  if (
+    !['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) &&
+    parsed.searchParams.get('sslmode') !== 'verify-full'
+  ) {
+    fail('Non-local backup sources require sslmode=verify-full')
+  }
+  return parsed
+}
+
+async function psqlEvidence(psql, databaseUrl, sql) {
+  const result = await spawnBounded(
+    psql,
+    [
+      '-X',
+      '--no-psqlrc',
+      '--tuples-only',
+      '--no-align',
+      '--set',
+      'ON_ERROR_STOP=1',
+    ],
     {
-      createdAt: new Date().toISOString(),
-      gitCommitSha: git.stdout.trim(),
-      supabaseCliVersion: '2.113.0',
-      dumpPath,
-      dumpSha256,
-      scope:
-        'full linked database data; critical relations listed for restore verification',
-      criticalRelations,
-      restoreEvidence,
-      storageRequirement: 'Keep outside the Capital Lab Supabase project.',
+      env: {
+        ...process.env,
+        PGDATABASE: databaseUrl,
+        PGCONNECT_TIMEOUT: '10',
+        PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
+      },
+      input: sql,
     },
-    null,
-    2,
-  )}\n`,
-  'utf8',
-)
-process.stdout.write(
-  `${JSON.stringify({ status: 'backup_evidence_created', dumpPath, manifestPath })}\n`,
-)
+  )
+  if (result.code !== 0 || result.signal)
+    fail('Critical backup evidence query failed')
+  return JSON.parse(result.stdout.trim())
+}
+
+async function main() {
+  const outputInput = onlyOption('output-dir')
+  if (!outputInput) {
+    fail('Usage: pnpm backup:critical -- --output-dir=<external-directory>')
+  }
+  const workspace = await realpath(process.cwd())
+  if (git(['status', '--porcelain=v1', '--untracked-files=all'], workspace)) {
+    fail('Backup creation requires a completely clean Working Tree')
+  }
+  const commitSha = git(['rev-parse', 'HEAD'], workspace)
+  if (!/^[0-9a-f]{40}$/.test(commitSha)) fail('Exact Git HEAD is invalid')
+
+  await mkdir(path.resolve(outputInput), { recursive: true })
+  const outputDirectory = await realpath(path.resolve(outputInput))
+  const relative = path.relative(workspace, outputDirectory)
+  if (
+    relative === '' ||
+    (!relative.startsWith('..') && !path.isAbsolute(relative))
+  ) {
+    fail('Backup output must resolve outside the repository')
+  }
+  const databaseUrl = process.env.CAPITAL_LAB_DATABASE_URL
+  if (!databaseUrl)
+    fail('CAPITAL_LAB_DATABASE_URL is required and never printed')
+  validateDatabaseUrl(databaseUrl)
+
+  const contractPath = path.join(
+    workspace,
+    'supabase',
+    'backup',
+    'critical-relations.v2.json',
+  )
+  const { contract, sha256: relationContractSha256 } =
+    await loadCriticalRelationContract(contractPath)
+  const migrationDirectory = path.join(workspace, 'supabase', 'migrations')
+  const migrationFiles = (await readdir(migrationDirectory))
+    .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
+    .sort()
+  const migrations = []
+  for (const name of migrationFiles) {
+    migrations.push({
+      name,
+      sha256: sha256(await readFile(path.join(migrationDirectory, name))),
+      version: name.slice(0, 14),
+    })
+  }
+
+  const supabase = process.platform === 'win32' ? 'supabase.cmd' : 'supabase'
+  const cliVersion = spawnSync(supabase, ['--version'], {
+    encoding: 'utf8',
+    shell: false,
+    windowsHide: true,
+  })
+  if (
+    cliVersion.status !== 0 ||
+    cliVersion.stdout.trim() !== SUPABASE_CLI_VERSION
+  ) {
+    fail(`Supabase CLI ${SUPABASE_CLI_VERSION} is required`)
+  }
+  const psql = process.platform === 'win32' ? 'psql.exe' : 'psql'
+  const psqlVersion = spawnSync(psql, ['--version'], {
+    encoding: 'utf8',
+    shell: false,
+    windowsHide: true,
+  })
+  if (psqlVersion.status !== 0) fail('psql is unavailable')
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const paths = {
+    roles: path.join(outputDirectory, `capital-lab-${timestamp}-roles.sql`),
+    schema: path.join(outputDirectory, `capital-lab-${timestamp}-schema.sql`),
+    data: path.join(outputDirectory, `capital-lab-${timestamp}-data.sql`),
+    manifest: path.join(
+      outputDirectory,
+      `capital-lab-${timestamp}-manifest.json`,
+    ),
+  }
+  const evidenceSql = buildCriticalEvidenceSql(contract)
+  const evidenceBefore = await psqlEvidence(psql, databaseUrl, evidenceSql)
+  const dumpCommands = [
+    [
+      'db',
+      'dump',
+      '--db-url',
+      databaseUrl,
+      '--role-only',
+      '--file',
+      paths.roles,
+    ],
+    ['db', 'dump', '--db-url', databaseUrl, '--file', paths.schema],
+    [
+      'db',
+      'dump',
+      '--db-url',
+      databaseUrl,
+      '--data-only',
+      '--use-copy',
+      '--file',
+      paths.data,
+    ],
+  ]
+  for (const args of dumpCommands) {
+    const result = await spawnBounded(supabase, args)
+    if (result.code !== 0 || result.signal)
+      fail('Supabase database dump failed')
+  }
+  const evidenceAfter = await psqlEvidence(psql, databaseUrl, evidenceSql)
+  if (
+    evidenceBefore.databaseFingerprint !== evidenceAfter.databaseFingerprint ||
+    canonicalJson(evidenceBefore) !== canonicalJson(evidenceAfter)
+  ) {
+    fail('Backup source changed or database identity switched during export')
+  }
+  const artifacts = {}
+  for (const key of ['roles', 'schema', 'data']) {
+    artifacts[key] = {
+      file: path.basename(paths[key]),
+      sha256: sha256(await readFile(paths[key])),
+    }
+  }
+  const manifest = {
+    artifacts,
+    createdAt: new Date().toISOString(),
+    gitCommitSha: commitSha,
+    migrations,
+    relationContractSha256,
+    relations: evidenceBefore.relations,
+    schemaContractVersion: 'capital-lab-activation-backup-v2',
+    schemaVersion: 2,
+    source: {
+      appliedMigrations: evidenceBefore.appliedMigrations,
+      databaseFingerprint: evidenceBefore.databaseFingerprint,
+      serverVersion: evidenceBefore.serverVersion,
+    },
+    toolVersions: {
+      psql: psqlVersion.stdout.trim(),
+      supabase: SUPABASE_CLI_VERSION,
+    },
+  }
+  await writeFile(paths.manifest, `${canonicalJson(manifest)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
+  process.stdout.write(
+    `${JSON.stringify({ status: 'sensitive_backup_created', manifest: paths.manifest })}\n`,
+  )
+}
+
+await main()

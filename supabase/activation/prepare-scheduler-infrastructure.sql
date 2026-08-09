@@ -1,30 +1,32 @@
 \set ON_ERROR_STOP on
 begin;
 
-select set_config('capital_lab.expected_project_ref', :'expected_project_ref', true) \gset
-select set_config('capital_lab.expected_database_fingerprint', :'expected_database_fingerprint', true) \gset
+select private.assert_activation_context(
+  :'campaign_id'::uuid, :'expected_commit_sha', :'config_version',
+  :'manifest_sha256', :'phase_contract_sha256',
+  :'expected_database_fingerprint'
+);
+select set_config('capital_lab.campaign_id', :'campaign_id', true);
+select set_config('capital_lab.expected_commit_sha', :'expected_commit_sha', true);
+select set_config('capital_lab.config_version', :'config_version', true);
+select set_config('capital_lab.correlation_id', :'correlation_id', true);
 
 do $$
 declare
-  capital_lab_job_exists boolean := false;
+  current_state text;
+  unexpected_jobs integer := 0;
 begin
-  if current_setting('capital_lab.expected_project_ref') <> 'qrnuyibntcxwffrxmrvn'
-    or current_setting('capital_lab.expected_database_fingerprint')
-      <> current_database() || ':' || current_setting('server_version_num')::integer / 10000
-  then
-    raise exception 'scheduler infrastructure target fingerprint mismatch';
-  end if;
-  if (select state from private.no_ai_shadow_dry_runs
-      where id = '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d001') <> 'prepared'
-  then
-    raise exception 'dry run is not prepared';
+  select state into strict current_state from private.no_ai_shadow_dry_runs
+  where id = current_setting('capital_lab.campaign_id')::uuid for update;
+  if current_state not in ('prepared', 'infra_installed') then
+    raise exception 'scheduler infrastructure phase is not retryable from state %', current_state;
   end if;
   if to_regclass('cron.job') is not null then
-    execute 'select exists (select 1 from cron.job where jobname like $1)'
-      into capital_lab_job_exists using 'capital-lab-%';
+    execute 'select count(*) from cron.job where jobname like $1'
+      into unexpected_jobs using 'capital-lab-%';
   end if;
-  if capital_lab_job_exists then
-    raise exception 'Capital Lab scheduler jobs already exist before infrastructure preparation';
+  if unexpected_jobs <> 0 then
+    raise exception 'scheduler infrastructure phase found an unmanaged Capital Lab job';
   end if;
 end;
 $$;
@@ -40,25 +42,25 @@ begin
   then
     raise exception 'scheduler infrastructure postflight failed';
   end if;
+  if (select state from private.no_ai_shadow_dry_runs
+      where id = current_setting('capital_lab.campaign_id')::uuid) = 'prepared' then
+    perform private.transition_no_ai_shadow_dry_run(
+      current_setting('capital_lab.campaign_id')::uuid,
+      'prepared', 'infra_installed', 'admin_script',
+      current_setting('capital_lab.expected_commit_sha'),
+      current_setting('capital_lab.config_version'),
+      current_setting('capital_lab.correlation_id')::uuid,
+      jsonb_build_object('extensions_present', 2, 'extension_version_pins', 0,
+        'jobs_installed', 0, 'http_requests_sent', 0)
+    );
+  end if;
 end;
 $$;
 
-select private.transition_no_ai_shadow_dry_run(
-  '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d001',
-  'prepared', 'infra_installed', 'admin_script',
-  :'expected_commit_sha', :'config_version', :'correlation_id'::uuid,
-  jsonb_build_object('extensions', jsonb_build_array('pg_cron', 'pg_net'), 'jobs_installed', 0)
-);
-
-select jsonb_build_object(
-  'schema_version', 1,
-  'phase', 'scheduler_infrastructure_prepared',
-  'project_ref', current_setting('capital_lab.expected_project_ref'),
-  'database_fingerprint', current_setting('capital_lab.expected_database_fingerprint'),
-  'extensions_present', 2,
-  'extension_version_pins', 0,
-  'jobs_installed', 0,
-  'http_requests_sent', 0
-) as evidence;
+select jsonb_build_object('schema_version', 2,
+  'phase', 'scheduler-infrastructure-preparation',
+  'persisted_state', state, 'extensions_present', 2,
+  'extension_version_pins', 0, 'jobs_installed', 0)
+from private.no_ai_shadow_dry_runs where id = :'campaign_id'::uuid;
 
 commit;

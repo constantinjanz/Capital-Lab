@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 
 const root = process.cwd()
 const ignoredDirectories = new Set([
@@ -19,37 +20,85 @@ const rules = [
     id: 'CRED-001',
     findingClass: 'asymmetric_private_key',
     pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+    historyPattern: '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----',
   },
   {
     id: 'CRED-002',
     findingClass: 'openai_api_secret',
     pattern: /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/,
+    historyPattern: 'sk-(proj-)?[A-Za-z0-9_-]{20,}',
   },
   {
     id: 'CRED-003',
     findingClass: 'supabase_server_secret',
     pattern: /\bsb_secret_[A-Za-z0-9_-]{16,}\b/,
+    historyPattern: 'sb_secret_[A-Za-z0-9_-]{16,}',
   },
   {
     id: 'CRED-004',
     findingClass: 'supabase_publishable_credential',
     pattern: /\bsb_publishable_[A-Za-z0-9_-]{16,}\b/,
+    historyPattern: 'sb_publishable_[A-Za-z0-9_-]{16,}',
   },
   {
     id: 'CRED-005',
     findingClass: 'jwt_bearer_credential',
     pattern:
       /\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\b/,
+    historyPattern:
+      'eyJ[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{10,}',
   },
   {
     id: 'CRED-006',
     findingClass: 'github_access_token',
     pattern: /\bgh(?:p|o|u|s|r)_[A-Za-z0-9]{20,}\b/,
+    historyPattern: 'gh(p|o|u|s|r)_[A-Za-z0-9]{20,}',
   },
   {
     id: 'CRED-007',
     findingClass: 'aws_access_key_id',
     pattern: /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/,
+    historyPattern: '(AKIA|ASIA)[A-Z0-9]{16}',
+  },
+  {
+    id: 'CRED-008',
+    findingClass: 'database_url_with_embedded_password',
+    pattern:
+      /\bpostgres(?:ql)?:\/\/(?!postgres:postgres@(?:127\.0\.0\.1|localhost|\[::1\]))[^:\s/]+:[^@\s/]{8,}@[a-z0-9.\[\]:-]+(?::\d+)?\/[a-z0-9_-]+/i,
+    historyPattern:
+      'postgres(ql)?://[^:[:space:]/]+:[^@[:space:]/]{8,}@[A-Za-z0-9.-]+(:[0-9]+)?/[A-Za-z0-9_-]+',
+  },
+  {
+    id: 'CRED-009',
+    findingClass: 'npm_registry_auth_token',
+    pattern: /(?:^|\n)\s*(?:\/\/[^\s:]+\/)?_authToken\s*=\s*[^${\s][^\s]{15,}/,
+    historyPattern:
+      '_authToken[[:space:]]*=[[:space:]]*[^$[:space:]][^[:space:]]{15,}',
+  },
+  {
+    id: 'CRED-010',
+    findingClass: 'vercel_access_token',
+    pattern: /\b(?:vercel|vc)_[A-Za-z0-9_-]{20,}\b/i,
+    historyPattern: '(vercel|vc)_[A-Za-z0-9_-]{20,}',
+  },
+  {
+    id: 'CRED-011',
+    findingClass: 'supabase_personal_access_token',
+    pattern: /\bsbp_[A-Za-z0-9_-]{20,}\b/,
+    historyPattern: 'sbp_[A-Za-z0-9_-]{20,}',
+  },
+  {
+    id: 'CRED-012',
+    findingClass: 'github_fine_grained_token',
+    pattern: /\bgithub_pat_[A-Za-z0-9_]{20,}\b/,
+    historyPattern: 'github_pat_[A-Za-z0-9_]{20,}',
+  },
+  {
+    id: 'CRED-013',
+    findingClass: 'literal_authorization_bearer',
+    pattern: /\bAuthorization\s*[:=]\s*['"]?Bearer\s+[A-Za-z0-9._~-]{20,}/i,
+    historyPattern:
+      'Authorization[[:space:]]*[:=][[:space:]]*Bearer[[:space:]]+[A-Za-z0-9._~-]{20,}',
   },
 ]
 
@@ -62,7 +111,9 @@ async function filesUnder(directory) {
     const fullPath = path.join(directory, entry.name)
     if (entry.isDirectory()) files.push(...(await filesUnder(fullPath)))
     else if (
-      /\.(?:ts|tsx|js|mjs|cjs|json|md|sql|toml|ya?ml|env|txt)$/i.test(
+      entry.name.startsWith('.env') ||
+      entry.name === '.npmrc' ||
+      /\.(?:ts|tsx|js|mjs|cjs|json|md|sql|toml|ya?ml|env|txt|sh|bash|zsh|ps1|psm1|bat|cmd|ini|conf|config|properties)$/i.test(
         entry.name,
       )
     ) {
@@ -75,6 +126,68 @@ async function filesUnder(directory) {
 
 const self = path.join(root, 'scripts', 'check-credential-patterns.mjs')
 const findings = []
+
+const history = spawnSync(
+  'git',
+  ['log', '--format=%H', '--max-count=100', '--all'],
+  { cwd: root, encoding: 'utf8', shell: false, windowsHide: true },
+)
+if (history.status !== 0) {
+  throw new Error(
+    'Bounded Git-history credential scan could not enumerate commits',
+  )
+}
+const commits = history.stdout.trim().split(/\r?\n/).filter(Boolean)
+for (const rule of rules.filter((candidate) => candidate.historyPattern)) {
+  const result = spawnSync(
+    'git',
+    [
+      'grep',
+      '-I',
+      '-l',
+      '-E',
+      '-e',
+      rule.historyPattern,
+      ...commits,
+      '--',
+      '.',
+    ],
+    {
+      cwd: root,
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: true,
+      maxBuffer: 4 * 1024 * 1024,
+    },
+  )
+  if (result.status === 0) {
+    for (const matched of result.stdout.trim().split(/\r?\n/).filter(Boolean)) {
+      const separator = matched.indexOf(':')
+      const commit = matched.slice(0, separator)
+      const filename = matched.slice(separator + 1)
+      const blob = spawnSync('git', ['show', `${commit}:${filename}`], {
+        cwd: root,
+        encoding: 'utf8',
+        shell: false,
+        windowsHide: true,
+        maxBuffer: 4 * 1024 * 1024,
+      })
+      if (blob.status !== 0) {
+        throw new Error(
+          'Bounded Git-history credential scan could not inspect a candidate',
+        )
+      }
+      if (!rule.pattern.test(blob.stdout)) continue
+      findings.push({
+        path: `git-history/${commit.slice(0, 12)}/${filename}`,
+        ruleId: rule.id,
+        findingClass: rule.findingClass,
+      })
+    }
+  } else if (result.status !== 1) {
+    throw new Error('Bounded Git-history credential scan failed closed')
+  }
+}
 
 for (const filename of await filesUnder(root)) {
   if (filename === self) continue
@@ -101,4 +214,6 @@ if (findings.length > 0) {
   process.exit(1)
 }
 
-console.log('Credential pattern scan passed with zero redacted findings.')
+console.log(
+  'Credential scan passed: working tree plus 100 bounded Git-history commits, zero redacted findings.',
+)

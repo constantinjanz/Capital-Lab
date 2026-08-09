@@ -2,6 +2,44 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## PR #21 activation-readiness adversarial hardening (2026-08-09)
+
+Safety status: implementation-only. Production migration/deployment/activation, Hosted extension/Vault/Cron mutation, scheduler HTTP, provider/model calls, Canary execution, broker connectivity, and PR merge/undraft are prohibited.
+
+### Preflight and evidence boundaries
+
+- [x] Derive local HEAD/branch/remote from Git, inspect the complete working tree, and preserve the 20 pre-existing unrelated modified files unstaged and unchanged.
+- [x] Confirm Draft PR #21 points to `codex/activation-readiness-follow-up` at `f23c8e4a98338e2546497d53ab77238f51c09691`; no later PR commits exist.
+- [x] Read current official Supabase migration, backup/restore, Cron/pg_cron, pg_net, Vault, RLS, security-definer, and breaking-change guidance; direct `cron.job` mutation and extension version pins remain forbidden.
+- [x] Prove read-only that linked Capital-Lab Hosted migration history contains neither `20260809150000` nor `20260809150417`; `pg_cron`/`pg_net`, planned Vault names, activation relations, and scheduler jobs are absent. Existing Vault extension is platform baseline with zero entries.
+- [x] Confirm read-only that the Vercel project is not live, the PR deployment is Preview-only (`target=null`), and tracked `vercel.json` disables `main` Git deployments; Production config remains untouched.
+
+### Implementation plan
+
+- [x] Replace name-trusting Cron logic with versioned canonical job specifications, persisted schedule-returned IDs, full-definition checks before install/arm/verify/stop, ID-bound `cron.alter_job`/`cron.unschedule`, and fail-closed extra-job detection.
+- [x] Bind the campaign manifest to a parser-validated Production origin/path, Deployment ID, commit, environment, database target fingerprint, phase-file hashes, and server-derived Git/target evidence.
+- [x] Add persistent one-shot auth-noop request/response/reconciliation evidence and a strict scheduler route response contract with exact zero side-effect counters and 401/no-side-effect coverage.
+- [x] Split unconditional DB-first emergency kill from orderly Vercel-first stop; make drain, disable, unschedule, and audit retryable without rolling back phase-one controls.
+- [x] Make dispatcher/reconciler transport capture unconditional, persist actual response JSON evidence, refresh side-effect snapshots on every tick, and implement deterministic terminal finalization (52 slots/104 events for v2) with drain and 300-second post-stop gates.
+- [x] Replace partial baselines with deterministic full-state signatures/watermarks/sums; enforce the complete dangerous-setting keyset, mock/paper provider contract, lead time, and retry equality.
+- [x] Establish one versioned critical-relation source of truth for exporter/manifest/restore verification, full schema/content hashes, clean-commit/migration/target binding, seed-free disposable restore, and tamper tests.
+- [x] Minimize grants and wrapper execution, enforce actor/transition matrices and owner/campaign composite FKs, harden security-definer search paths, and protect immutable evidence including TRUNCATE and global Canary one-shot semantics.
+- [x] Harden the cross-platform runner (`shell:false`, canonical paths, `psql -X`, timeouts, allowlists, unknown-outcome reconciliation) and expose explicit canonical phase files with frozen SHA-256 values.
+- [x] Expand redacted credential/history scanning, pin security-critical Actions by immutable SHAs, keep Canary flags child-scoped, and expose only safe disabled/mock health evidence.
+- [x] Add application, integration, pgTAP, fault-injection, full 52/104 happy-path, backup/restore tamper, privilege/RLS/TRUNCATE, target/manifest mismatch, Windows argument/path, and unknown/late request tests with zero external network/provider/OpenAI effects.
+
+### Verification and publication
+
+- [ ] Run focused tests while iterating, then on the exact clean final commit: format, lint, typecheck, unit, safety, credentials, build, Playwright, pinned Supabase CLI version, local start/reset/pgTAP, seed-free export/restore, and rollback-only migration rehearsals.
+- [ ] Regenerate migration/script/manifest/documentation checksums from final bytes; verify them again after commit and record exact commands, exit codes, and test counts under `docs/post-build/`.
+- [ ] Push only scoped files to the existing PR branch, keep PR #21 draft/unmerged, observe exact-commit CI/Preview read-only, and end at no stronger than second-independent-review readiness.
+
+Iteration evidence before the first CI commit: direct TypeScript compiler exit 0;
+ESLint exit 0 with zero warnings; focused security suites 5 files / 34 tests;
+complete Vitest 79 files / 589 tests; PAPER-only scan exit 0. Local Supabase,
+pgTAP, Playwright, build, and seed-free restore remain pending until the clean
+ephemeral CI checkout because this workstation has neither Docker nor psql.
+
 ## Activation readiness follow-up (2026-08-09)
 
 - [x] Preserve unrelated working-tree changes and branch from the audit tree on `codex/activation-readiness-follow-up` without merging or deploying Production.

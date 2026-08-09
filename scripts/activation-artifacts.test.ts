@@ -1,7 +1,10 @@
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+
+import { canonicalJson } from './run-activation-phase.mjs'
 
 const root = process.cwd()
 
@@ -10,7 +13,7 @@ async function text(relativePath: string): Promise<string> {
 }
 
 describe('activation phase separation', () => {
-  it('keeps both app/schema migrations free of extensions, Vault writes, jobs, and HTTP', async () => {
+  it('keeps app/schema migrations free of extension and Cron installation', async () => {
     for (const filename of [
       'supabase/migrations/20260809150000_post_build_hosting_safety.sql',
       'supabase/migrations/20260809150417_activation_readiness_follow_up.sql',
@@ -21,9 +24,6 @@ describe('activation phase separation', () => {
         /vault\.create_secret|insert\s+into\s+vault/i,
       )
       expect(migration).not.toMatch(/cron\.schedule\s*\(/i)
-      expect(migration).not.toMatch(
-        /(?:perform|select)\s+private\.dispatch_no_ai_shadow_dry_run_event\s*\(/i,
-      )
     }
   })
 
@@ -38,52 +38,79 @@ describe('activation phase separation', () => {
     expect(infrastructure).not.toMatch(/net\.http_(?:get|post)\s*\(/i)
   })
 
-  it('installs only two disabled jobs through supported Cron APIs', async () => {
+  it('persists full job identities before supported ID-based disable operations', async () => {
     const installer = await text(
       'supabase/activation/install-hosted-scheduler-jobs-disabled.sql',
     )
     expect(installer.match(/:=\s*cron\.schedule\s*\(/gi)).toHaveLength(2)
-    expect(
-      installer.match(/cron\.alter_job\([^;]+active := false\)/gi),
-    ).toHaveLength(2)
-    expect(installer).not.toMatch(
-      /(?:insert|update|delete)\s+(?:into|from)?\s*cron\.job/i,
+    expect(installer.match(/register_activation_job_spec\s*\(/gi)).toHaveLength(
+      2,
+    )
+    expect(installer).toMatch(/set_activation_jobs_active\s*\([^]*false/i)
+    expect(installer.indexOf('register_activation_job_spec')).toBeLessThan(
+      installer.indexOf('set_activation_jobs_active'),
     )
     expect(installer).not.toMatch(
-      /(?:select|perform)\s+net\.http_(?:get|post)\s*\(/i,
-    )
-  })
-
-  it('keeps arming and shutdown separate from provisioning', async () => {
-    const arm = await text('supabase/activation/enable-hosted-scheduler.sql')
-    const stop = await text('supabase/activation/disable-hosted-scheduler.sql')
-    expect(arm).not.toMatch(/create extension|cron\.schedule|vault\./i)
-    expect(arm).toMatch(/cron\.alter_job\([^;]+active := true\)/i)
-    expect(stop).toMatch(/cron\.unschedule/i)
-    expect(stop).not.toMatch(
       /(?:insert|update|delete)\s+(?:into|from)?\s*cron\.job/i,
     )
   })
 
-  it('makes versioned psql files fail on the first SQL error', async () => {
-    const activationDirectory = path.join(root, 'supabase', 'activation')
-    const files = [
-      'prepare-no-ai-dry-run.sql',
-      'prepare-scheduler-infrastructure.sql',
-      'verify-scheduler-vault.sql',
-      'install-hosted-scheduler-jobs-disabled.sql',
-      'request-scheduler-auth-noop.sql',
-      'verify-scheduler-auth-noop.sql',
-      'plan-and-freeze-no-ai-dry-run.sql',
-      'enable-hosted-scheduler.sql',
-      'disable-hosted-scheduler.sql',
-    ]
-    for (const filename of files) {
-      const content = await readFile(
-        path.join(activationDirectory, filename),
-        'utf8',
+  it('keeps DB-first emergency kill separate from Cron disable and unschedule', async () => {
+    const kill = await text('supabase/activation/emergency-kill.sql')
+    const disable = await text('supabase/activation/emergency-disable-jobs.sql')
+    const unschedule = await text(
+      'supabase/activation/unschedule-terminal-jobs.sql',
+    )
+    expect(kill).toMatch(/emergency_kill_activation_controls/i)
+    expect(kill).not.toMatch(/cron\.(?:alter_job|schedule|unschedule)\s*\(/i)
+    expect(kill).not.toMatch(/unschedule_terminal_activation_jobs\s*\(/i)
+    expect(disable).toMatch(/disable_activation_jobs_after_emergency/i)
+    expect(unschedule).toMatch(/unschedule_terminal_activation_jobs/i)
+  })
+
+  it('checksums every canonical phase file and uses no moving phase selection', async () => {
+    const contractPath = path.join(
+      root,
+      'supabase',
+      'activation',
+      'phase-contract.json',
+    )
+    const bytes = await readFile(contractPath)
+    const contract = JSON.parse(bytes.toString('utf8')) as {
+      schema_version: number
+      phases: Record<string, { file: string; sha256: string }>
+    }
+    expect(bytes.toString('utf8')).toBe(`${canonicalJson(contract)}\n`)
+    expect(contract.schema_version).toBe(2)
+    expect(Object.keys(contract.phases).sort()).toEqual([
+      'arm',
+      'auth-failure-reconcile',
+      'auth-failure-request',
+      'auth-noop-reconcile',
+      'auth-noop-request',
+      'baseline-freeze',
+      'drain-reconcile',
+      'emergency-disable-jobs',
+      'emergency-kill',
+      'install-jobs-disabled',
+      'manual-finalize',
+      'orderly-stop',
+      'prepare',
+      'scheduler-infrastructure-preparation',
+      'unschedule-terminal-jobs',
+      'vault-verification',
+    ])
+    for (const phase of Object.values(contract.phases)) {
+      const phaseBytes = await readFile(
+        path.join(root, 'supabase', 'activation', phase.file),
       )
-      expect(content).toContain('\\set ON_ERROR_STOP on')
+      expect(createHash('sha256').update(phaseBytes).digest('hex')).toBe(
+        phase.sha256,
+      )
+      expect(phaseBytes.toString('utf8')).toContain('\set ON_ERROR_STOP on')
+      expect(phaseBytes.toString('utf8')).not.toMatch(
+        /(?:insert|update|delete)\s+(?:into|from)?\s*cron\.job/i,
+      )
     }
   })
 })
