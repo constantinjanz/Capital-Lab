@@ -11,7 +11,7 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 - [x] Add a shadow proposal boundary that cannot create an order and an explicit live-paper boundary that can delegate only to the deterministic simulation service.
 - [x] Persist immutable run provenance, routing events, concise rationale, scenarios, and point-in-time evidence through an owner-only hosted contract.
 - [x] Replace the hosted Agent console mock with an owner-scoped read projection and truthful empty/disabled states.
-- [ ] Run application, database, browser, hosted rollback, Preview, and CI gates without enabling paid AI, Sol, web search, scheduling, or Production.
+- [x] Run application, database, browser, hosted rollback, Preview, and CI gates without enabling paid AI, Sol, web search, scheduling, or Production.
 
 Scope guard: the hosted environment remains `AGENT_ENABLED=false`, shadow by default, with Sol and web search disabled. This work cannot add brokerage connectivity, broker credentials, real-order paths, or direct fill/ledger writes.
 
@@ -23,6 +23,13 @@ Scope guard: the hosted environment remains `AGENT_ENABLED=false`, shadow by def
 - The additive migration sections compile against the hosted Capital-Lab schema inside rollback-only transactions, including canonical Luna/Terra/Sol prompts, immutable prompt pins and provider response provenance, atomic begin/finalize/fail contracts, point-in-time evidence enforcement, and the bounded owner console. No rehearsal schema or data persisted.
 - Repository verification passed zero-warning ESLint, strict TypeScript, 70 Vitest files / 531 tests, the PAPER TRADING ONLY scan, intended-slice formatting, `git diff --check`, and the Next.js 16.3 production build.
 - Shadow dispatch persists only a decision record through an injected writer and never invokes simulation. Explicit live-paper dispatch can call only the deterministic `PaperSimulationExecutionService` port; neither path contains a broker, fill, ledger, credential, or external-action capability.
+- GitHub CI run 107 is green at exact application commit `7f97242`: clean-checkout formatting, zero-warning lint, strict TypeScript, 70 Vitest files / 531 tests, the PAPER TRADING ONLY scan, the Next.js 16.3 build, the Chromium gate, a fresh Supabase start/reset, and all 12 pgTAP files / 1,469 assertions passed. The unrelated mock research-import journey passed on its configured retry, while the protected hosted verification below completed cleanly.
+- The complete structured runtime migration passed a rollback-only compile rehearsal against the current hosted schema before migration `20260808235225` was applied. Supabase's foreign-key advisor then identified two prompt-pin access paths; follow-up migration `20260809000307` adds both covering indexes, passed its own rollback rehearsal, and is applied from the CI-validated SQL.
+- Generated hosted types include the immutable prompt pins, provider response provenance, atomic Luna/shadow begin/finalize/fail contracts, and bounded console read. Prompt pins retain forced RLS and read-only owner access; only `service_role` may begin a run, while `authenticated` may only read the console and `anon` cannot.
+- Post-migration Supabase advisors report no unindexed foreign key or new schema-security finding. Performance findings are informational unused-index notices on the intentionally dormant schema; leaked-password protection remains the one project-level security warning.
+- The hosted audit reports four immutable prompt versions and three experiment-role pins, with zero agent runs, decisions, AI budget reservations, AI usage events, enabled agent controls, enabled scheduler controls, orders, or fills. The single pre-existing opening cash-ledger entry is unchanged.
+- Vercel Preview `dpl_6jbeDa3p5U7GWJt3ierVCzZuFsMZ` is READY as Next.js at exact application commit `7f97242` with no Production target. `/api/health` returns `200`, `paperTradingOnly: true`, mock data mode, and `agentEnabled: false`; build-error logs are empty.
+- The authenticated owner `/agent` route renders the hosted database projection, disabled provider/broker boundaries, and truthful zero-run/decision/evidence/tool states. Browser warning/error diagnostics are empty. Paid AI, Sol, controlled web research, live market data, remote scheduling, brokerage connectivity, and Production remain disabled.
 
 ### Hosted evidence statistics and reviewed pattern gates
 
