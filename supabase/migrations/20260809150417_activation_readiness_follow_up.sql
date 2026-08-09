@@ -4008,7 +4008,78 @@ $$;
 
 revoke update, delete, truncate on table private.audit_log from service_role;
 
-revoke all on all functions in schema private from public, anon, authenticated;
+-- Restrict only the activation/canary surface introduced or replaced here.
+-- Existing private owner-check helpers retain the explicit grants established
+-- by their source migrations; a schema-wide revoke would break those narrow
+-- public SECURITY DEFINER entry points.
+do $$
+declare
+  activation_function record;
+begin
+  for activation_function in
+    select procedure.oid::regprocedure as signature
+    from pg_proc as procedure
+    join pg_namespace as namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'private'
+      and procedure.proname = any(array[
+        'activation_database_fingerprint',
+        'activation_deterministic_uuid',
+        'activation_job_spec_hash',
+        'activation_relation_contract_hash',
+        'activation_safe_nonnegative_integer',
+        'activation_safe_uuid',
+        'activation_snapshots_match',
+        'activation_zero_counters_valid',
+        'arm_activation_campaign',
+        'arm_no_ai_shadow_dry_run',
+        'assert_activation_context',
+        'assert_activation_controls',
+        'assert_activation_job_specs',
+        'assert_unmanaged_activation_jobs_safe',
+        'capture_activation_control_snapshot',
+        'capture_activation_http_responses',
+        'capture_activation_relation_snapshot',
+        'capture_storage_monitor_snapshot',
+        'claim_activation_auth_noop',
+        'claim_paid_canary',
+        'disable_activation_jobs_after_emergency',
+        'dispatch_no_ai_shadow_dry_run_event',
+        'emergency_kill_activation_controls',
+        'finalize_activation_campaign',
+        'finalize_no_ai_shadow_dry_run',
+        'freeze_activation_baseline',
+        'freeze_no_ai_shadow_dry_run_baseline',
+        'paid_canary_context',
+        'plan_no_ai_shadow_dry_run',
+        'prepare_no_ai_shadow_dry_run',
+        'prepare_no_ai_shadow_dry_run_v2',
+        'protect_activation_event_mutation',
+        'protect_activation_manifest_identity',
+        'reconcile_no_ai_shadow_dry_run',
+        'record_activation_forbidden_mutation',
+        'register_activation_job_spec',
+        'run_hosted_scheduler_request',
+        'run_hosted_scheduler_request_v2',
+        'set_activation_jobs_active',
+        'stop_no_ai_shadow_dry_run',
+        'submit_activation_auth_failure_probes',
+        'submit_activation_auth_noop',
+        'transition_no_ai_shadow_dry_run',
+        'unschedule_activation_jobs',
+        'unschedule_terminal_activation_jobs',
+        'verify_activation_auth_failure_probes',
+        'verify_activation_auth_noop',
+        'verify_activation_vault_scope',
+        'verify_no_ai_shadow_auth_noop'
+      ]::text[])
+  loop
+    execute format(
+      'revoke all on function %s from public, anon, authenticated',
+      activation_function.signature
+    );
+  end loop;
+end;
+$$;
 revoke all on function private.transition_no_ai_shadow_dry_run(uuid, text, text, text, text, text, uuid, jsonb) from service_role;
 revoke all on function private.prepare_no_ai_shadow_dry_run(text, text, uuid) from service_role;
 revoke all on function private.plan_no_ai_shadow_dry_run(uuid, timestamptz, timestamptz) from service_role;

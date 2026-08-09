@@ -44,6 +44,13 @@ failed closed on a non-idempotent trigger drop. Run `31341396633` passed the
 browser gate and advanced migration compilation to an installed-function
 parameter-name mismatch. Both schema-local findings were fixed without Hosted
 mutation; exact-head database rerun remains mandatory.
+Run `31341545900` passed application, browser, Supabase start, migration compile,
+and database reset. Its 1,332-assertion pgTAP pass then failed closed on a
+schema-wide private-function revoke that regressed established owner wrappers
+and on a non-superuser Cron-owner tamper fixture. The grant change is now an
+exact activation-function allowlist; username tamper is covered by the
+documented API rejection plus versioned hash inequality. A fresh exact-head
+pgTAP/restore run remains mandatory.
 
 ## Activation readiness follow-up (2026-08-09)
 

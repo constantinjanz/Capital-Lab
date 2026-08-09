@@ -80,7 +80,7 @@ select ok(not has_function_privilege('service_role', 'private.transition_no_ai_s
 select ok(has_function_privilege('service_role', 'public.run_hosted_scheduler_request(uuid,uuid,uuid,text,uuid,uuid,timestamptz)', 'EXECUTE'), 'service role has only the narrow scheduler wrapper');
 select ok(not has_function_privilege('authenticated', 'public.run_hosted_scheduler_request(uuid,uuid,uuid,text,uuid,uuid,timestamptz)', 'EXECUTE'), 'authenticated cannot execute scheduler wrapper');
 select ok((
-  select proconfig = array['search_path=']
+  select array_to_string(proconfig, ',') in ('search_path=', 'search_path=""')
   from pg_proc where oid = 'private.emergency_kill_activation_controls(uuid)'::regprocedure
 ), 'emergency kill has an empty fixed search_path');
 select ok(exists (
@@ -213,9 +213,29 @@ select cron.alter_job((select jobid from activation_jobs where job_role = 'dispa
 select cron.alter_job((select jobid from activation_jobs where job_role = 'dispatcher'), database := 'template1', active := false);
 select throws_ok($$select private.assert_activation_job_specs(pg_temp.campaign_id(), false)$$, '55000', 'Cron job definition drift or tampering detected', 'database tampering fails before arm');
 select cron.alter_job((select jobid from activation_jobs where job_role = 'dispatcher'), database := current_database(), active := false);
-select cron.alter_job((select jobid from activation_jobs where job_role = 'dispatcher'), username := 'authenticator', active := false);
-select throws_ok($$select private.assert_activation_job_specs(pg_temp.campaign_id(), false)$$, '55000', 'Cron job definition drift or tampering detected', 'username tampering fails before arm');
-select cron.alter_job((select jobid from activation_jobs where job_role = 'dispatcher'), username := current_user, active := false);
+select throws_ok(
+  $$select cron.alter_job(
+    (select jobid from activation_jobs where job_role = 'dispatcher'),
+    username := 'authenticator', active := false
+  )$$,
+  '42501', 'must be superuser to alter username',
+  'documented Cron API rejects unauthorized username tampering before arm'
+);
+select isnt(
+  private.activation_job_spec_hash(
+    (select jobid from activation_jobs where job_role = 'dispatcher'),
+    'capital-lab-no-ai-dispatcher', '*/15 * * * 1-5',
+    $$select private.dispatch_no_ai_shadow_dry_run_event('market_dispatcher', statement_timestamp());$$,
+    current_database(), current_user, false
+  ),
+  private.activation_job_spec_hash(
+    (select jobid from activation_jobs where job_role = 'dispatcher'),
+    'capital-lab-no-ai-dispatcher', '*/15 * * * 1-5',
+    $$select private.dispatch_no_ai_shadow_dry_run_event('market_dispatcher', statement_timestamp());$$,
+    current_database(), 'authenticator', false
+  ),
+  'versioned full-definition hash binds the exact Cron username'
+);
 select throws_ok(
   $$select private.register_activation_job_spec(
     pg_temp.campaign_id(), 'dispatcher', 9223372036854775800, false,
