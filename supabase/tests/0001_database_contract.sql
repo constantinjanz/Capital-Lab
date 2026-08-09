@@ -976,7 +976,7 @@ insert into public.model_pricing(
   pricing_version, checksum, effective_from, is_verified
 ) values (
   '60100000-0000-0000-0000-000000000101', 'openai', 'gpt-5.6-terra', 'tokens',
-  'standard', 2.00, 0.20, 2.50, 12.00, 0, 'local://database-test',
+  'database-test', 2.00, 0.20, 2.50, 12.00, 0, 'local://database-test',
   '2026-01-01', '2027-01-01', 'database-test-v1', repeat('a', 64), '2026-01-01', true
 );
 

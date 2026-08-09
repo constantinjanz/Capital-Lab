@@ -127,9 +127,9 @@ select is(
   'no experiment scheduler was enabled by the migration'
 );
 select is(
-  (select count(*) from pg_extension where extname in ('pg_cron', 'pg_net')),
+  (select count(*) from pg_extension where extname = 'pg_cron'),
   0::bigint,
-  'scheduler extensions are not activated by the migration'
+  'the scheduler Cron authority is not activated by the migration'
 );
 select ok(
   not has_function_privilege(

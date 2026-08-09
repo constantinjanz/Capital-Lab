@@ -904,7 +904,7 @@ to service_role;
 grant execute on function private.compact_regenerable_raw_payloads(uuid, uuid, integer)
 to service_role;
 
-create function public.hosted_storage_status()
+create function private.hosted_storage_status()
 returns jsonb
 language plpgsql
 stable
@@ -985,11 +985,25 @@ begin
 end;
 $$;
 
+revoke all on function private.hosted_storage_status()
+from public, anon, authenticated;
+grant execute on function private.hosted_storage_status() to authenticated;
+
+create function public.hosted_storage_status()
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select private.hosted_storage_status();
+$$;
+
 revoke all on function public.hosted_storage_status()
 from public, anon, authenticated;
 grant execute on function public.hosted_storage_status() to authenticated;
 
-create function public.hosted_budget_threshold_status()
+create function private.hosted_budget_threshold_status()
 returns jsonb
 language plpgsql
 stable
@@ -1050,6 +1064,20 @@ begin
     'alerts', alerts
   );
 end;
+$$;
+
+revoke all on function private.hosted_budget_threshold_status()
+from public, anon, authenticated;
+grant execute on function private.hosted_budget_threshold_status() to authenticated;
+
+create function public.hosted_budget_threshold_status()
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select private.hosted_budget_threshold_status();
 $$;
 
 revoke all on function public.hosted_budget_threshold_status()
