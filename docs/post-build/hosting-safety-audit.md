@@ -221,17 +221,17 @@ The command record includes failures; none is hidden.
 | Corrected `node scripts/check-paper-only.mjs` and targeted scans | 0                                                            |
 | Exact Notion runtime dependency scan                             | 0, none found                                                |
 | Final repository `pnpm format:check`                             | 1; 15 preserved, unrelated dirty market-ingestion files      |
-| Audit-owned Prettier slice                                       | 0; all matched TS/JS/JSON/Markdown files pass                 |
-| Final direct ESLint (`--max-warnings=0`)                          | 0; zero warnings                                              |
-| Final direct TypeScript (`tsc --noEmit`)                          | 0                                                            |
+| Audit-owned Prettier slice                                       | 0; all matched TS/JS/JSON/Markdown files pass                |
+| Final direct ESLint (`--max-warnings=0`)                         | 0; zero warnings                                             |
+| Final direct TypeScript (`tsc --noEmit`)                         | 0                                                            |
 | Final direct Vitest                                              | 0; 74 files / 558 tests                                      |
 | Final paper-only safety scan                                     | 0                                                            |
 | Final direct Next.js production build                            | 0; Next.js 16.3, internal scheduler route present            |
 | First final Playwright attempt                                   | 1; Chromium spawn denied by Windows sandbox                  |
-| Second Playwright attempt                                        | 1; real `.env.local` selected hosted auth, no mock mutation   |
+| Second Playwright attempt                                        | 1; real `.env.local` selected hosted auth, no mock mutation  |
 | Corrected isolated mock Playwright                               | 0; 4/4 Chromium journeys                                     |
 | Local `pnpm test:db`                                             | 1 immediately; Docker is not installed/running               |
-| Final connector rollback request                                 | refused: embedded migration `COMMIT`; no query executed       |
+| Final connector rollback request                                 | refused: embedded migration `COMMIT`; no query executed      |
 | Prior hosted rollback migration + pgTAP rehearsal                | success through `ok 42`; no schema/data persisted            |
 | `git diff --check`                                               | 0                                                            |
 | Preview and clean-checkout CI                                    | pending exact-commit Git gates                               |
