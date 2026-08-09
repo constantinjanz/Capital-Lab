@@ -87,13 +87,14 @@ on conflict (id) do nothing;
 insert into public.model_pricing(
   id, provider, model, pricing_mode, context_tier, input_per_million,
   cached_input_per_million, cache_write_per_million, output_per_million,
-  tool_call_price, source_url, effective_from, is_verified
+  tool_call_price, source_url, verified_at, verification_expires_at,
+  pricing_version, checksum, effective_from, is_verified
 ) values
-  ('60100000-0000-0000-0000-000000000001', 'mock', 'mock-luna', 'tokens', 'standard', 0, 0, 0, 0, 0, 'local://synthetic', '2026-01-01', true),
-  ('60100000-0000-0000-0000-000000000002', 'openai', 'gpt-5.6-luna', 'tokens', 'standard', 0.20, 0.02, 0.25, 1.20, 0, 'https://developers.openai.com/api/docs/pricing', '2026-08-06', false),
-  ('60100000-0000-0000-0000-000000000003', 'openai', 'gpt-5.6-terra', 'tokens', 'standard', 2.00, 0.20, 2.50, 12.00, 0, 'https://developers.openai.com/api/docs/pricing', '2026-08-06', false),
-  ('60100000-0000-0000-0000-000000000004', 'openai', 'gpt-5.6-sol', 'tokens', 'standard', 5.00, 0.50, 6.25, 30.00, 0, 'https://developers.openai.com/api/docs/pricing', '2026-08-06', false),
-  ('60100000-0000-0000-0000-000000000005', 'openai', 'web-search', 'tool_call', 'standard', 0, 0, 0, 0, 0.01, 'https://developers.openai.com/api/docs/pricing', '2026-08-06', false)
+  ('60100000-0000-0000-0000-000000000001', 'mock', 'mock-luna', 'tokens', 'standard', 0, 0, 0, 0, 0, 'local://synthetic', '2026-01-01', '2099-01-01', 'synthetic-mock-v1', repeat('0', 64), '2026-01-01', true),
+  ('60100000-0000-0000-0000-000000000002', 'openai', 'gpt-5.6-luna', 'tokens', 'standard', 0.20, 0.02, 0.25, 1.20, 0, 'https://developers.openai.com/api/docs/pricing', null, null, null, null, '2026-08-06', false),
+  ('60100000-0000-0000-0000-000000000003', 'openai', 'gpt-5.6-terra', 'tokens', 'standard', 2.00, 0.20, 2.50, 12.00, 0, 'https://developers.openai.com/api/docs/pricing', null, null, null, null, '2026-08-06', false),
+  ('60100000-0000-0000-0000-000000000004', 'openai', 'gpt-5.6-sol', 'tokens', 'standard', 5.00, 0.50, 6.25, 30.00, 0, 'https://developers.openai.com/api/docs/pricing', null, null, null, null, '2026-08-06', false),
+  ('60100000-0000-0000-0000-000000000005', 'openai', 'web-search', 'tool_call', 'standard', 0, 0, 0, 0, 0.01, 'https://developers.openai.com/api/docs/pricing', null, null, null, null, '2026-08-06', false)
 on conflict (id) do nothing;
 
 insert into public.prompt_versions(id, owner_id, agent_role, version, system_prompt, output_schema, content_hash)
