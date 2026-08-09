@@ -102,7 +102,7 @@ tasks/todo.md
 
 | Artifact                                            | SHA-256                                                            |
 | --------------------------------------------------- | ------------------------------------------------------------------ |
-| `20260809150417_activation_readiness_follow_up.sql` | `6b35a4ee3f46b2666f9a5185b4f5d786147df2f758fe7a7d0e27a85731c574e8` |
+| `20260809150417_activation_readiness_follow_up.sql` | `c62fae20291edce437ea4eb7e94bdba3d7bbf3d3befa81c5fff1881bb9256d7f` |
 | `phase-contract.json`                               | `d795b4b100f932479e183316e82710bb5bc25693fee49163f6d1fc019bcb07f8` |
 | `critical-relations.v2.json`                        | `ce65298a8b8e93954ca787b610bcedc988f04ce7645ba971395227aff6ba306d` |
 | `run-activation-phase.mjs`                          | `90d943f61a22e18236912d635438f25490e21838a6a9ff862c654d3251c25b0d` |
@@ -132,20 +132,23 @@ The canonical phase contract additionally binds every phase file:
 
 ## Verification ledger
 
-| Command/evidence                           |        Exit | Result                                                       | Status                                          |
-| ------------------------------------------ | ----------: | ------------------------------------------------------------ | ----------------------------------------------- |
-| direct `tsc --noEmit`                      |           0 | strict                                                       | locally verified                                |
-| direct `eslint . --max-warnings=0`         |           0 | zero warnings                                                | locally verified                                |
-| focused security Vitest                    |           0 | 5 files / 34 tests                                           | locally verified                                |
-| complete Vitest                            |           0 | 79 files / 589 tests                                         | locally verified                                |
-| `node scripts/check-paper-only.mjs`        |           0 | PAPER-only scan passed                                       | locally verified                                |
-| `git diff --check`                         |           0 | no whitespace errors                                         | locally verified                                |
-| local credentials                          | not claimed | ignored `.env.local` contains redacted credential categories | expected local owner gate; values never emitted |
-| local Supabase/pgTAP                       | unavailable | Docker, Supabase CLI, and psql absent                        | exact clean CI required                         |
-| local seed-free export/restore             | unavailable | Docker/psql absent                                           | exact clean CI required                         |
-| exact-head application CI, run `31341237570` |           0 | format, lint, typecheck, 589 tests, safety, credentials, build | verified on `1a97c215...`                       |
-| exact-head browser CI, run `31341237570`     |           0 | Playwright critical flows                                     | verified on `1a97c215...`                       |
-| exact-head database CI, run `31341237570`    |           1 | first migration compile exposed non-idempotent trigger drop    | fixed with `DROP TRIGGER IF EXISTS`; rerun required |
+| Command/evidence                             |        Exit | Result                                                         | Status                                                 |
+| -------------------------------------------- | ----------: | -------------------------------------------------------------- | ------------------------------------------------------ |
+| direct `tsc --noEmit`                        |           0 | strict                                                         | locally verified                                       |
+| direct `eslint . --max-warnings=0`           |           0 | zero warnings                                                  | locally verified                                       |
+| focused security Vitest                      |           0 | 5 files / 34 tests                                             | locally verified                                       |
+| complete Vitest                              |           0 | 79 files / 589 tests                                           | locally verified                                       |
+| `node scripts/check-paper-only.mjs`          |           0 | PAPER-only scan passed                                         | locally verified                                       |
+| `git diff --check`                           |           0 | no whitespace errors                                           | locally verified                                       |
+| local credentials                            | not claimed | ignored `.env.local` contains redacted credential categories   | expected local owner gate; values never emitted        |
+| local Supabase/pgTAP                         | unavailable | Docker, Supabase CLI, and psql absent                          | exact clean CI required                                |
+| local seed-free export/restore               | unavailable | Docker/psql absent                                             | exact clean CI required                                |
+| exact-head application CI, run `31341237570` |           0 | format, lint, typecheck, 589 tests, safety, credentials, build | verified on `1a97c215...`                              |
+| exact-head browser CI, run `31341237570`     |           0 | Playwright critical flows                                      | verified on `1a97c215...`                              |
+| exact-head database CI, run `31341237570`    |           1 | first migration compile exposed non-idempotent trigger drop    | fixed with `DROP TRIGGER IF EXISTS`; rerun required    |
+| exact-head application CI, run `31341396633` |           1 | report formatting only                                         | formatted; rerun required                              |
+| exact-head browser CI, run `31341396633`     |           0 | Playwright critical flows                                      | verified on `6113a000...`                              |
+| exact-head database CI, run `31341396633`    |           1 | second compile exposed PostgreSQL parameter-name replacement   | retained the installed signature names; rerun required |
 
 ## Manual gates and stop conditions
 

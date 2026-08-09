@@ -39,6 +39,11 @@ ESLint exit 0 with zero warnings; focused security suites 5 files / 34 tests;
 complete Vitest 79 files / 589 tests; PAPER-only scan exit 0. Local Supabase,
 pgTAP, Playwright, build, and seed-free restore remain pending until the clean
 ephemeral CI checkout because this workstation has neither Docker nor psql.
+Exact-head CI run `31341237570` passed application and browser gates, then
+failed closed on a non-idempotent trigger drop. Run `31341396633` passed the
+browser gate and advanced migration compilation to an installed-function
+parameter-name mismatch. Both schema-local findings were fixed without Hosted
+mutation; exact-head database rerun remains mandatory.
 
 ## Activation readiness follow-up (2026-08-09)
 

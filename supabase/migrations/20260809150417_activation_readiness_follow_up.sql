@@ -3680,8 +3680,8 @@ end;
 $$;
 
 create or replace function private.dispatch_no_ai_shadow_dry_run_event(
-  p_event_type text,
-  p_observed_at timestamptz
+  p_job text,
+  p_requested_at timestamptz
 )
 returns bigint
 language plpgsql
@@ -3700,7 +3700,7 @@ declare
   missing_responses integer;
   required_drain_at timestamptz;
 begin
-  if p_event_type not in ('market_dispatcher', 'reconciler') then
+  if p_job not in ('market_dispatcher', 'reconciler') then
     raise exception using errcode = '22023', message = 'scheduler event type is invalid';
   end if;
   perform set_config('capital_lab.internal_event_write', 'on', true);
@@ -3767,7 +3767,7 @@ begin
     return null;
   end if;
   select * into event_row from private.no_ai_shadow_dry_run_events
-  where dry_run_id = campaign.id and event_type = p_event_type
+  where dry_run_id = campaign.id and event_type = p_job
     and pg_net_request_id is null
     and expected_at between statement_timestamp() - interval '6 minutes'
       and statement_timestamp() + interval '90 seconds'
