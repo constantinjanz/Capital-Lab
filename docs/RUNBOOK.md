@@ -58,9 +58,11 @@ The Canary is local CLI only. It is blocked unless agent/autonomous/web are off,
 
 ## Scheduler recovery and shutdown
 
-Every remote request is POST-only, bearer-protected, uncached, Production-only, correlated, and awaited. A duplicate experiment/session/quarter-hour slot cannot create a second slot, reservation, model request, order intent, or fill. The no-AI dry-run contract records only a skipped slot/run with all side-effect counts exactly zero. The Reconciler marks expired leases `timed_out`, creates one deduplicated audit event, and never retries a provider request.
+The only reviewed remote experiment is the dedicated `no_ai_shadow_infrastructure_dry_run`; it is not a research/trading experiment. Follow `docs/post-build/activation-readiness-follow-up.md` and the versioned `activation:phase` runner. Do not copy a shortened SQL fragment into the SQL Editor. Migration, extensions, Vault verification, disabled job installation, auth/no-op, baseline, arming, and shutdown are separate checksummed phases.
 
-On any unknown result, run `supabase/activation/disable-hosted-scheduler.sql`, set Vercel `SCHEDULER_ENABLED=false`, and inspect the correlation/cycle IDs before considering another delivery. Do not release an unknown AI reservation automatically.
+Every expected request is POST-only, bearer-protected, uncached, Production-only, correlated, and awaited. Two complete regular XNAS sessions contain 52 preregistered 15-minute slots and 104 dispatcher/reconciler events. Every dispatcher must have one Cron trigger, one pg_net request ID, a known 2xx response, one authenticated route request, one claimed terminal no-AI cycle, and exact zero model, budget, order, fill, and ledger counters. Missing or duplicate evidence is failure.
+
+On any unknown result, first set Vercel `SCHEDULER_ENABLED=false` and prove the new exact Production deployment `READY`. Then disable the database control, unschedule only the exact expected jobs, drain at least 300 seconds, and reconcile responses/leases before evaluating baseline deltas. Never create a new operation to bypass an unknown result and never release an unknown AI reservation automatically.
 
 ## Storage and backups
 

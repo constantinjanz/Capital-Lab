@@ -1,6 +1,7 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { spawn, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { spawn } from 'node:child_process'
 
 const outputFlag = process.argv.find((argument) =>
   argument.startsWith('--output-dir='),
@@ -12,6 +13,19 @@ if (!outputFlag) {
 }
 
 const outputDirectory = resolve(outputFlag.slice('--output-dir='.length))
+const workspace = resolve(process.cwd())
+if (
+  outputDirectory === workspace ||
+  outputDirectory.startsWith(
+    `${workspace}${process.platform === 'win32' ? '\\' : '/'}`,
+  )
+) {
+  throw new Error('Backup output must be outside the Capital Lab repository')
+}
+const databaseUrl = process.env.CAPITAL_LAB_DATABASE_URL
+if (!databaseUrl) {
+  throw new Error('CAPITAL_LAB_DATABASE_URL is required and is never printed')
+}
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
 const dumpPath = resolve(
   outputDirectory,
@@ -48,6 +62,13 @@ const criticalRelations = [
 ]
 
 const command = process.platform === 'win32' ? 'supabase.cmd' : 'supabase'
+const version = spawnSync(command, ['--version'], {
+  encoding: 'utf8',
+  shell: false,
+})
+if (version.status !== 0 || version.stdout.trim() !== '2.113.0') {
+  throw new Error('Supabase CLI 2.113.0 is required for backup evidence')
+}
 const args = [
   'db',
   'dump',
@@ -64,15 +85,50 @@ const exitCode = await new Promise((resolveExit, reject) => {
 })
 if (exitCode !== 0) throw new Error(`supabase db dump exited ${exitCode}`)
 
+const dumpSha256 = createHash('sha256')
+  .update(await readFile(dumpPath))
+  .digest('hex')
+const git = spawnSync('git', ['rev-parse', 'HEAD'], {
+  encoding: 'utf8',
+  shell: false,
+})
+if (git.status !== 0 || !/^[0-9a-f]{40}$/.test(git.stdout.trim())) {
+  throw new Error('Exact Git commit could not be recorded')
+}
+
+const psql = process.platform === 'win32' ? 'psql.exe' : 'psql'
+const evidenceSqlPath = resolve(
+  'supabase',
+  'backup',
+  'critical-restore-evidence.sql',
+)
+const evidenceResult = spawnSync(
+  psql,
+  ['--tuples-only', '--no-align', '--file', evidenceSqlPath],
+  {
+    env: { ...process.env, PGDATABASE: databaseUrl, PGCONNECT_TIMEOUT: '10' },
+    encoding: 'utf8',
+    shell: false,
+  },
+)
+if (evidenceResult.status !== 0) {
+  throw new Error('Critical relation evidence query failed')
+}
+const restoreEvidence = JSON.parse(evidenceResult.stdout.trim())
+
 await writeFile(
   manifestPath,
   `${JSON.stringify(
     {
       createdAt: new Date().toISOString(),
+      gitCommitSha: git.stdout.trim(),
+      supabaseCliVersion: '2.113.0',
       dumpPath,
+      dumpSha256,
       scope:
         'full linked database data; critical relations listed for restore verification',
       criticalRelations,
+      restoreEvidence,
       storageRequirement: 'Keep outside the Capital Lab Supabase project.',
     },
     null,
@@ -80,4 +136,6 @@ await writeFile(
   )}\n`,
   'utf8',
 )
-process.stdout.write(`${JSON.stringify({ dumpPath, manifestPath })}\n`)
+process.stdout.write(
+  `${JSON.stringify({ status: 'backup_evidence_created', dumpPath, manifestPath })}\n`,
+)

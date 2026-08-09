@@ -12,6 +12,15 @@ const environmentKeys = [
   'REAL_BROKER_ENABLED',
   'OPENAI_API_KEY',
   'SUPABASE_SECRET_KEY',
+  'SCHEDULER_SHARED_SECRET',
+  'SCHEDULER_PROVIDER',
+  'SCHEDULER_ENABLED',
+  'AUTONOMOUS_PAPER_EXECUTION_ENABLED',
+  'OPENAI_CANARY_ENABLED',
+  'OPENAI_WEB_SEARCH_ENABLED',
+  'SOL_ENABLED',
+  'SOL_CHALLENGER_ENABLED',
+  'SOL_LIVE_EXECUTION_ENABLED',
 ] as const
 
 const originalValues = new Map<string, string | undefined>()
@@ -90,6 +99,22 @@ describe('server environment Alpaca readiness', () => {
       SCHEDULER_PROVIDER: 'supabase',
       REAL_BROKER_ENABLED: false,
     })
+  })
+
+  it('accepts the later Production no-AI scheduler state without an OpenAI key', () => {
+    process.env.SCHEDULER_ENABLED = 'true'
+    process.env.SCHEDULER_PROVIDER = 'supabase'
+    process.env.SCHEDULER_SHARED_SECRET = 's'.repeat(48)
+    process.env.SUPABASE_SECRET_KEY = 'server-only-database-key'
+
+    expect(getServerEnvironment()).toMatchObject({
+      SCHEDULER_ENABLED: true,
+      SCHEDULER_PROVIDER: 'supabase',
+      AGENT_ENABLED: false,
+      PAID_MODEL_CALLS_ENABLED: false,
+      OPENAI_CANARY_ENABLED: false,
+    })
+    expect(getServerEnvironment()).not.toHaveProperty('OPENAI_API_KEY')
   })
 
   it('rejects every permanently unsupported execution flag', () => {

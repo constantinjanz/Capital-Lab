@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { OpenAIGateway } from '@/providers/openai/types'
+import { decimal } from '@/domain/financial/decimal'
 
 import { runPaidOpenAICanary, type PaidCanaryBudgetLedger } from './paid-canary'
 
@@ -78,7 +79,7 @@ describe('local paid OpenAI canary', () => {
       acquireOneShotLock: vi.fn(async () => true),
     })
     expect(outcome).toMatchObject({ status: 'completed', calls: 3 })
-    expect(Number(outcome.reservedUsd)).toBeLessThanOrEqual(0.01)
+    expect(decimal(outcome.reservedUsd).lte('0.01')).toBe(true)
     expect(
       test.runPaidCanary.mock.calls.map(([request]) => request.model),
     ).toEqual(['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol'])

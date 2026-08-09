@@ -8,11 +8,24 @@ on:
 permissions:
   contents: read
 
+env:
+  CAPITAL_LAB_CI_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   application:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify exact clean checkout
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain)"
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.2
@@ -21,28 +34,68 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm test:safety
-      - run: pnpm build
+      - run: node scripts/run-ci-gate.mjs --id format -- pnpm format:check
+      - run: node scripts/run-ci-gate.mjs --id lint -- pnpm lint
+      - run: node scripts/run-ci-gate.mjs --id typecheck -- pnpm typecheck
+      - run: node scripts/run-ci-gate.mjs --id unit-integration -- pnpm test
+      - run: node scripts/run-ci-gate.mjs --id paper-only -- pnpm test:safety
+      - run: node scripts/run-ci-gate.mjs --id credentials -- pnpm test:credentials
+      - run: node scripts/run-ci-gate.mjs --id production-build -- pnpm build
+      - name: Publish application evidence summary
+        if: always()
+        run: cat .ci-evidence/*.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: application-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .ci-evidence/*.json
+          if-no-files-found: error
 
   database:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify exact clean checkout
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain)"
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
-      - run: supabase start
-      - run: supabase db reset
-      - run: supabase test db
+          version: 2.113.0
+      - run: supabase --version
+      - run: node scripts/run-ci-gate.mjs --id supabase-start -- supabase start
+      - run: node scripts/run-ci-gate.mjs --id database-reset -- supabase db reset
+      - run: node scripts/run-ci-gate.mjs --id database-pgtap -- supabase test db
+      - name: Publish database evidence summary
+        if: always()
+        run: cat .ci-evidence/*.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: database-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .ci-evidence/*.json
+          if-no-files-found: error
 
   browser:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify exact clean checkout
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain)"
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.2
@@ -52,4 +105,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      - run: node scripts/run-ci-gate.mjs --id browser -- pnpm test:e2e
+      - name: Publish browser evidence summary
+        if: always()
+        run: cat .ci-evidence/*.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .ci-evidence/*.json
+          if-no-files-found: error

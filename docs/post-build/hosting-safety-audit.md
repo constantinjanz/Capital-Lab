@@ -1,5 +1,7 @@
 # Capital Lab post-build hosting and safety audit
 
+> Historical audit snapshot. Its 48-hour activation instructions are superseded by [`activation-readiness-follow-up.md`](./activation-readiness-follow-up.md). Do not execute the historical combined activation command: migration, extension preparation, disabled job installation, auth/no-op, two-full-session planning, arming, and shutdown are now separate reviewed phases.
+
 Audit date: 2026-08-09 (Europe/Berlin)
 Branch: `codex/post-build-hosting-audit`
 Scope: post-build hardening and preparation only

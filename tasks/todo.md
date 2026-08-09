@@ -2,6 +2,20 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## Activation readiness follow-up (2026-08-09)
+
+- [x] Preserve unrelated working-tree changes and branch from the audit tree on `codex/activation-readiness-follow-up` without merging or deploying Production.
+- [x] Classify the prior audit evidence, record `key_rotation_completed=owner_attested`, and keep `server_consumer_scope_sync=pending` without inspecting hosted secret values.
+- [x] Confirm the hosted Production off-state and identify Supabase CLI `2.113.0` as the exact release resolved by the last green clean-checkout CI run.
+- [x] Pin the database gate, add redacted credential scanning, and capture exact-commit exit codes and test counts as machine-readable CI evidence.
+- [x] Separate schema migration, extension preparation, disabled job installation, later arming, and shutdown into idempotent fail-closed phases.
+- [x] Add the dedicated `no_ai_shadow_infrastructure_dry_run`, two-full-regular-session plan, expected-vs-actual evidence, alarms, atomic stop, and audited state machine.
+- [x] Make the paid Canary globally one-shot across operation IDs and isolate temporary launcher flags without executing a real model request.
+- [x] Add focused application and pgTAP coverage, harden backup/restore evidence, and produce the final Activation Readiness report.
+- [ ] Run clean application, browser, and exact-commit CI database gates; publish only an unmerged draft PR and leave every dangerous flag false.
+
+Scope guard: this follow-up prepares and verifies code only. It must not apply the Production migration, install remote extensions, inspect or change hosted secrets, create or enable jobs, promote or deploy Production, merge a PR, activate any runtime control, call a live provider or model, run the paid Canary, import research, or create an order, fill, or ledger entry.
+
 ## Post-build hosting and activation audit (2026-08-09)
 
 - [x] Re-audit repository instructions, architecture, dependencies, migrations, runtime boundaries, CI, environment examples, and dirty worktree without overwriting unrelated user changes.

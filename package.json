@@ -15,14 +15,16 @@
     "test:e2e": "playwright test",
     "test:db": "node scripts/run-database-tests.mjs",
     "test:safety": "node scripts/check-paper-only.mjs",
+    "test:credentials": "node scripts/check-credential-patterns.mjs",
     "openai:models:check": "node --conditions=react-server --import tsx scripts/check-openai-model-access.ts",
     "openai:canary": "node --conditions=react-server --import tsx scripts/run-openai-paid-canary.ts",
     "pricing:verify": "node --import tsx scripts/verify-model-pricing.ts",
     "backup:critical": "node scripts/export-critical-tables.mjs",
     "backup:restore:test": "node scripts/verify-backup-restore.mjs",
+    "activation:phase": "node scripts/run-activation-phase.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:safety && pnpm build"
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:safety && pnpm test:credentials && pnpm build"
   },
   "engines": {
     "node": ">=22"

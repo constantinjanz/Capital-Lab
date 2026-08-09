@@ -44,6 +44,7 @@ yarn-error.log*
 /supabase/.temp
 /playwright-report
 /test-results
+/.ci-evidence
 
 # vercel
 .vercel
