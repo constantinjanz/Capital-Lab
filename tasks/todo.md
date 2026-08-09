@@ -12,7 +12,7 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 - [x] Add the dedicated `no_ai_shadow_infrastructure_dry_run`, two-full-regular-session plan, expected-vs-actual evidence, alarms, atomic stop, and audited state machine.
 - [x] Make the paid Canary globally one-shot across operation IDs and isolate temporary launcher flags without executing a real model request.
 - [x] Add focused application and pgTAP coverage, harden backup/restore evidence, and produce the final Activation Readiness report.
-- [ ] Run clean application, browser, and exact-commit CI database gates; publish only an unmerged draft PR and leave every dangerous flag false.
+- [x] Run clean application, browser, and exact-commit CI database gates; publish only an unmerged draft PR and leave every dangerous flag false.
 
 Scope guard: this follow-up prepares and verifies code only. It must not apply the Production migration, install remote extensions, inspect or change hosted secrets, create or enable jobs, promote or deploy Production, merge a PR, activate any runtime control, call a live provider or model, run the paid Canary, import research, or create an order, fill, or ledger entry.
 

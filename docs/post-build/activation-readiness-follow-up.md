@@ -4,7 +4,7 @@
 - Scope: code, schema, scripts, tests, and evidence preparation only
 - Audit input: [`hosting-safety-audit.md`](./hosting-safety-audit.md)
 
-Verdict: **NO-GO** until the exact follow-up commit passes clean-checkout CI and the report is finalized. This is not authorization to apply a migration or activate anything.
+Verdict: **GO FOR MIGRATION REVIEW**. This authorizes review only and is not authorization to apply a migration or activate anything.
 
 ## Immutable scope and credential handling
 
@@ -17,15 +17,17 @@ Verdict: **NO-GO** until the exact follow-up commit passes clean-checkout CI and
 
 ## Starting point and Git evidence
 
-| Evidence          | Value                                                                                                          | Classification  |
-| ----------------- | -------------------------------------------------------------------------------------------------------------- | --------------- |
-| Merged audit base | `70ed610d5e0e5c08bf523d0d160a7b76f5fe2e51`                                                                     | `code_verified` |
-| Audit branch tip  | `a3bf18439d2bcdcf512976ff55a4879d88f3abbd`                                                                     | `code_verified` |
-| Shared audit tree | `ca969f8887b36200ece84c65221881ee8fa465f2`                                                                     | `code_verified` |
-| Follow-up branch  | `codex/activation-readiness-follow-up`                                                                         | `code_verified` |
-| Follow-up end SHA | Recorded by the exact-head PR/CI evidence after commit; it cannot be self-embedded in the commit it identifies | `pending`       |
+| Evidence                    | Value                                                                                       | Classification  |
+| --------------------------- | ------------------------------------------------------------------------------------------- | --------------- |
+| Merged audit base           | `70ed610d5e0e5c08bf523d0d160a7b76f5fe2e51`                                                  | `code_verified` |
+| Audit branch tip            | `a3bf18439d2bcdcf512976ff55a4879d88f3abbd`                                                  | `code_verified` |
+| Shared audit tree           | `ca969f8887b36200ece84c65221881ee8fa465f2`                                                  | `code_verified` |
+| Follow-up branch            | `codex/activation-readiness-follow-up`                                                      | `code_verified` |
+| Verified implementation SHA | `88295e0fe1b51c5bcea4a17ac4129911a72ba51d`                                                  | `code_verified` |
+| Exact-head PR CI            | [run `31324382247`](https://github.com/constantinjanz/Capital-Lab/actions/runs/31324382247) | `code_verified` |
+| Draft PR                    | [PR #21](https://github.com/constantinjanz/Capital-Lab/pull/21), open and unmerged          | `code_verified` |
 
-The audit tip, merged base, and `origin/main` have the same tree. Unrelated user working-tree changes were preserved and are excluded from this follow-up's staged-file allowlist. No reset, broad checkout, or `git add -A` is permitted.
+The audit tip, merged base, and `origin/main` have the same tree. The verified implementation SHA is the exact code checkpoint covered by the evidence below. A later report-only commit necessarily changes the PR head and cannot self-embed its own SHA; the authoritative final report-head SHA is therefore the exact PR head shown by GitHub and repeated in the handoff. Unrelated user working-tree changes were preserved and are excluded from this follow-up's staged-file allowlist. No reset, broad checkout, or `git add -A` is permitted.
 
 ## Prior audit claim register
 
@@ -125,45 +127,52 @@ The automatic end independently disables the database control and both jobs afte
 
 ## Verification ledger
 
-| Command/evidence                                                           |    Exit |                                   Count | Classification                                                                                          |
-| -------------------------------------------------------------------------- | ------: | --------------------------------------: | ------------------------------------------------------------------------------------------------------- |
-| Redacted credential-pattern scan                                           |       0 |                              0 findings | `code_verified`                                                                                         |
-| PAPER-only scan                                                            |       0 |                              0 findings | `code_verified`                                                                                         |
-| Focused TypeScript ESLint                                                  |       0 |                              0 warnings | `code_verified`                                                                                         |
-| Repository TypeScript typecheck                                            |       0 |                                  strict | `code_verified`                                                                                         |
-| Repository ESLint                                                          |       0 |                              0 warnings | `code_verified`                                                                                         |
-| Current Vitest full suite                                                  |       0 |                    76 files / 571 tests | `code_verified`                                                                                         |
-| Production build                                                           |       0 |            14 static/dynamic app routes | `code_verified`; network-enabled retry passed after the sandbox could not reach configured Google Fonts |
-| Combined audit + follow-up migration Hosted transaction ending in rollback |       0 |                                compiled | `rollback_rehearsed`                                                                                    |
-| Follow-up pgTAP in the same rollback-only transaction                      |       0 |                           62 assertions | `rollback_rehearsed`                                                                                    |
-| Post-rollback table and migration-record check                             |       0 |                             both absent | `production_verified` narrow absence check                                                              |
-| Local database reset/pgTAP                                                 |       2 |       unavailable: Docker not installed | `pending`; exact-commit CI required                                                                     |
-| Local mock browser                                                         |       0 |                            4/4 journeys | `code_verified`; initial sandbox launch returned `EPERM`, approved Chromium launch passed               |
-| Real backup restore                                                        | not run | no disposable Docker/Postgres available | `pending`                                                                                               |
-| Production browser/runtime verification                                    | not run |         no Production deployment exists | `pending`                                                                                               |
+| Command/evidence                                                           |    Exit |                                   Count | Classification                                                                                    |
+| -------------------------------------------------------------------------- | ------: | --------------------------------------: | ------------------------------------------------------------------------------------------------- |
+| Exact-head CI `pnpm format:check`                                          |       0 |                          clean checkout | `code_verified`                                                                                   |
+| Exact-head CI `pnpm lint`                                                  |       0 |                              0 warnings | `code_verified`                                                                                   |
+| Exact-head CI `pnpm typecheck`                                             |       0 |                                  strict | `code_verified`                                                                                   |
+| Exact-head CI `pnpm test`                                                  |       0 |         76 files / 571 passed / 0 flaky | `code_verified`                                                                                   |
+| Exact-head CI redacted credential-pattern scan                             |       0 |                              0 findings | `code_verified`                                                                                   |
+| Exact-head CI PAPER-only scan                                              |       0 |                              0 findings | `code_verified`                                                                                   |
+| Exact-head CI `pnpm build`                                                 |       0 |            14 static/dynamic app routes | `code_verified`                                                                                   |
+| Exact-head CI `pnpm test:e2e` with fail-on-flaky                           |       0 |                      4 passed / 0 flaky | `code_verified`                                                                                   |
+| Exact-head CI Supabase CLI                                                 |       0 |                               `2.113.0` | `code_verified`                                                                                   |
+| Exact-head CI `supabase start`                                             |       0 |                       local stack ready | `code_verified`                                                                                   |
+| Exact-head CI `supabase db reset`                                          |       0 |                    migrations reapplied | `code_verified`                                                                                   |
+| Exact-head CI `supabase test db`                                           |       0 |        14 files / 1692 passed / 0 flaky | `code_verified`                                                                                   |
+| Combined audit + follow-up migration Hosted transaction ending in rollback |       0 |                                compiled | `rollback_rehearsed`                                                                              |
+| Follow-up pgTAP in the same rollback-only transaction                      |       0 |                           62 assertions | `rollback_rehearsed`                                                                              |
+| Post-rollback table and migration-record check                             |       0 |                             both absent | `production_verified` narrow absence check                                                        |
+| Local database reset/pgTAP                                                 |       2 |       unavailable: Docker not installed | `pending`; exact-head clean CI supplies the reproducible database gate, not a local-restore claim |
+| Local mock browser                                                         |       0 |                      4 passed / 0 flaky | `code_verified`; initial sandbox launch returned `EPERM`, approved Chromium launch passed         |
+| Real backup restore                                                        | not run | no disposable Docker/Postgres available | `pending`                                                                                         |
+| Production browser/runtime verification                                    | not run |         no Production deployment exists | `pending`                                                                                         |
 
-The final clean-checkout format, lint, typecheck, unit/integration, safety, credential, build, browser, and database counts will replace the provisional rows above from the exact PR-head CI artifacts.
+The authoritative machine-readable evidence is attached to exact-head PR run `31324382247`; every recorded gate has commit SHA `88295e0fe1b51c5bcea4a17ac4129911a72ba51d` and exit code `0`.
 
 ## Gate status and exact manual evidence still required
 
-| Gate                           | Status                           | Required later evidence                                                                                                                         |
-| ------------------------------ | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Key rotation                   | `owner_attested`                 | Owner attestation already recorded; never request value evidence                                                                                |
-| Server consumer scope sync     | `pending`                        | Production server variable names/scopes point to the new generation; obsolete Preview/Development consumers removed/replaced; names/scopes only |
-| Follow-up app/schema migration | `prepared`, `rollback_rehearsed` | Review, approved apply, migration-list entry, checksum, RLS/grant postflight                                                                    |
-| Extensions                     | `prepared`                       | Separate install/verify evidence, no version pins, zero jobs                                                                                    |
-| Vault                          | `prepared`                       | Required names, scopes, random-secret length gate; no value output                                                                              |
-| Jobs                           | `prepared`                       | Exactly two expected inactive jobs before arming                                                                                                |
-| Production deployment          | `pending`                        | Exact deployment ID, URL, commit, `READY`, Production environment names/scopes                                                                  |
-| Production off-state           | `pending`                        | Every dangerous flag false, no privileged public variable, no OpenAI key, health paper-only/mock/agent-off                                      |
-| Scheduler auth/no-op           | `prepared`                       | Invalid/missing bearer 401/403 with zero effects; one valid no-op 2xx with request ID and zero effects                                          |
-| Runtime logs                   | `pending`                        | No credential leak and no warning/error/fatal during gates                                                                                      |
-| Backup/restore                 | `prepared`, execution `pending`  | Real local/disposable restore with exact row-count/checksum/ledger match; no dump in Git or CI                                                  |
-| No-AI dry run                  | `prepared`                       | Later state-machine execution across two complete sessions                                                                                      |
-| OpenAI/Canary                  | `prepared`, execution `pending`  | Remains off and unconfigured during no-AI run; any later paid gate requires separate approval                                                   |
+| Gate                           | Status           | Required later evidence                                                                                                                         |
+| ------------------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Key rotation                   | `owner_attested` | Owner attestation already recorded; never request value evidence                                                                                |
+| Exact-head clean CI            | `verified`       | PR run `31324382247`: application, browser, database, and exact-SHA evidence all passed                                                         |
+| Current dangerous controls     | `verified`       | Repository scan and narrow Hosted database inspection both found zero enabled dangerous controls                                                |
+| Server consumer scope sync     | `pending`        | Production server variable names/scopes point to the new generation; obsolete Preview/Development consumers removed/replaced; names/scopes only |
+| Follow-up app/schema migration | `prepared`       | Rollback rehearsal passed; review, approved apply, migration-list entry, checksum, RLS/grant postflight remain later                            |
+| Extensions                     | `prepared`       | Separate install/verify evidence, no version pins, zero jobs                                                                                    |
+| Vault                          | `prepared`       | Required names, scopes, random-secret length gate; no value output                                                                              |
+| Jobs                           | `prepared`       | Exactly two expected inactive jobs before arming                                                                                                |
+| Production deployment          | `pending`        | Exact deployment ID, URL, commit, `READY`, Production environment names/scopes                                                                  |
+| Production off-state           | `pending`        | Every dangerous flag false, no privileged public variable, no OpenAI key, health paper-only/mock/agent-off                                      |
+| Scheduler auth/no-op           | `prepared`       | Invalid/missing bearer 401/403 with zero effects; one valid no-op 2xx with request ID and zero effects                                          |
+| Runtime logs                   | `pending`        | No credential leak and no warning/error/fatal during gates                                                                                      |
+| Backup/restore                 | `pending`        | Tooling is prepared; real local/disposable restore with exact row-count/checksum/ledger match is still required; no dump in Git or CI           |
+| No-AI dry run                  | `prepared`       | Later state-machine execution across two complete sessions                                                                                      |
+| OpenAI/Canary                  | `prepared`       | Execution remains pending; stays off and unconfigured during no-AI run; any later paid gate requires separate approval                          |
 
 Production apply, extension installation, Vault changes, job creation/activation, Production deployment/promotion, PR merge, model/provider calls, Canary, research import, scheduler/agent activation, and financial side effects remain explicitly unauthorized by this report.
 
 ## Verdict
 
-**NO-GO** until exact-head clean-checkout CI, checksums, and PR evidence are complete. Even a later **GO FOR MIGRATION REVIEW** authorizes review only; it does not authorize migration apply, extensions, Production, Vault, jobs, OpenAI, or the dry run.
+**GO FOR MIGRATION REVIEW**. Code, checksums, exact-head clean-checkout CI, and the unmerged Draft PR are ready for controlled review. Server-consumer scope sync, real disposable restore, Production deployment/off-state/runtime evidence, and every later activation phase remain manual blockers. This verdict does not authorize migration apply, extensions, Production, Vault, jobs, OpenAI, the no-AI dry run, PR merge, or any provider/financial side effect.
