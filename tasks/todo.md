@@ -88,6 +88,11 @@ the first PostgreSQL `ERROR` line with all single-quoted literals and URLs
 redacted and a hard 400-character cap. It still never prints query output,
 rows, credentials, headers, or connection details. A fresh exact-head run is
 required to identify the SQL contract defect.
+Run `31342850522` kept application, browser, reset, and all pgTAP assertions
+green. The pre-dump `psql` failure uses lowercase `psql: error:` formatting, so
+the redactor remained unclassified. Matching is now case-insensitive; no error
+detail, query output, row, literal, URL, or connection value is exposed. The
+next exact-head run remains mandatory.
 
 ## Activation readiness follow-up (2026-08-09)
 

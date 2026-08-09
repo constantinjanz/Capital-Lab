@@ -54,7 +54,7 @@ function redactedDirtyPathSummary(status) {
 function redactedPostgresError(stderr) {
   const errorLine = stderr
     .split(/\r?\n/u)
-    .find((line) => /(?:^|:\s)ERROR:/u.test(line))
+    .find((line) => /(?:^|:\s)error:/iu.test(line))
   if (!errorLine) return 'postgres-error-unclassified'
   return errorLine
     .replace(/'[^']*'/gu, "'[redacted-literal]'")

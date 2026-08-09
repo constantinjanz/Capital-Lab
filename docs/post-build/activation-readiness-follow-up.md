@@ -109,7 +109,7 @@ tasks/todo.md
 | `phase-contract.json`                               | `d795b4b100f932479e183316e82710bb5bc25693fee49163f6d1fc019bcb07f8` |
 | `critical-relations.v2.json`                        | `ce65298a8b8e93954ca787b610bcedc988f04ce7645ba971395227aff6ba306d` |
 | `run-activation-phase.mjs`                          | `90d943f61a22e18236912d635438f25490e21838a6a9ff862c654d3251c25b0d` |
-| `export-critical-tables.mjs`                        | `d56af6a598d9be0c9b36dda6749dcf4a948f1f5a6a7f31063c926e6eb98eac59` |
+| `export-critical-tables.mjs`                        | `e6bcd95002b8eb966db7e90713e2005638e4c685ff7565da6f52b61b9c2ad975` |
 | `verify-backup-restore.mjs`                         | `6d9550b154654171830e9360f64fef3b33b9b0563a1a1673e12d39c350730e16` |
 
 The canonical phase contract additionally binds every phase file:
@@ -175,6 +175,9 @@ The canonical phase contract additionally binds every phase file:
 | exact-head application/browser CI, run `31342645890`     |           0 | complete application and 4/4 Playwright gates                                                                       | verified on `b8d3700e...`                                                                                                             |
 | exact-head Supabase start/reset/pgTAP, run `31342645890` |           0 | pinned CLI and all 1,836 assertions                                                                                 | database contract remains green                                                                                                       |
 | exact-head seed-free export/restore, run `31342645890`   |           1 | clean-tree gate passed; first canonical evidence query failed before dumps                                          | literal-/URL-redacted PostgreSQL error classification added; rerun required                                                           |
+| exact-head application/browser CI, run `31342850522`     |           0 | complete application and 4/4 Playwright gates                                                                       | verified on `926af4a9...`                                                                                                             |
+| exact-head Supabase start/reset/pgTAP, run `31342850522` |           0 | pinned CLI and all 1,836 assertions                                                                                 | database contract remains green                                                                                                       |
+| exact-head seed-free export/restore, run `31342850522`   |           1 | pre-dump `psql` failure used lowercase error formatting and remained unclassified                                   | case-insensitive redacted classification added; rerun required                                                                        |
 
 ## Manual gates and stop conditions
 
