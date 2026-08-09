@@ -3,9 +3,11 @@ import { FlaskConical } from 'lucide-react'
 export function DataModeNotice({
   compact = false,
   mode = 'mock',
+  hostedActivity,
 }: {
   compact?: boolean
   mode?: 'mock' | 'supabase'
+  hostedActivity?: string
 }) {
   return (
     <div
@@ -24,8 +26,9 @@ export function DataModeNotice({
           </>
         ) : (
           <>
-            <strong>Hosted database connected.</strong> Market ingestion,
-            scheduler, agent, and broker connections remain disabled.
+            <strong>Hosted database connected.</strong>{' '}
+            {hostedActivity ??
+              'Market ingestion, scheduler, agent, and broker connections remain disabled.'}
           </>
         )}
       </span>

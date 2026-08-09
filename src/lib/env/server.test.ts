@@ -6,6 +6,9 @@ const environmentKeys = [
   'MARKET_DATA_PROVIDER',
   'ALPACA_API_KEY_ID',
   'ALPACA_API_SECRET_KEY',
+  'AGENT_ENABLED',
+  'OPENAI_API_KEY',
+  'SUPABASE_SECRET_KEY',
 ] as const
 
 const originalValues = new Map<string, string | undefined>()
@@ -52,4 +55,26 @@ describe('server environment Alpaca readiness', () => {
       )
     },
   )
+
+  it('requires both server-only provider and database keys only when the agent is enabled', () => {
+    process.env.AGENT_ENABLED = 'true'
+    process.env.OPENAI_API_KEY = 'provider-key'
+
+    expect(() => getServerEnvironment()).toThrow(
+      'SUPABASE_SECRET_KEY is required only when AGENT_ENABLED=true',
+    )
+
+    process.env.SUPABASE_SECRET_KEY = 'server-only-database-key'
+    resetEnvironmentForTests()
+
+    expect(getServerEnvironment()).toMatchObject({
+      AGENT_ENABLED: true,
+      OPENAI_API_KEY: 'provider-key',
+      SUPABASE_SECRET_KEY: 'server-only-database-key',
+    })
+  })
+
+  it('keeps the database mutation key optional while the agent is disabled', () => {
+    expect(getServerEnvironment()).toMatchObject({ AGENT_ENABLED: false })
+  })
 })

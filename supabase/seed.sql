@@ -199,11 +199,11 @@ on conflict (id) do nothing;
 
 insert into public.event_revisions(
   id, event_id, owner_id, revision_no, author, title, sanitized_text, content_hash,
-  published_at, first_seen_at, available_at, source_quality
+  published_at, first_seen_at, available_at, source_quality, created_at
 ) values
-  ('82100000-0000-0000-0000-000000000001', '82000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 1, 'Synthetic authority', 'Synthetic policy event', 'Synthetic fixture: a policy announcement changes sector assumptions.', repeat('e',64), '2026-08-03 13:49:00+00', '2026-08-03 13:50:00+00', '2026-08-03 13:50:05+00', 0.80),
-  ('82100000-0000-0000-0000-000000000002', '82000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 1, 'Synthetic issuer', 'Synthetic SEC filing', 'Synthetic fixture: a filing reports a material business update.', repeat('f',64), '2026-08-03 13:54:00+00', '2026-08-03 13:55:00+00', '2026-08-03 13:55:05+00', 0.90),
-  ('82100000-0000-0000-0000-000000000003', '82000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001', 1, 'Synthetic publisher', 'Synthetic irrelevant story', 'Synthetic fixture with no expected market relevance.', repeat('0',64), '2026-08-03 13:57:00+00', '2026-08-03 13:58:00+00', '2026-08-03 13:58:05+00', 0.50)
+  ('82100000-0000-0000-0000-000000000001', '82000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 1, 'Synthetic authority', 'Synthetic policy event', 'Synthetic fixture: a policy announcement changes sector assumptions.', repeat('e',64), '2026-08-03 13:49:00+00', '2026-08-03 13:50:00+00', '2026-08-03 13:50:05+00', 0.80, '2026-08-03 13:50:05+00'),
+  ('82100000-0000-0000-0000-000000000002', '82000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 1, 'Synthetic issuer', 'Synthetic SEC filing', 'Synthetic fixture: a filing reports a material business update.', repeat('f',64), '2026-08-03 13:54:00+00', '2026-08-03 13:55:00+00', '2026-08-03 13:55:05+00', 0.90, '2026-08-03 13:55:05+00'),
+  ('82100000-0000-0000-0000-000000000003', '82000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001', 1, 'Synthetic publisher', 'Synthetic irrelevant story', 'Synthetic fixture with no expected market relevance.', repeat('0',64), '2026-08-03 13:57:00+00', '2026-08-03 13:58:00+00', '2026-08-03 13:58:05+00', 0.50, '2026-08-03 13:58:05+00')
 on conflict (id) do nothing;
 
 insert into public.simulation_accounts(id, experiment_id, owner_id, base_currency, opened_at, closed_at, status)
