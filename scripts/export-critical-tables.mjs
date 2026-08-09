@@ -6,6 +6,7 @@ import {
   buildCriticalEvidenceSql,
   canonicalJson,
   loadCriticalRelationContract,
+  postgresUrlToLibpqEnv,
   sha256,
 } from './critical-backup-contract.mjs'
 
@@ -95,21 +96,7 @@ async function spawnBounded(command, args, options = {}) {
   })
 }
 
-function validateDatabaseUrl(value) {
-  const parsed = new URL(value)
-  if (parsed.protocol !== 'postgresql:' || parsed.hash) {
-    fail('CAPITAL_LAB_DATABASE_URL must be a PostgreSQL URL')
-  }
-  if (
-    !['localhost', '127.0.0.1', '::1'].includes(parsed.hostname) &&
-    parsed.searchParams.get('sslmode') !== 'verify-full'
-  ) {
-    fail('Non-local backup sources require sslmode=verify-full')
-  }
-  return parsed
-}
-
-async function psqlEvidence(psql, databaseUrl, sql) {
+async function psqlEvidence(psql, connectionEnv, sql) {
   const result = await spawnBounded(
     psql,
     [
@@ -123,7 +110,7 @@ async function psqlEvidence(psql, databaseUrl, sql) {
     {
       env: {
         ...process.env,
-        PGDATABASE: databaseUrl,
+        ...connectionEnv,
         PGCONNECT_TIMEOUT: '10',
         PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
       },
@@ -168,7 +155,7 @@ async function main() {
   const databaseUrl = process.env.CAPITAL_LAB_DATABASE_URL
   if (!databaseUrl)
     fail('CAPITAL_LAB_DATABASE_URL is required and never printed')
-  validateDatabaseUrl(databaseUrl)
+  const sourceConnection = postgresUrlToLibpqEnv(databaseUrl)
 
   const contractPath = path.join(
     workspace,
@@ -222,7 +209,11 @@ async function main() {
     ),
   }
   const evidenceSql = buildCriticalEvidenceSql(contract)
-  const evidenceBefore = await psqlEvidence(psql, databaseUrl, evidenceSql)
+  const evidenceBefore = await psqlEvidence(
+    psql,
+    sourceConnection.libpqEnv,
+    evidenceSql,
+  )
   const dumpCommands = [
     [
       'db',
@@ -250,7 +241,11 @@ async function main() {
     if (result.code !== 0 || result.signal)
       fail('Supabase database dump failed')
   }
-  const evidenceAfter = await psqlEvidence(psql, databaseUrl, evidenceSql)
+  const evidenceAfter = await psqlEvidence(
+    psql,
+    sourceConnection.libpqEnv,
+    evidenceSql,
+  )
   if (
     evidenceBefore.databaseFingerprint !== evidenceAfter.databaseFingerprint ||
     canonicalJson(evidenceBefore) !== canonicalJson(evidenceAfter)

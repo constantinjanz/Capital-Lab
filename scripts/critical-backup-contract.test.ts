@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   assertBackupManifest,
   assertRestoredEvidence,
+  postgresUrlToLibpqEnv,
 } from './critical-backup-contract.mjs'
 
 const hashA = 'a'.repeat(64)
@@ -59,6 +60,47 @@ const expected = {
 }
 
 describe('critical backup contract', () => {
+  it('decomposes a loopback URL into explicit libpq fields without a URI', () => {
+    const parsed = postgresUrlToLibpqEnv(
+      'postgresql://postgres:p%40ss@127.0.0.1:54322/capital_lab',
+      { localOnly: true },
+    )
+    expect(parsed.libpqEnv).toEqual({
+      PGDATABASE: 'capital_lab',
+      PGHOST: '127.0.0.1',
+      PGPASSWORD: 'p@ss',
+      PGPORT: '54322',
+      PGSSLMODE: 'disable',
+      PGUSER: 'postgres',
+    })
+  })
+
+  it('requires verify-full for non-loopback sources', () => {
+    expect(() =>
+      postgresUrlToLibpqEnv(
+        'postgresql://operator:password@db.example.com/capital_lab',
+      ),
+    ).toThrow('target or TLS policy')
+    expect(
+      postgresUrlToLibpqEnv(
+        'postgresql://operator:password@db.example.com/capital_lab?sslmode=verify-full',
+      ).libpqEnv.PGSSLMODE,
+    ).toBe('verify-full')
+  })
+
+  it('rejects fragments and non-allowlisted connection parameters', () => {
+    expect(() =>
+      postgresUrlToLibpqEnv(
+        'postgresql://postgres:postgres@127.0.0.1:54322/postgres#fragment',
+      ),
+    ).toThrow('target or TLS policy')
+    expect(() =>
+      postgresUrlToLibpqEnv(
+        'postgresql://postgres:postgres@127.0.0.1:54322/postgres?application_name=unsafe',
+      ),
+    ).toThrow('target or TLS policy')
+  })
+
   it('rejects HEAD, migration checksum, and relation-set drift', () => {
     expect(() => assertBackupManifest(manifest, expected)).not.toThrow()
     expect(() =>

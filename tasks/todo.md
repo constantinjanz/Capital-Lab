@@ -93,6 +93,14 @@ green. The pre-dump `psql` failure uses lowercase `psql: error:` formatting, so
 the redactor remained unclassified. Matching is now case-insensitive; no error
 detail, query output, row, literal, URL, or connection value is exposed. The
 next exact-head run remains mandatory.
+Run `31343009696` identified the pre-dump failure: libpq ignored the full URI
+when placed only in `PGDATABASE` and fell back to the default local socket.
+Export and restore now use one strict parser and separate non-logged `PGHOST`,
+`PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`, and `PGSSLMODE` fields. The
+parser requires credentials/database, exact port bounds, loopback for restore,
+`verify-full` for non-loopback sources, and rejects fragments or non-allowlisted
+parameters. Eight focused contract tests pass; exact-head restore remains
+mandatory.
 
 ## Activation readiness follow-up (2026-08-09)
 

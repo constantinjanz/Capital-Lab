@@ -20,6 +20,55 @@ export function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
+export function postgresUrlToLibpqEnv(value, { localOnly = false } = {}) {
+  let parsed
+  try {
+    parsed = new URL(value)
+  } catch {
+    throw new Error('PostgreSQL connection URL is invalid')
+  }
+  const hostname = parsed.hostname.replace(/^\[(.*)\]$/u, '$1')
+  const loopback = ['localhost', '127.0.0.1', '::1'].includes(hostname)
+  const database = decodeURIComponent(parsed.pathname.slice(1))
+  const username = decodeURIComponent(parsed.username)
+  const password = decodeURIComponent(parsed.password)
+  const port = parsed.port || '5432'
+  const searchKeys = [...parsed.searchParams.keys()]
+  const sslmode = parsed.searchParams.get('sslmode')
+  if (
+    parsed.protocol !== 'postgresql:' ||
+    parsed.hash ||
+    !hostname ||
+    !username ||
+    !password ||
+    !database ||
+    database.includes('/') ||
+    !/^\d{1,5}$/u.test(port) ||
+    Number(port) < 1 ||
+    Number(port) > 65535 ||
+    searchKeys.some((key) => key !== 'sslmode') ||
+    searchKeys.filter((key) => key === 'sslmode').length > 1 ||
+    (loopback && sslmode !== null && sslmode !== 'disable') ||
+    (!loopback && sslmode !== 'verify-full') ||
+    (localOnly && !loopback)
+  ) {
+    throw new Error('PostgreSQL connection target or TLS policy is invalid')
+  }
+  return {
+    database,
+    hostname,
+    port,
+    libpqEnv: {
+      PGDATABASE: database,
+      PGHOST: hostname,
+      PGPASSWORD: password,
+      PGPORT: port,
+      PGSSLMODE: loopback ? 'disable' : 'verify-full',
+      PGUSER: username,
+    },
+  }
+}
+
 export async function loadCriticalRelationContract(filename) {
   const bytes = await readFile(filename)
   const contract = JSON.parse(bytes.toString('utf8'))

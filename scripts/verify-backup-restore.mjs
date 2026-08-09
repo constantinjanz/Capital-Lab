@@ -8,6 +8,7 @@ import {
   buildCriticalEvidenceSql,
   canonicalJson,
   loadCriticalRelationContract,
+  postgresUrlToLibpqEnv,
   sha256,
 } from './critical-backup-contract.mjs'
 
@@ -38,7 +39,7 @@ function git(args, cwd) {
   return result.stdout.trim()
 }
 
-async function runPsql(psql, databaseUrl, args, input = undefined) {
+async function runPsql(psql, connectionEnv, args, input = undefined) {
   return new Promise((resolve, reject) => {
     let stdout = ''
     let stderr = ''
@@ -48,7 +49,7 @@ async function runPsql(psql, databaseUrl, args, input = undefined) {
       {
         env: {
           ...process.env,
-          PGDATABASE: databaseUrl,
+          ...connectionEnv,
           PGCONNECT_TIMEOUT: '10',
           PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
         },
@@ -100,14 +101,9 @@ async function main() {
   const databaseValue = process.env.CAPITAL_LAB_RESTORE_DATABASE_URL
   if (!databaseValue)
     fail('CAPITAL_LAB_RESTORE_DATABASE_URL is required and never printed')
-  const databaseUrl = new URL(databaseValue)
-  if (
-    databaseUrl.protocol !== 'postgresql:' ||
-    !['localhost', '127.0.0.1', '::1'].includes(databaseUrl.hostname) ||
-    databaseUrl.hash
-  ) {
-    fail('Restore verification is restricted to an explicit loopback database')
-  }
+  const restoreConnection = postgresUrlToLibpqEnv(databaseValue, {
+    localOnly: true,
+  })
 
   const workspace = await realpath(process.cwd())
   if (git(['status', '--porcelain=v1', '--untracked-files=all'], workspace)) {
@@ -170,7 +166,7 @@ async function main() {
   }
   const preflight = await runPsql(
     psql,
-    databaseUrl.toString(),
+    restoreConnection.libpqEnv,
     ['--tuples-only', '--no-align'],
     `select jsonb_build_object(
       'user_relations', count(*) filter (where namespace.nspname in ('public','private','supabase_migrations')),
@@ -193,20 +189,20 @@ async function main() {
     fail('Restore target fingerprint equals the source database')
   }
 
-  await runPsql(psql, databaseUrl.toString(), ['--file', artifacts.roles])
-  await runPsql(psql, databaseUrl.toString(), [
+  await runPsql(psql, restoreConnection.libpqEnv, ['--file', artifacts.roles])
+  await runPsql(psql, restoreConnection.libpqEnv, [
     '--single-transaction',
     '--file',
     artifacts.schema,
   ])
-  await runPsql(psql, databaseUrl.toString(), [
+  await runPsql(psql, restoreConnection.libpqEnv, [
     '--single-transaction',
     '--file',
     artifacts.data,
   ])
   const evidenceOutput = await runPsql(
     psql,
-    databaseUrl.toString(),
+    restoreConnection.libpqEnv,
     ['--tuples-only', '--no-align'],
     buildCriticalEvidenceSql(contract),
   )
