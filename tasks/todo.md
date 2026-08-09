@@ -67,6 +67,13 @@ future slot with a lease based only on current server time, violating
 The runtime now derives lease expiry from the greater of server time and the
 server-planned slot, preserving the table invariant for retries and future
 slots. A fresh exact-head run remains mandatory.
+Run `31342252647` passed application, browser, pinned Supabase CLI startup,
+reset, and all 14 pgTAP files / 1,836 assertions. The seed-free backup gate was
+reached for the first time and rejected the post-toolchain checkout as dirty
+before any dump. The exporter now reports only Git status plus repository path
+(with `.env*`/`.npmrc` path redaction), never contents or credentials, so the
+next ephemeral run can identify and explicitly ignore or eliminate only the
+actual generated path. Clean-tree rejection remains unchanged.
 
 ## Activation readiness follow-up (2026-08-09)
 

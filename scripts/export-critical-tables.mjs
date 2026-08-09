@@ -36,6 +36,21 @@ function git(args, cwd) {
   return result.stdout.trim()
 }
 
+function redactedDirtyPathSummary(status) {
+  return status
+    .split(/\r?\n/u)
+    .filter(Boolean)
+    .map((line) => {
+      const state = line.slice(0, 2)
+      const filePath = line.slice(3).replaceAll('\\', '/')
+      const sensitivePath = filePath
+        .split('/')
+        .some((part) => /^\.env(?:\.|$)/iu.test(part) || part === '.npmrc')
+      return `${state}:${sensitivePath ? '[sensitive-path]' : filePath}`
+    })
+    .join(', ')
+}
+
 async function spawnBounded(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     let stdout = ''
@@ -114,8 +129,14 @@ async function main() {
     fail('Usage: pnpm backup:critical -- --output-dir=<external-directory>')
   }
   const workspace = await realpath(process.cwd())
-  if (git(['status', '--porcelain=v1', '--untracked-files=all'], workspace)) {
-    fail('Backup creation requires a completely clean Working Tree')
+  const dirtyStatus = git(
+    ['status', '--porcelain=v1', '--untracked-files=all'],
+    workspace,
+  )
+  if (dirtyStatus) {
+    fail(
+      `Backup creation requires a completely clean Working Tree; path-only evidence: ${redactedDirtyPathSummary(dirtyStatus)}`,
+    )
   }
   const commitSha = git(['rev-parse', 'HEAD'], workspace)
   if (!/^[0-9a-f]{40}$/.test(commitSha)) fail('Exact Git HEAD is invalid')
