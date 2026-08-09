@@ -3492,7 +3492,9 @@ begin
     ) values (
       slot_identifier, campaign.owner_id, null,
       'no_ai_shadow_infrastructure_dry_run', 'supabase', event_row.exchange_session_id,
-      event_row.expected_at, server_now + interval '120 seconds', 1, 'running', null,
+      event_row.expected_at,
+      greatest(server_now, event_row.expected_at) + interval '120 seconds',
+      1, 'running', null,
       event_row.session_date, event_row.slot_number, p_cycle_id, server_now, 1
     ) on conflict (slot_key) do nothing;
     get diagnostics inserted_count = row_count;

@@ -60,6 +60,13 @@ three narrow fixed-search-path public wrappers, the fixture creates every
 required false setting explicitly, and internal writers open the mutation gate
 only around individual writes and close it before return. Exact-head rerun is
 still mandatory.
+Run `31342073726` passed all non-database gates and reduced pgTAP to three
+cascade assertions: the accelerated deterministic 52/104 test proposed a
+future slot with a lease based only on current server time, violating
+`lease_until > slot_at` before `ON CONFLICT` could use the preclaimed fixture.
+The runtime now derives lease expiry from the greater of server time and the
+server-planned slot, preserving the table invariant for retries and future
+slots. A fresh exact-head run remains mandatory.
 
 ## Activation readiness follow-up (2026-08-09)
 
