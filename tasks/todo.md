@@ -2,6 +2,21 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## Post-build hosting and activation audit (2026-08-09)
+
+- [x] Re-audit repository instructions, architecture, dependencies, migrations, runtime boundaries, CI, environment examples, and dirty worktree without overwriting unrelated user changes.
+- [x] Remove the Vercel Cron GET path and prepare the single dormant Supabase Cron -> pg_net -> protected Production POST topology with 110/120/300-second deadlines.
+- [x] Add fail-closed agent/paid/Canary/autonomous/Sol/web/broker/scheduler flags and mandatory Preview no-op behavior.
+- [x] Version and expire exact Luna/Terra/Sol pricing; add the free model-list check and a fully gated local-only paid Canary without running a paid call.
+- [x] Enforce daily/monthly/experiment/lifetime budget defaults, atomic experiment serialization, persistent 70/90/100 alerts, and conservative unknown usage.
+- [x] Add scheduler cycle identity, lease/heartbeat/retry/reconciler evidence, Sol isolation, storage thresholds, audited retention, and dashboard projections in one unapplied migration.
+- [x] Add dormant activation/shutdown SQL, backup/export and local-only restore scripts, and the Notion runtime boundary.
+- [x] Compile the migration and reach pgTAP assertion 42 against the hosted schema inside rollback-only transactions; no hosted schema/data persisted.
+- [ ] Complete final format/lint/type/unit/safety/build/database/Preview gates and record exact results in `docs/post-build/hosting-safety-audit.md`.
+- [ ] Rotate the server key disclosed in conversation, manually verify Vercel Production flag scopes, OpenAI credit/expiry/project/spend limit, and approve the migration before any activation.
+
+Scope guard: this audit ends with agent, paid calls, Canary, autonomous paper execution, Sol, web search, broker paths, and both scheduler jobs disabled. It does not apply the migration, run the Canary, connect Notion, or start the 48-hour dry run.
+
 ## Plan
 
 ### Structured paper-agent orchestration

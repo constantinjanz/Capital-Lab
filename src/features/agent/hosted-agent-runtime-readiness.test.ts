@@ -4,6 +4,7 @@ import { deriveHostedAgentRuntimeReadiness } from './hosted-agent-runtime-readin
 
 const environment = {
   AGENT_ENABLED: false,
+  PAID_MODEL_CALLS_ENABLED: false,
   AGENT_EXECUTION_MODE: 'shadow' as const,
   OPENAI_API_KEY: undefined,
   SUPABASE_SECRET_KEY: undefined,
@@ -22,6 +23,7 @@ describe('deriveHostedAgentRuntimeReadiness', () => {
       deriveHostedAgentRuntimeReadiness({
         ...environment,
         AGENT_ENABLED: true,
+        PAID_MODEL_CALLS_ENABLED: true,
         OPENAI_API_KEY: 'provider-key',
       }),
     ).toMatchObject({ ready: false, code: 'environment_invalid' })
@@ -32,6 +34,7 @@ describe('deriveHostedAgentRuntimeReadiness', () => {
       deriveHostedAgentRuntimeReadiness({
         ...environment,
         AGENT_ENABLED: true,
+        PAID_MODEL_CALLS_ENABLED: true,
         AGENT_EXECUTION_MODE: 'live_paper',
         OPENAI_API_KEY: 'provider-key',
         SUPABASE_SECRET_KEY: 'database-key',
@@ -44,6 +47,7 @@ describe('deriveHostedAgentRuntimeReadiness', () => {
       deriveHostedAgentRuntimeReadiness({
         ...environment,
         AGENT_ENABLED: true,
+        PAID_MODEL_CALLS_ENABLED: true,
         OPENAI_API_KEY: 'provider-key',
         SUPABASE_SECRET_KEY: 'database-key',
       }),

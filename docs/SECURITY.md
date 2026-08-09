@@ -22,4 +22,10 @@ Official-calendar setup is a distinct owner-only Server Action over a fixed-inpu
 
 Secrets stay server-side and are filtered from structured logs. Health checks reveal status, not secret values. Manual agent/cycle endpoints are owner-only and rate-limited. External content is sanitized and delimited as untrusted data.
 
+The remote scheduler has one authority: Supabase Cron. Its only application boundary is `POST /api/internal/scheduler`; the obsolete Vercel Cron GET route was removed. Authentication hashes the complete bearer values and compares them in constant time. Invalid auth returns 401 before JSON parsing, ID allocation, database access, or logging any secret. Preview is a mandatory no-op. Production dispatch additionally requires `SCHEDULER_PROVIDER=supabase`, `SCHEDULER_ENABLED=true`, and every agent/paid/Canary/web/Sol/autonomous/broker gate false. Critical writes are awaited before the response; timeouts are returned as `unknown` and never backgrounded.
+
+Only `src/providers/openai/gateway.ts` imports the OpenAI SDK. `GET /v1/models`, structured inference, web research, and the paid Canary all share that boundary with SDK retries disabled. The model-list result contains no key prefix, length, hash, or fragment. The optional Canary is not a route, action, UI control, or Cron job.
+
+The post-build migration adds forced RLS and explicit grants for budget threshold alerts, paired model comparisons, storage snapshots, retention audits, scheduler reconciliation, and Canary locks. Security-definer helpers use an empty fixed search path; public wrappers grant scheduler/Canary mutation only to `service_role`. A database trigger rejects any paper order originating from a Sol shadow decision.
+
 Run `pnpm test:safety` to scan for forbidden brokerage hosts, endpoints, SDKs, and credential names. Treat a failure as a release blocker.

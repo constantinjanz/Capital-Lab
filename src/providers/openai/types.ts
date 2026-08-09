@@ -45,9 +45,24 @@ export type WebResearchResult = {
   finishState: 'completed' | 'incomplete'
 }
 
+export type PaidCanaryRequest = {
+  model: ModelId
+}
+
+export type PaidCanaryResult = {
+  responseId: string
+  outputText: string
+  usage: TokenUsage
+  providerInputTokens: string
+  reasoningTokens: string
+  latencyMs: number
+  finishState: 'completed' | 'incomplete'
+}
+
 export interface OpenAIGateway {
   generateStructured<TSchema extends z.ZodType>(
     request: StructuredGenerationRequest<TSchema>,
   ): Promise<StructuredGenerationResult<z.infer<TSchema>>>
   researchWeb(request: WebResearchRequest): Promise<WebResearchResult>
+  runPaidCanary(request: PaidCanaryRequest): Promise<PaidCanaryResult>
 }

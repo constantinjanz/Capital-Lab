@@ -46,6 +46,28 @@ Sign in as the owner and save the fixed calendar from Markets only after its mig
 
 Unknown OpenAI reservations are never auto-released. Compare stored response IDs and provider usage records; settle or release through an audited owner action. If actual cost exceeds the reservation, record the overage and pause.
 
+## Free OpenAI metadata check
+
+`pnpm openai:models:check` calls only `GET /v1/models` through the central server gateway and never creates a response. It reports `not_configured`, `authentication_error`, `permission_error`, `model_missing`, `rate_limited`, `timeout_error`, `network_error`, or `ok`, with booleans for the three exact model IDs and no key metadata. Success proves authentication and model visibility only; it does not prove prepaid credit or inference billing readiness.
+
+Manually verify the correct OpenAI project, approximately USD 50 active prepaid credit, credit expiry, billing/payment health, and a USD 10 monthly project hard-spend limit at [Billing overview](https://platform.openai.com/settings/organization/billing/overview). Never put an `OPENAI_ADMIN_KEY` in Vercel, Supabase, source control, logs, or this app.
+
+## Optional paid Canary
+
+The Canary is local CLI only. It is blocked unless agent/autonomous/web are off, paid calls and Canary are ephemerally on, the exact `MAX_0_01_USD` confirmation is present, current pricing exists, the normal database budget reservation succeeds, and an atomic operation UUID is claimed. It reserves all three fixed Luna/Terra/Sol calls before sending, enforces a combined USD 0.01 ceiling, uses no tools/files/web/context/retries, and marks possibly accepted failures unknown. Do not run it without separate approval. See the exact command in `docs/post-build/hosting-safety-audit.md`.
+
+## Scheduler recovery and shutdown
+
+Every remote request is POST-only, bearer-protected, uncached, Production-only, correlated, and awaited. A duplicate experiment/session/quarter-hour slot cannot create a second slot, reservation, model request, order intent, or fill. The no-AI dry-run contract records only a skipped slot/run with all side-effect counts exactly zero. The Reconciler marks expired leases `timed_out`, creates one deduplicated audit event, and never retries a provider request.
+
+On any unknown result, run `supabase/activation/disable-hosted-scheduler.sql`, set Vercel `SCHEDULER_ENABLED=false`, and inspect the correlation/cycle IDs before considering another delivery. Do not release an unknown AI reservation automatically.
+
+## Storage and backups
+
+The AI-free Reconciler captures at most one storage snapshot per UTC day. At 60% it warns, 75% identifies archival pressure, 85% blocks nonessential raw ingestion, and 90% disables scheduler/agent controls and emergency-pauses experiments. Cleanup only compacts regenerable raw payloads that already have an external storage path and an effective retention policy; hashes, source/time metadata, ledger, orders, fills, decisions, budget, and comparison evidence remain immutable.
+
+Follow `docs/BACKUP_AND_RESTORE.md` weekly. A backup is not valid until a local/disposable restore test passes, and it must be stored outside the Capital Lab Supabase project.
+
 ## Ledger reconciliation
 
 Rebuild cash, lots, positions, realized P&L, fees, exposure, and margin from immutable fills/ledger/action events. Any exact mismatch pauses the experiment. Administrative repair may rebuild only materialized projections; never rewrite history.

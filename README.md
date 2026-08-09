@@ -59,15 +59,23 @@ Live Supabase auth requires the public URL/publishable key pair. The first-owner
 
 The Alpaca integration is a data-only latest-quote and completed raw one-minute-bar adapter restricted to `https://data.alpaca.markets`; it has no brokerage client or order-forwarding endpoint. Hosted setup creates a disabled `alpaca_iex` reference source. A separately authenticated owner action may enable that exact IEX source and run one bounded five-symbol batch when server-only Alpaca Market Data credentials are present, `MARKET_DATA_PROVIDER=alpaca`, `ALPACA_DATA_FEED=iex`, `SCHEDULER_PROVIDER=manual`, and the agent is disabled. A separate owner-reviewed calendar action persists the fixed official 2026 XNAS/ARCX regular-session manifest from the Nasdaq Trader and NYSE calendars; its two provenance sources stay disabled and it performs no runtime website request. Mock remains the default, page loads never contact Alpaca or an exchange site, and neither action enables a scheduler, AI, account, or order API.
 
-OpenAI remains off until all of the following are deliberately configured:
+OpenAI remains off by default. The checked-in safe state is:
 
 ```dotenv
-OPENAI_API_KEY=...
-AGENT_ENABLED=true
-AGENT_EXECUTION_MODE=shadow
+AGENT_ENABLED=false
+AGENT_EXECUTION_MODE=mock
+AUTONOMOUS_PAPER_EXECUTION_ENABLED=false
+PAID_MODEL_CALLS_ENABLED=false
+OPENAI_CANARY_ENABLED=false
+OPENAI_WEB_SEARCH_ENABLED=false
+SOL_CHALLENGER_ENABLED=false
+SOL_LIVE_EXECUTION_ENABLED=false
+REAL_BROKER_ENABLED=false
+SCHEDULER_ENABLED=false
+SCHEDULER_PROVIDER=supabase
 ```
 
-Keep `AGENT_EXECUTION_MODE=shadow`, `SOL_ENABLED=false`, and `OPENAI_WEB_SEARCH_ENABLED=false` during initial review. All model calls reserve worst-case cost before leaving the database and settle actual usage afterward.
+`pnpm openai:models:check` is a non-generating `GET /v1/models` metadata check. The optional paid Canary is local-only and remains unusable without seven simultaneous gates plus an exact confirmation. All paid model calls reserve worst-case cost before leaving the database and settle actual usage afterward.
 
 ## Research imports
 
@@ -79,7 +87,7 @@ Imports support preview before commit, content hashes, deterministic chunks, dup
 
 ## Scheduler
 
-Exactly one provider may be active: `manual`, `vercel`, or `supabase`. The checked-in deployment keeps remote scheduling disabled. An authenticated owner may explicitly submit the reviewed manual hosted envelope for an active replay/shadow experiment; the database checks the locked 2026 XNAS/ARCX session, serializes one 15-minute slot, and persists only a skipped scheduler/simulator journal because provider runtime, AI, orders, fills, positions, and financial writes remain off. Vercel or Supabase scheduling requires a later reviewed activation; never enable both.
+Exactly one remote provider is supported: Supabase. The dormant topology is `Supabase Cron -> pg_net -> protected Vercel Production POST -> guards -> Supabase`. Vercel Cron is not configured. The checked-in deployment and database controls keep remote scheduling disabled; the two Supabase jobs exist only as a separately reviewed activation script. An authenticated owner may still submit the reviewed manual hosted envelope, which persists only skipped simulator evidence.
 
 ## Important limitations
 

@@ -6,11 +6,91 @@ import type { z } from 'zod'
 
 import type {
   OpenAIGateway,
+  PaidCanaryRequest,
+  PaidCanaryResult,
   StructuredGenerationRequest,
   StructuredGenerationResult,
   WebResearchRequest,
   WebResearchResult,
 } from './types'
+
+type RequiredModelId = 'gpt-5.6-luna' | 'gpt-5.6-terra' | 'gpt-5.6-sol'
+
+export type OpenAIModelAccessStatus =
+  | 'not_configured'
+  | 'ok'
+  | 'authentication_error'
+  | 'permission_error'
+  | 'model_missing'
+  | 'rate_limited'
+  | 'timeout_error'
+  | 'network_error'
+
+export type OpenAIModelAccessResult = {
+  status: OpenAIModelAccessStatus
+  requiredModels: Record<RequiredModelId, boolean>
+}
+
+type ModelAccessDependencies = {
+  listModels?(apiKey: string, timeoutMs: number): Promise<readonly string[]>
+}
+
+function hiddenModelMap(
+  visibleModels: ReadonlySet<string> = new Set(),
+): OpenAIModelAccessResult['requiredModels'] {
+  return {
+    'gpt-5.6-luna': visibleModels.has('gpt-5.6-luna'),
+    'gpt-5.6-terra': visibleModels.has('gpt-5.6-terra'),
+    'gpt-5.6-sol': visibleModels.has('gpt-5.6-sol'),
+  }
+}
+
+function errorStatus(error: unknown): OpenAIModelAccessStatus {
+  const status =
+    error && typeof error === 'object' && 'status' in error
+      ? (error as { status?: unknown }).status
+      : undefined
+  if (status === 401) return 'authentication_error'
+  if (status === 403) return 'permission_error'
+  if (status === 429) return 'rate_limited'
+  const name = error instanceof Error ? error.name : ''
+  return name.includes('Timeout') ? 'timeout_error' : 'network_error'
+}
+
+/**
+ * Free, non-generating activation metadata check. The result deliberately
+ * contains no key metadata and does not prove billing credit or inference.
+ */
+export async function checkRequiredOpenAIModelAccess(
+  apiKey: string | undefined,
+  timeoutMs = 10_000,
+  dependencies: ModelAccessDependencies = {},
+): Promise<OpenAIModelAccessResult> {
+  if (!apiKey) {
+    return { status: 'not_configured', requiredModels: hiddenModelMap() }
+  }
+
+  const listModels =
+    dependencies.listModels ??
+    (async (key: string, timeout: number) => {
+      const client = new OpenAI({ apiKey: key, maxRetries: 0, timeout })
+      const page = await client.models.list()
+      return page.data.map((model) => model.id)
+    })
+
+  try {
+    const visibleModels = new Set(await listModels(apiKey, timeoutMs))
+    const requiredModels = hiddenModelMap(visibleModels)
+    return {
+      status: Object.values(requiredModels).every(Boolean)
+        ? 'ok'
+        : 'model_missing',
+      requiredModels,
+    }
+  } catch (error) {
+    return { status: errorStatus(error), requiredModels: hiddenModelMap() }
+  }
+}
 
 function usageField(record: unknown, path: readonly string[]): number {
   let current = record
@@ -147,6 +227,27 @@ export class ResponsesOpenAIGateway implements OpenAIGateway {
       reasoningTokens: reasoningTokens(response.usage),
       latencyMs: Math.round(performance.now() - startedAt),
       finishState: 'completed',
+    }
+  }
+
+  async runPaidCanary(request: PaidCanaryRequest): Promise<PaidCanaryResult> {
+    const startedAt = performance.now()
+    const response = await this.client.responses.create({
+      model: request.model,
+      store: false,
+      input: 'Reply with exactly OK.',
+      reasoning: { effort: 'none' },
+      max_output_tokens: 16,
+      tools: [],
+    })
+    return {
+      responseId: response.id,
+      outputText: response.output_text,
+      usage: responseUsage(response.usage, 0),
+      providerInputTokens: providerInputTokens(response.usage),
+      reasoningTokens: reasoningTokens(response.usage),
+      latencyMs: Math.round(performance.now() - startedAt),
+      finishState: response.status === 'completed' ? 'completed' : 'incomplete',
     }
   }
 }

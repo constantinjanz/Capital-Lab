@@ -13,8 +13,18 @@ import { ProgressMeter } from '@/components/ui/progress-meter'
 import { StatusPill } from '@/components/ui/status-pill'
 import { TableShell } from '@/components/ui/table-shell'
 import type { CostViewModel } from '@/lib/mock/types'
+import type { HostedBudgetStatus } from '@/lib/supabase/budget-status-read-repository'
+import type { HostedStorageStatus } from '@/lib/supabase/storage-status-read-repository'
 
-export function CostsView({ data }: { data: CostViewModel }) {
+export function CostsView({
+  data,
+  storage,
+  budget,
+}: {
+  data: CostViewModel
+  storage: HostedStorageStatus
+  budget: HostedBudgetStatus
+}) {
   return (
     <div className="page-stack">
       <PageHeader
@@ -168,6 +178,122 @@ export function CostsView({ data }: { data: CostViewModel }) {
           </p>
         </Panel>
       </div>
+      <Panel eyebrow="Supabase Free guard" title="Database storage">
+        {!storage.available ? (
+          <p className="muted-copy">
+            Storage monitoring is unavailable until the reviewed audit migration
+            is applied and the AI-free monitor captures its first snapshot.
+          </p>
+        ) : (
+          <div className="dashboard-grid dashboard-grid--split">
+            <div className="threshold-list">
+              <div>
+                <span className="threshold-list__value">
+                  {storage.utilizationPercent}%
+                </span>
+                <span>
+                  <strong>{storage.thresholdState}</strong>
+                  <small>
+                    {storage.databaseBytes} / {storage.limitBytes} bytes
+                  </small>
+                </span>
+                <ShieldCheck size={16} aria-hidden="true" />
+              </div>
+              <div>
+                <span className="threshold-list__value">7d</span>
+                <span>
+                  <strong>{storage.growth7Bytes} bytes</strong>
+                  <small>30d growth: {storage.growth30Bytes} bytes</small>
+                </span>
+              </div>
+              <div>
+                <span className="threshold-list__value">90%</span>
+                <span>
+                  <strong>
+                    {storage.forecastDays.pause_90 === null
+                      ? 'Forecast pending'
+                      : `${storage.forecastDays.pause_90} days`}
+                  </strong>
+                  <small>
+                    Last cleanup: {storage.lastCleanupAt ?? 'not yet run'} (
+                    {storage.lastCleanupCount} compacted)
+                  </small>
+                </span>
+              </div>
+            </div>
+            <TableShell caption="Largest database relations">
+              <thead>
+                <tr>
+                  <th scope="col">Relation</th>
+                  <th scope="col" className="numeric">
+                    Bytes
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {storage.largestRelations.slice(0, 8).map((relation) => (
+                  <tr key={`${relation.schema}.${relation.relation}`}>
+                    <td className="mono">
+                      {relation.schema}.{relation.relation}
+                    </td>
+                    <td className="numeric mono">{relation.totalBytes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </TableShell>
+          </div>
+        )}
+      </Panel>
+      <Panel eyebrow="Durable budget evidence" title="Hosted threshold alerts">
+        {!budget.available ? (
+          <p className="muted-copy">
+            Hosted budget alerts are unavailable until the reviewed migration is
+            applied. Paid calls remain blocked by default.
+          </p>
+        ) : (
+          <>
+            <p className="muted-copy">
+              Day ${budget.limits.tradingDaySoft} soft / $
+              {budget.limits.tradingDayHard} hard · month $
+              {budget.limits.monthlySoft} soft / ${budget.limits.monthlyHard}{' '}
+              hard · experiment ${budget.limits.experimentHard} · lifetime $
+              {budget.limits.lifetimeHard}
+            </p>
+            <TableShell caption="Persistent deduplicated budget alerts">
+              <thead>
+                <tr>
+                  <th scope="col">Scope</th>
+                  <th scope="col">Threshold</th>
+                  <th scope="col" className="numeric">
+                    Used / limit
+                  </th>
+                  <th scope="col">Emitted</th>
+                </tr>
+              </thead>
+              <tbody>
+                {budget.alerts.length === 0 ? (
+                  <tr>
+                    <td colSpan={4}>No 70/90/100% alert has been emitted.</td>
+                  </tr>
+                ) : (
+                  budget.alerts.map((alert) => (
+                    <tr
+                      key={`${alert.scopeKind}:${alert.scopeKey}:${alert.thresholdPercent}`}
+                    >
+                      <td>{alert.scopeKind}</td>
+                      <td>{alert.thresholdPercent}%</td>
+                      <td className="numeric mono">
+                        ${alert.usedAmount} / ${alert.limitAmount}
+                      </td>
+                      <td>{alert.emittedAt}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </TableShell>
+          </>
+        )}
+      </Panel>
     </div>
   )
 }

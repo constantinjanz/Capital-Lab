@@ -2,6 +2,8 @@ import type { z } from 'zod'
 
 import type {
   OpenAIGateway,
+  PaidCanaryRequest,
+  PaidCanaryResult,
   StructuredGenerationRequest,
   StructuredGenerationResult,
   WebResearchRequest,
@@ -65,6 +67,24 @@ export class FakeOpenAIGateway implements OpenAIGateway {
       finishState: 'completed',
     }
   }
+
+  async runPaidCanary(request: PaidCanaryRequest): Promise<PaidCanaryResult> {
+    return {
+      responseId: `fake-canary-${request.model}`,
+      outputText: 'OK',
+      usage: {
+        inputTokens: '8',
+        cachedInputTokens: '0',
+        cacheWriteTokens: '0',
+        outputTokens: '1',
+        webSearchCalls: '0',
+      },
+      providerInputTokens: '8',
+      reasoningTokens: '0',
+      latencyMs: 0,
+      finishState: 'completed',
+    }
+  }
 }
 
 export class DisabledOpenAIGateway implements OpenAIGateway {
@@ -76,6 +96,11 @@ export class DisabledOpenAIGateway implements OpenAIGateway {
   }
 
   async researchWeb(request: WebResearchRequest): Promise<WebResearchResult> {
+    void request
+    throw new Error('OpenAI gateway is disabled by configuration')
+  }
+
+  async runPaidCanary(request: PaidCanaryRequest): Promise<PaidCanaryResult> {
     void request
     throw new Error('OpenAI gateway is disabled by configuration')
   }
