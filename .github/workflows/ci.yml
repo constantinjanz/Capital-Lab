@@ -49,6 +49,7 @@ jobs:
         with:
           name: application-evidence-${{ github.event.pull_request.head.sha || github.sha }}
           path: .ci-evidence/*.json
+          include-hidden-files: true
           if-no-files-found: error
 
   database:
@@ -80,6 +81,7 @@ jobs:
         with:
           name: database-evidence-${{ github.event.pull_request.head.sha || github.sha }}
           path: .ci-evidence/*.json
+          include-hidden-files: true
           if-no-files-found: error
 
   browser:
@@ -114,4 +116,5 @@ jobs:
         with:
           name: browser-evidence-${{ github.event.pull_request.head.sha || github.sha }}
           path: .ci-evidence/*.json
+          include-hidden-files: true
           if-no-files-found: error
