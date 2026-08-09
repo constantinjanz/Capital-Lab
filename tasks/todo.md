@@ -12,10 +12,12 @@ The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`
 - [x] Add scheduler cycle identity, lease/heartbeat/retry/reconciler evidence, Sol isolation, storage thresholds, audited retention, and dashboard projections in one unapplied migration.
 - [x] Add dormant activation/shutdown SQL, backup/export and local-only restore scripts, and the Notion runtime boundary.
 - [x] Compile the migration and reach pgTAP assertion 42 against the hosted schema inside rollback-only transactions; no hosted schema/data persisted.
-- [ ] Complete final format/lint/type/unit/safety/build/database/Preview gates and record exact results in `docs/post-build/hosting-safety-audit.md`.
+- [x] Complete final format/lint/type/unit/safety/build/database/Preview gates and record exact results in `docs/post-build/hosting-safety-audit.md`.
 - [ ] Rotate the server key disclosed in conversation, manually verify Vercel Production flag scopes, OpenAI credit/expiry/project/spend limit, and approve the migration before any activation.
 
 Scope guard: this audit ends with agent, paid calls, Canary, autonomous paper execution, Sol, web search, broker paths, and both scheduler jobs disabled. It does not apply the migration, run the Canary, connect Notion, or start the 48-hour dry run.
+
+Final gate evidence: GitHub push and pull-request runs `31312305640` and `31312307206` are green at exact application commit `42dc1b3`; the clean-checkout application gate passed formatting, zero-warning lint, strict TypeScript, 74 Vitest files / 558 tests, the PAPER-only scan, and the Next.js 16.3 build. Browser passed 4/4 journeys. Database passed 13 pgTAP files / 1,575 assertions. Vercel Preview `dpl_LSUP5aUruge2dvNpS93DJVfRdULQ` is READY with no Production target; exact-deployment health is HTTP 200 in disabled mock mode and observed runtime error/warning/fatal logs are empty.
 
 ## Plan
 

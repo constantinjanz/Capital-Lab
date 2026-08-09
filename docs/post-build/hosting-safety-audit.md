@@ -128,11 +128,12 @@ Hosted database evidence on 2026-08-09: 0 enabled agent controls, 0 enabled sche
 ## Vercel verification
 
 - Project: `capital-lab` (`prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR`), Next.js, Node 24.x.
-- Project `live=false`; latest observed deployment is READY and Preview (`target=null`) at prior commit `451633f`.
+- Project `live=false`; verified deployment `dpl_LSUP5aUruge2dvNpS93DJVfRdULQ` is READY and Preview (`target=null`) at exact application commit `42dc1b38092e2ddfa5a5de50be9dd503effb1cf0`.
 - `vercel.json` has no Cron schedule and now explicitly sets Fluid Compute.
 - Current official Vercel documentation reports a 300-second Hobby maximum with Fluid Compute and a once-per-day minimum Hobby Cron frequency. Sources: [Function limits](https://vercel.com/docs/functions/limitations), [Cron usage and pricing](https://vercel.com/docs/cron-jobs/usage-and-pricing).
 - Exact Production environment names/scopes: `manual_verification_required` because the connected project API does not expose them.
-- New audit Preview: recorded in final verification below after Git deployment.
+- Exact-deployment `/api/health` returned HTTP 200 with `paperTradingOnly=true`, `dataMode=mock`, `agentEnabled=false`, no-store caching, and the expected security headers. Runtime error/warning/fatal logs were empty for the observed 30-minute window.
+- The protected owner login page was browser-verified at application-identical commit `7808b30`: PAPER TRADING ONLY messaging and the no-broker/no-paid-call boundaries rendered correctly with no browser warning or error. The later exact application commit changes only SQL fixtures/security contracts; its deployment health and logs were verified independently.
 
 ## Supabase verification
 
@@ -141,6 +142,7 @@ Hosted database evidence on 2026-08-09: 0 enabled agent controls, 0 enabled sche
 - Largest relations: `public.market_sessions` 581,632; `public.experiment_versions` 491,520; `private.ai_budget_reservations` 311,296; `public.decision_context_snapshots` 278,528; `public.fills` 245,760; `public.orders` 229,376; `public.agent_decisions` 229,376; `public.agent_runs` 204,800 bytes.
 - 0 current `model_pricing` rows; `pg_cron` and `pg_net` are not installed; no job was created.
 - All exposed existing tables have RLS; post-build additions force RLS in rollback rehearsal.
+- Public hosted storage/budget dashboard RPCs remain `SECURITY INVOKER`; privileged aggregation is confined to private, fixed-search-path `SECURITY DEFINER` functions.
 - Security advisor: only leaked-password protection disabled. Performance advisor: informational unused indexes expected for the dormant schema.
 - The full new migration compiled on the hosted schema and the combined pgTAP rehearsal reached `ok 42` inside a transaction that ended in `ROLLBACK`.
 
@@ -197,44 +199,51 @@ Manual Billing checklist:
 
 The command record includes failures; none is hidden.
 
-| Command / operation                                              | Exit/result                                                  |
-| ---------------------------------------------------------------- | ------------------------------------------------------------ |
-| Initial focused env/scheduler/readiness Vitest                   | 0, 3 files / 21 tests                                        |
-| Pricing/budget Vitest after exact-limit changes                  | 0, 2 files / 10 tests                                        |
-| Model-list + pricing/budget Vitest                               | 0, 3 files / 15 tests                                        |
-| First model-list CLI                                             | 1; incomplete local `esbuild` dependency, no API request     |
-| `pnpm install --offline --frozen-lockfile` (120 s)               | 124; OneDrive relink timeout                                 |
-| Same offline install (600 s)                                     | 124; incomplete offline cache/registry denied                |
-| Approved `pnpm install --frozen-lockfile`                        | 0; exact lockfile, 805 packages linked                       |
-| `pnpm exec` focused test/typecheck                               | 1; non-TTY managed-pnpm purge check; no tests run            |
-| Direct focused Vitest + TypeScript                               | tests 0, 35/35; typecheck 1 on stale deleted route metadata  |
-| `next typegen`                                                   | 0; stale `.next/dev/types` still present                     |
-| Remove verified generated `.next/dev/types`; direct TypeScript   | 0                                                            |
-| Canary/storage/scheduler focused Vitest + TypeScript             | 0, latest 16/16 and typecheck pass                           |
-| First hosted migration rehearsal                                 | transport error; command text was truncated before execution |
-| Chunked hosted migration `BEGIN ... ROLLBACK`                    | success, no persistence                                      |
-| First combined pgTAP rehearsal                                   | stopped: pgTAP search path missing                           |
-| Corrected combined migration/pgTAP rehearsal                     | success through `ok 42`, then rollback                       |
-| Disabled Canary CLI with wrong confirmation/default flags        | expected exit 1; `calls=0`, `reservedUsd=0`                  |
-| Free model-list CLI without key                                  | expected exit 1; `not_configured`, no request                |
-| First repository scan command                                    | PowerShell parse error before scan                           |
-| Corrected `node scripts/check-paper-only.mjs` and targeted scans | 0                                                            |
-| Exact Notion runtime dependency scan                             | 0, none found                                                |
-| Final repository `pnpm format:check`                             | 1; 15 preserved, unrelated dirty market-ingestion files      |
-| Audit-owned Prettier slice                                       | 0; all matched TS/JS/JSON/Markdown files pass                |
-| Final direct ESLint (`--max-warnings=0`)                         | 0; zero warnings                                             |
-| Final direct TypeScript (`tsc --noEmit`)                         | 0                                                            |
-| Final direct Vitest                                              | 0; 74 files / 558 tests                                      |
-| Final paper-only safety scan                                     | 0                                                            |
-| Final direct Next.js production build                            | 0; Next.js 16.3, internal scheduler route present            |
-| First final Playwright attempt                                   | 1; Chromium spawn denied by Windows sandbox                  |
-| Second Playwright attempt                                        | 1; real `.env.local` selected hosted auth, no mock mutation  |
-| Corrected isolated mock Playwright                               | 0; 4/4 Chromium journeys                                     |
-| Local `pnpm test:db`                                             | 1 immediately; Docker is not installed/running               |
-| Final connector rollback request                                 | refused: embedded migration `COMMIT`; no query executed      |
-| Prior hosted rollback migration + pgTAP rehearsal                | success through `ok 42`; no schema/data persisted            |
-| `git diff --check`                                               | 0                                                            |
-| Preview and clean-checkout CI                                    | pending exact-commit Git gates                               |
+| Command / operation                                              | Exit/result                                                        |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Initial focused env/scheduler/readiness Vitest                   | 0, 3 files / 21 tests                                              |
+| Pricing/budget Vitest after exact-limit changes                  | 0, 2 files / 10 tests                                              |
+| Model-list + pricing/budget Vitest                               | 0, 3 files / 15 tests                                              |
+| First model-list CLI                                             | 1; incomplete local `esbuild` dependency, no API request           |
+| `pnpm install --offline --frozen-lockfile` (120 s)               | 124; OneDrive relink timeout                                       |
+| Same offline install (600 s)                                     | 124; incomplete offline cache/registry denied                      |
+| Approved `pnpm install --frozen-lockfile`                        | 0; exact lockfile, 805 packages linked                             |
+| `pnpm exec` focused test/typecheck                               | 1; non-TTY managed-pnpm purge check; no tests run                  |
+| Direct focused Vitest + TypeScript                               | tests 0, 35/35; typecheck 1 on stale deleted route metadata        |
+| `next typegen`                                                   | 0; stale `.next/dev/types` still present                           |
+| Remove verified generated `.next/dev/types`; direct TypeScript   | 0                                                                  |
+| Canary/storage/scheduler focused Vitest + TypeScript             | 0, latest 16/16 and typecheck pass                                 |
+| First hosted migration rehearsal                                 | transport error; command text was truncated before execution       |
+| Chunked hosted migration `BEGIN ... ROLLBACK`                    | success, no persistence                                            |
+| First combined pgTAP rehearsal                                   | stopped: pgTAP search path missing                                 |
+| Corrected combined migration/pgTAP rehearsal                     | success through `ok 42`, then rollback                             |
+| Disabled Canary CLI with wrong confirmation/default flags        | expected exit 1; `calls=0`, `reservedUsd=0`                        |
+| Free model-list CLI without key                                  | expected exit 1; `not_configured`, no request                      |
+| First repository scan command                                    | PowerShell parse error before scan                                 |
+| Corrected `node scripts/check-paper-only.mjs` and targeted scans | 0                                                                  |
+| Exact Notion runtime dependency scan                             | 0, none found                                                      |
+| Final repository `pnpm format:check`                             | 1; 15 preserved, unrelated dirty market-ingestion files            |
+| Audit-owned Prettier slice                                       | 0; all matched TS/JS/JSON/Markdown files pass                      |
+| Final direct ESLint (`--max-warnings=0`)                         | 0; zero warnings                                                   |
+| Final direct TypeScript (`tsc --noEmit`)                         | 0                                                                  |
+| Final direct Vitest                                              | 0; 74 files / 558 tests                                            |
+| Final paper-only safety scan                                     | 0                                                                  |
+| Final direct Next.js production build                            | 0; Next.js 16.3, internal scheduler route present                  |
+| First final Playwright attempt                                   | 1; Chromium spawn denied by Windows sandbox                        |
+| Second Playwright attempt                                        | 1; real `.env.local` selected hosted auth, no mock mutation        |
+| Corrected isolated mock Playwright                               | 0; 4/4 Chromium journeys                                           |
+| Local `pnpm test:db`                                             | 1 immediately; Docker is not installed/running                     |
+| Final connector rollback request                                 | refused: embedded migration `COMMIT`; no query executed            |
+| Prior hosted rollback migration + pgTAP rehearsal                | success through `ok 42`; no schema/data persisted                  |
+| `git diff --check`                                               | 0                                                                  |
+| GitHub PR CI, exact application commit `42dc1b3`                 | pass; runs `31312307206` and `31312305640`                         |
+| Clean-checkout application gate                                  | pass; format, lint, typecheck, 74 files / 558 tests, safety, build |
+| Clean-checkout browser gate                                      | pass; 4/4 Chromium journeys                                        |
+| Clean-checkout database gate                                     | pass; 13 files / 1,575 assertions                                  |
+| Exact-commit Vercel Preview                                      | READY; `dpl_LSUP5aUruge2dvNpS93DJVfRdULQ`, `target=null`           |
+| Preview health/runtime logs                                      | HTTP 200 disabled mock state; no error/warning/fatal entries       |
+
+The first clean-checkout database attempts exposed synthetic pricing metadata drift, a tiny-fixture budget mismatch, an incorrect assumption about locally preinstalled `pg_net`, and public `SECURITY DEFINER` dashboard RPCs. The fixtures and assertions were corrected without weakening runtime controls, and the dashboard boundary was changed to public invoker wrappers over private definers. Both push and pull-request workflows then passed in full at the exact application commit above.
 
 ## Exact later commands — do not run without separate approval
 
