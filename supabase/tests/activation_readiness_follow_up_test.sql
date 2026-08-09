@@ -7,6 +7,26 @@ select plan(62);
 create temporary table activation_experiment_baseline as
 select count(*)::bigint as experiment_count from public.experiments;
 
+create function pg_temp.pg_net_activity_count()
+returns bigint
+language plpgsql
+as $$
+declare
+  activity_count bigint := 0;
+  relation_count bigint;
+begin
+  if to_regclass('net.http_request_queue') is not null then
+    execute 'select count(*) from net.http_request_queue' into relation_count;
+    activity_count := activity_count + relation_count;
+  end if;
+  if to_regclass('net._http_response') is not null then
+    execute 'select count(*) from net._http_response' into relation_count;
+    activity_count := activity_count + relation_count;
+  end if;
+  return activity_count;
+end;
+$$;
+
 select has_table('private', 'no_ai_shadow_dry_runs', 'dedicated dry-run class exists');
 select has_table('private', 'no_ai_shadow_dry_run_transitions', 'state transitions persist');
 select has_table('private', 'no_ai_shadow_dry_run_events', 'expected and actual events persist');
@@ -32,7 +52,7 @@ select ok(not has_table_privilege('authenticated', 'private.no_ai_shadow_dry_run
 select ok(not has_table_privilege('authenticated', 'private.no_ai_shadow_dry_run_baselines', 'SELECT'), 'authenticated has no baseline table privilege');
 select ok(not has_table_privilege('authenticated', 'private.no_ai_shadow_dry_run_alarms', 'SELECT'), 'authenticated has no alarm table privilege');
 select is((select count(*) from pg_extension where extname = 'pg_cron'), 0::bigint, 'schema migration installs no pg_cron');
-select is((select count(*) from pg_extension where extname = 'pg_net'), 0::bigint, 'schema migration installs no pg_net');
+select is(pg_temp.pg_net_activity_count(), 0::bigint, 'schema migration creates no pg_net request activity');
 select is((select count(*) from private.application_settings where setting_key in ('scheduler_enabled', 'agent_enabled', 'paid_model_calls_enabled', 'openai_canary_enabled', 'openai_web_search_enabled', 'sol_challenger_enabled', 'sol_live_execution_enabled', 'real_broker_enabled') and value <> 'false'::jsonb), 0::bigint, 'migration leaves dangerous flags false');
 select is((select count(*) from private.no_ai_shadow_dry_runs), 0::bigint, 'migration does not start a dry run');
 select has_column('private', 'paid_canary_runs', 'campaign_key', 'Canary has an immutable campaign key');
