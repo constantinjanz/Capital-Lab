@@ -21,6 +21,7 @@ import {
 const PROCESS_TIMEOUT_MS = 600_000
 const RESTORE_DATABASE = 'capital_lab_restore'
 const PLATFORM_SCHEMAS = 'auth,storage,extensions,vault'
+const PLATFORM_ADMIN = 'supabase_admin'
 
 function fail(message) {
   throw new Error(message)
@@ -158,6 +159,7 @@ async function main() {
   const baselineSchema = path.join(baselineDirectory, 'schema.sql')
   const baselineData = path.join(baselineDirectory, 'data.sql')
   const targetEnv = { ...commonEnv, PGDATABASE: RESTORE_DATABASE }
+  const platformAdminEnv = { ...targetEnv, PGUSER: PLATFORM_ADMIN }
   try {
     await run(
       supabase,
@@ -195,7 +197,7 @@ async function main() {
       psql,
       [...psqlArgs, '--single-transaction', '--file', baselineSchema],
       'platform_schema_restore',
-      targetEnv,
+      platformAdminEnv,
     )
     await run(
       psql,
@@ -208,7 +210,7 @@ async function main() {
         baselineData,
       ],
       'platform_data_restore',
-      targetEnv,
+      platformAdminEnv,
     )
   } finally {
     await rm(baselineDirectory, { recursive: true, force: true })

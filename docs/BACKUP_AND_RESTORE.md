@@ -65,7 +65,9 @@ the target's empty migration-history schema, and securely discards the temporary
 baseline artifacts before verification. The helper derives the paths itself,
 accepts no arguments, uses `shell:false`, and refuses a dirty tree. Run it only
 in a disposable local stack because rebuilding the local source database is
-destructive:
+destructive. Only the allowlisted managed baseline is restored as the fixed
+local `supabase_admin`, preserving its role/owner statements; the Capital Lab
+restore and evidence queries continue to use the parsed operator:
 
 ```powershell
 $env:CAPITAL_LAB_DATABASE_URL = '<loopback-source-url>'

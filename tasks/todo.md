@@ -182,6 +182,13 @@ version differs from the Supabase database. The baseline export now uses the
 same pinned Supabase CLI `2.113.0` dump path already proven by the critical
 export, with schemas fixed to `auth,storage,extensions,vault`; no arbitrary
 schema input or mismatched host client remains.
+Run `31346865611` passed application, all four Playwright flows, and all 1,851
+database assertions. The pinned baseline dump succeeded; restore then correctly
+refused its `SET ROLE supabase_admin` under the generic operator. Ownership
+commands are not stripped. Only the allowlisted managed baseline now restores
+as the fixed local `supabase_admin` with the existing non-logged loopback
+password; the Capital Lab schema/data restore and all evidence queries remain
+bound to the parsed operator.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only
