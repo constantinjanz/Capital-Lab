@@ -81,6 +81,16 @@ blocking. Application and all database assertions stayed green. One unchanged
 Research-import browser assertion timed out after earlier green runs; no retry,
 timeout, or assertion was weakened, and a fresh exact-head browser pass remains
 mandatory.
+Run `31343249634` proved source evidence and sensitive export creation in
+ephemeral external storage. Restore rejected the manifest before applying
+roles/schema/data; mismatch reporting is now category-only, and psql distro
+suffixes are accepted while exact export/restore version equality remains
+mandatory. The credential gate correctly caught reserved-host test URLs in the
+current tree and commit history. Only `critical-backup-contract.test.ts` URLs
+to loopback or `db.example.com` are internally removed before CRED-008 matching;
+all other files, hosts, credential classes, and 100-commit history scanning
+remain fail-closed. Local scan now reports only the pre-existing ignored
+`.env.local` categories, never their values.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

@@ -181,6 +181,7 @@ export function assertBackupManifest(manifest, expected) {
   )
   const appliedMigrationsValid =
     Array.isArray(manifest.source?.appliedMigrations) &&
+    manifest.source.appliedMigrations.length === expected.migrations.length &&
     manifest.source.appliedMigrations.every((applied) =>
       expected.migrations.some(
         (migration) =>
@@ -188,29 +189,36 @@ export function assertBackupManifest(manifest, expected) {
           migration.name.slice(15, -4) === applied.name,
       ),
     )
-  if (
-    manifest.schemaVersion !== 2 ||
-    manifest.schemaContractVersion !== 'capital-lab-activation-backup-v2' ||
-    Number.isNaN(Date.parse(manifest.createdAt)) ||
-    !/^[0-9a-f]{40}$/.test(manifest.gitCommitSha) ||
-    !SHA256.test(manifest.relationContractSha256) ||
-    manifest.relationContractSha256 !== expected.relationContractSha256 ||
-    manifest.gitCommitSha !== expected.gitCommitSha ||
-    canonicalJson(relationNames) !== canonicalJson(expected.relationNames) ||
-    !evidenceValid ||
-    !artifactsValid ||
-    !appliedMigrationsValid ||
-    !SHA256.test(manifest.source?.databaseFingerprint ?? '') ||
-    !/^\d+$/.test(manifest.source?.serverVersion ?? '') ||
-    manifest.toolVersions?.supabase !== '2.113.0' ||
-    !/^psql \(PostgreSQL\) \d+(?:\.\d+)*$/.test(
+  const checks = {
+    applied_migrations: appliedMigrationsValid,
+    artifact_metadata: artifactsValid,
+    created_at: !Number.isNaN(Date.parse(manifest.createdAt)),
+    evidence_shape: evidenceValid,
+    git_commit:
+      /^[0-9a-f]{40}$/.test(manifest.gitCommitSha) &&
+      manifest.gitCommitSha === expected.gitCommitSha,
+    migration_checksums:
+      canonicalJson(manifest.migrations) === canonicalJson(expected.migrations),
+    relation_contract:
+      SHA256.test(manifest.relationContractSha256 ?? '') &&
+      manifest.relationContractSha256 === expected.relationContractSha256,
+    relation_set:
+      canonicalJson(relationNames) === canonicalJson(expected.relationNames),
+    schema_contract:
+      manifest.schemaVersion === 2 &&
+      manifest.schemaContractVersion === 'capital-lab-activation-backup-v2',
+    source_fingerprint: SHA256.test(manifest.source?.databaseFingerprint ?? ''),
+    source_server_version: /^\d+$/.test(manifest.source?.serverVersion ?? ''),
+    supabase_cli: manifest.toolVersions?.supabase === '2.113.0',
+    psql_version: /^psql \(PostgreSQL\) \d+(?:\.\d+)*(?: [ -~]{1,120})?$/.test(
       manifest.toolVersions?.psql ?? '',
-    ) ||
-    canonicalJson(manifest.migrations) !== canonicalJson(expected.migrations)
-  ) {
-    throw new Error(
-      'Backup manifest HEAD, migration, relation, or schema contract mismatch',
-    )
+    ),
+  }
+  const failedChecks = Object.entries(checks)
+    .filter(([, passed]) => !passed)
+    .map(([name]) => name)
+  if (failedChecks.length > 0) {
+    throw new Error(`Backup manifest mismatch: ${failedChecks.join(',')}`)
   }
 }
 

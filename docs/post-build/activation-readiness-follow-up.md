@@ -109,7 +109,8 @@ tasks/todo.md
 | `phase-contract.json`                               | `d795b4b100f932479e183316e82710bb5bc25693fee49163f6d1fc019bcb07f8` |
 | `critical-relations.v2.json`                        | `ce65298a8b8e93954ca787b610bcedc988f04ce7645ba971395227aff6ba306d` |
 | `run-activation-phase.mjs`                          | `90d943f61a22e18236912d635438f25490e21838a6a9ff862c654d3251c25b0d` |
-| `critical-backup-contract.mjs`                      | `4d821ecbdf78c40315da14571543c686e2d2d8bcaccbc413ae7f546593c8ef49` |
+| `check-credential-patterns.mjs`                     | `6541199b6bb8d545a5bc46f13ea0d92c6d9fdb0f3363e3f67ebfe5ba8a018a00` |
+| `critical-backup-contract.mjs`                      | `a9332d344ee7ecd87b908ed22853294db89d713da1b794e508e4ad0a0deb5b57` |
 | `export-critical-tables.mjs`                        | `6d7c40ec73e6e78622867c5b345129568faf8fe23dc09cb47c7bb0b2fe2bda98` |
 | `verify-backup-restore.mjs`                         | `d8ccbd232773d81506fd511357e49c3a82dd6b6048a2ea97b50f1df135040b9f` |
 
@@ -182,6 +183,11 @@ The canonical phase contract additionally binds every phase file:
 | exact-head application/browser CI, run `31343009696`     |           0 | complete application and 4/4 Playwright gates                                                                       | verified on `dbc481ee...`                                                                                                             |
 | exact-head Supabase start/reset/pgTAP, run `31343009696` |           0 | pinned CLI and all 1,836 assertions                                                                                 | database contract remains green                                                                                                       |
 | exact-head seed-free export/restore, run `31343009696`   |           1 | libpq ignored a connection URI placed only in `PGDATABASE` and fell back to socket port 5432                        | URL now strictly parsed into explicit non-logged libpq fields for exporter and verifier; rerun required                               |
+| exact-head browser CI, run `31343249634`                 |           0 | 4/4 Playwright gates                                                                                                | verified on `69044778...`                                                                                                             |
+| exact-head Supabase start/reset/pgTAP, run `31343249634` |           0 | pinned CLI and all 1,836 assertions                                                                                 | database contract remains green                                                                                                       |
+| exact-head export, run `31343249634`                     |           0 | sensitive roles/schema/data dumps and manifest created outside repository in ephemeral runner storage               | exporter/source evidence path verified; ephemeral runner discarded artifact                                                           |
+| exact-head restore contract, run `31343249634`           |           1 | manifest verifier rejected a safe contract-field mismatch before restoring roles/schema/data                        | safe mismatch categories and exact psql distribution-version validation added                                                         |
+| exact-head credential CI, run `31343249634`              |           1 | synthetic reserved-host URL fixture matched current/history DB-URL rule                                             | only that exact test file plus loopback/reserved host fixtures are internally excluded; real files/history remain blocking            |
 
 ## Manual gates and stop conditions
 
