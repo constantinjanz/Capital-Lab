@@ -170,6 +170,12 @@ exercise any database code: the ephemeral runner already had local port 54322
 bound before `supabase start`. Reset, pgTAP, export, and restore were skipped.
 No retry loop or port override was added; a fresh exact-head clean runner is
 required.
+Run `31346407773` passed application, all four Playwright flows, pinned local
+startup/reset, and all 1,851 database assertions. The logical builder reached
+`platform_schema_dump` and failed closed before target restore. It now reuses
+the tested PostgreSQL redactor only for fixed `platform_*` phases: the next run
+may emit only the first error category line with literals/URLs redacted and a
+400-character cap; dump contents and stdout remain suppressed.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

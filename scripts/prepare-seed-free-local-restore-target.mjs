@@ -13,7 +13,10 @@ import {
 import os from 'node:os'
 import path from 'node:path'
 
-import { postgresUrlToLibpqEnv } from './critical-backup-contract.mjs'
+import {
+  postgresUrlToLibpqEnv,
+  redactedPostgresError,
+} from './critical-backup-contract.mjs'
 
 const PROCESS_TIMEOUT_MS = 600_000
 const RESTORE_DATABASE = 'capital_lab_restore'
@@ -46,11 +49,15 @@ async function exists(filename) {
 async function run(command, args, phase, env = process.env) {
   return new Promise((resolve, reject) => {
     let settled = false
+    let stderr = ''
     const child = spawn(command, args, {
       env,
       shell: false,
       windowsHide: true,
-      stdio: ['ignore', 'ignore', 'ignore'],
+      stdio: ['ignore', 'ignore', 'pipe'],
+    })
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString()
     })
     const timer = setTimeout(() => child.kill('SIGTERM'), PROCESS_TIMEOUT_MS)
     child.once('error', (error) => {
@@ -63,9 +70,14 @@ async function run(command, args, phase, env = process.env) {
       if (settled) return
       settled = true
       clearTimeout(timer)
-      if (code !== 0 || signal)
-        reject(new Error(`Local database preparation failed: ${phase}`))
-      else resolve()
+      if (code !== 0 || signal) {
+        const detail = phase.startsWith('platform_')
+          ? `; redacted database error: ${redactedPostgresError(stderr)}`
+          : ''
+        reject(
+          new Error(`Local database preparation failed: ${phase}${detail}`),
+        )
+      } else resolve()
     })
   })
 }

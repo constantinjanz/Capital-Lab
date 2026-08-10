@@ -134,7 +134,7 @@ tasks/todo.md
 | `critical-backup-contract.mjs`                      | `2369370c62cc59b0fe024386ece966281071d27ab156f148b22024adbe389f01` |
 | `export-critical-tables.mjs`                        | `8d708a56c76810e4c0b88ecdba63111866bb0b9600f2b80e81d573a950ebf48c` |
 | `verify-backup-restore.mjs`                         | `a939b4af14d228c77da30b4c1d34894a93be31986e5b5c9e5ba26085b581dd79` |
-| `prepare-seed-free-local-restore-target.mjs`        | `2aca63e34fcf1c28a5d6e10ed89641bbd6f6be4a0194b6bef130810760f5b2a2` |
+| `prepare-seed-free-local-restore-target.mjs`        | `2966e4fe5f6ec1a986faca4e2c7a94a305f9fb421cbc37b8a11865b8861c8b7b` |
 | `seed-free-target-prelude.sql`                      | `d97bdd1ec58586944bbc0e556dd72113dfee4391eededa46aae1b5ff8009e353` |
 
 The canonical phase contract additionally binds every phase file:
@@ -241,6 +241,9 @@ The canonical phase contract additionally binds every phase file:
 | exact-head local target preparation, run `31345975029`                   |           1 | `source_drain` was denied for one or more Supabase service backends                                                    | physical clone removed; logical seed-free platform dump/restore requires no backend termination                                       |
 | exact-head application/browser CI, run `31346276617`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `0e4edb2e...`                                                                                                             |
 | exact-head Supabase startup, run `31346276617`                           |           1 | runner-local port `54322` was already bound before the database container started                                      | infrastructure failure before reset/migration/test; no gate was retried or weakened                                                   |
+| exact-head application/browser CI, run `31346407773`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `02127db2...`                                                                                                             |
+| exact-head Supabase reset / extended pgTAP, run `31346407773`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green                                                                                                      |
+| exact-head local target preparation, run `31346407773`                   |           1 | logical builder reached `platform_schema_dump` and failed closed                                                       | existing category-only PostgreSQL redactor added for fixed platform phases; dump/stdout remain suppressed                             |
 
 ## Manual gates and stop conditions
 
