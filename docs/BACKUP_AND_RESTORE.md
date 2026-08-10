@@ -36,6 +36,7 @@ path only, with credential-file paths redacted.
 - a roles dump;
 - a schema dump;
 - a data dump;
+- a separate migration-history schema dump and migration-history data dump;
 - a canonical manifest containing clean Git SHA, migration filenames and
   SHA-256 values, schema/contract versions, exact relation-set hash, safe source
   fingerprint metadata, tool versions, dump hashes, full relation counts,
@@ -82,10 +83,13 @@ order:
 1. roles (or, for a disposable database in the same PostgreSQL cluster,
    verifies the identical cluster-global role policy without replaying global
    role mutations into the still-running source cluster);
-2. the checksummed data-free target Prelude;
+2. the checksummed data-free target Prelude, which creates only the empty
+   `extensions` and `vault` namespaces required by the Supabase schema dump;
 3. schema;
-4. data;
-5. independently regenerated relation/column evidence.
+4. data in the same transaction after
+   `SET session_replication_role = replica`;
+5. the separately dumped `supabase_migrations` schema and rows;
+6. independently regenerated relation/column evidence.
 
 Every `psql` invocation uses `-X`, `ON_ERROR_STOP=1`, explicit transaction
 boundaries where the dump format permits them, and bounded process time. A

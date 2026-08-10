@@ -5,6 +5,14 @@ const RELATION = /^(?:public|private)\.[a-z][a-z0-9_]{0,62}$/
 const IDENTIFIER = /^[a-z][a-z0-9_]{0,62}$/
 const SHA256 = /^[0-9a-f]{64}$/
 
+export const BACKUP_ARTIFACT_KEYS = Object.freeze([
+  'roles',
+  'schema',
+  'data',
+  'historySchema',
+  'historyData',
+])
+
 export function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
   if (value && typeof value === 'object') {
@@ -220,7 +228,7 @@ export function assertBackupManifest(manifest, expected) {
       SHA256.test(evidence?.columnSignatureSha256)
     )
   })
-  const artifactsValid = ['roles', 'schema', 'data'].every(
+  const artifactsValid = BACKUP_ARTIFACT_KEYS.every(
     (key) =>
       /^[a-zA-Z0-9._-]+\.sql$/.test(manifest.artifacts?.[key]?.file ?? '') &&
       SHA256.test(manifest.artifacts?.[key]?.sha256 ?? ''),

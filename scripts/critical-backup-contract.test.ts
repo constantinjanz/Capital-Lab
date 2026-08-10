@@ -38,6 +38,8 @@ const manifest = {
     roles: { file: 'roles.sql', sha256: hashA },
     schema: { file: 'schema.sql', sha256: hashA },
     data: { file: 'data.sql', sha256: hashA },
+    historySchema: { file: 'history-schema.sql', sha256: hashB },
+    historyData: { file: 'history-data.sql', sha256: hashB },
   },
   createdAt: '2026-08-10T00:00:00.000Z',
   schemaVersion: 2,
@@ -159,6 +161,15 @@ describe('critical backup contract', () => {
         expected,
       ),
     ).toThrow(/mismatch/)
+    expect(() =>
+      assertBackupManifest(
+        {
+          ...manifest,
+          artifacts: { ...manifest.artifacts, historyData: undefined },
+        },
+        expected,
+      ),
+    ).toThrow(/artifact_metadata/)
   })
 
   it.each([

@@ -3,6 +3,7 @@ import { readFile, realpath, readdir } from 'node:fs/promises'
 import path from 'node:path'
 
 import {
+  BACKUP_ARTIFACT_KEYS,
   assertBackupManifest,
   assertRestoredEvidence,
   buildCriticalEvidenceSql,
@@ -149,7 +150,7 @@ async function main() {
   })
 
   const artifacts = {}
-  for (const key of ['roles', 'schema', 'data']) {
+  for (const key of BACKUP_ARTIFACT_KEYS) {
     const metadata = manifest.artifacts?.[key]
     if (
       !metadata ||
@@ -250,8 +251,17 @@ async function main() {
   ])
   await runPsql(psql, restoreConnection.libpqEnv, [
     '--single-transaction',
+    '--command',
+    'SET session_replication_role = replica',
     '--file',
     artifacts.data,
+  ])
+  await runPsql(psql, restoreConnection.libpqEnv, [
+    '--single-transaction',
+    '--file',
+    artifacts.historySchema,
+    '--file',
+    artifacts.historyData,
   ])
   const evidenceOutput = await runPsql(
     psql,

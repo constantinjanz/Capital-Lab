@@ -3,6 +3,7 @@ import { mkdir, readFile, realpath, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import {
+  BACKUP_ARTIFACT_KEYS,
   buildCriticalEvidenceSql,
   buildRolePolicySql,
   buildServerIdentitySql,
@@ -202,6 +203,14 @@ async function main() {
     roles: path.join(outputDirectory, `capital-lab-${timestamp}-roles.sql`),
     schema: path.join(outputDirectory, `capital-lab-${timestamp}-schema.sql`),
     data: path.join(outputDirectory, `capital-lab-${timestamp}-data.sql`),
+    historySchema: path.join(
+      outputDirectory,
+      `capital-lab-${timestamp}-history-schema.sql`,
+    ),
+    historyData: path.join(
+      outputDirectory,
+      `capital-lab-${timestamp}-history-data.sql`,
+    ),
     manifest: path.join(
       outputDirectory,
       `capital-lab-${timestamp}-manifest.json`,
@@ -244,6 +253,28 @@ async function main() {
       '--file',
       paths.data,
     ],
+    [
+      'db',
+      'dump',
+      '--db-url',
+      databaseUrl,
+      '--schema',
+      'supabase_migrations',
+      '--file',
+      paths.historySchema,
+    ],
+    [
+      'db',
+      'dump',
+      '--db-url',
+      databaseUrl,
+      '--data-only',
+      '--use-copy',
+      '--schema',
+      'supabase_migrations',
+      '--file',
+      paths.historyData,
+    ],
   ]
   for (const args of dumpCommands) {
     const result = await spawnBounded(supabase, args)
@@ -275,7 +306,7 @@ async function main() {
     fail('Backup source changed or database identity switched during export')
   }
   const artifacts = {}
-  for (const key of ['roles', 'schema', 'data']) {
+  for (const key of BACKUP_ARTIFACT_KEYS) {
     artifacts[key] = {
       file: path.basename(paths[key]),
       sha256: sha256(await readFile(paths[key])),

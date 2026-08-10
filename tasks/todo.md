@@ -129,6 +129,15 @@ fixture because its JSON used the operation UUID in the `request_id` field
 instead of the request UUID frozen by the claim. The fixture now uses the exact
 persisted request identity; no production code or acceptance condition was
 weakened. Backup/restore was correctly skipped after the pgTAP failure.
+Run `31344881015` passed format, lint, typecheck, 79 files / 594 tests, safety,
+credentials, build, pinned Supabase startup/reset, and all 14 pgTAP files /
+1,851 assertions. The seed-free target passed export, manifest, role-policy,
+and identity preflight, then stopped because the schema dump expects the empty
+Supabase-managed `vault` namespace. The manifest-checksummed Prelude now creates
+only empty `extensions` and `vault` namespaces; it installs no extension and
+creates no table, role, migration, or row. One unchanged Research-import browser
+assertion was transiently red (3/4); no retry, timeout, or assertion was
+weakened. A fresh exact-head full restore and browser run remain mandatory.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

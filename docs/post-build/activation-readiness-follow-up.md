@@ -36,6 +36,26 @@ tracked `vercel.json` disables deployment from `main`; the connector did not
 provide a complete Production environment-variable listing, so scope parity is
 still a manual gate.
 
+## Official source baseline reviewed before changes
+
+- Supabase Database Migrations and migration-history guidance:
+  <https://supabase.com/docs/guides/deployment/database-migrations>
+- Supabase CLI Backup/Restore, including roles → schema → replica-mode data and
+  separately preserved migration history:
+  <https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore>
+- Supabase Cron and the current pg_cron troubleshooting guidance restricting
+  changes to `cron.schedule`, `cron.alter_job`, and `cron.unschedule`:
+  <https://supabase.com/docs/guides/cron> and
+  <https://supabase.com/docs/guides/troubleshooting/pgcron-debugging-guide-n1KTaz>
+- Supabase pg_net, Vault, RLS, and database-function security guidance:
+  <https://supabase.com/docs/guides/database/extensions/pg_net>,
+  <https://supabase.com/docs/guides/database/vault>,
+  <https://supabase.com/docs/guides/database/postgres/row-level-security>, and
+  <https://supabase.com/docs/guides/database/functions>
+- Current breaking-change feed, including the prohibition on direct
+  `cron.job` inserts/updates and managed-schema restrictions:
+  <https://supabase.com/changelog?types=breaking-change>
+
 ## Finding disposition
 
 | Finding                                            | Root cause                                                                       | Remediation                                                                                                                                                                                              | Evidence                                                                                      | Residual risk                                                                                      |
@@ -111,10 +131,10 @@ tasks/todo.md
 | `critical-relations.v2.json`                        | `ce65298a8b8e93954ca787b610bcedc988f04ce7645ba971395227aff6ba306d` |
 | `run-activation-phase.mjs`                          | `90d943f61a22e18236912d635438f25490e21838a6a9ff862c654d3251c25b0d` |
 | `check-credential-patterns.mjs`                     | `6541199b6bb8d545a5bc46f13ea0d92c6d9fdb0f3363e3f67ebfe5ba8a018a00` |
-| `critical-backup-contract.mjs`                      | `be6651331774eda9bf9ac7a77dd3d7aef803ab4dfb6771b554b5dc9672e3eb22` |
-| `export-critical-tables.mjs`                        | `25042262b34e6ff2d813e4567451fa8a8feaaaaa55809053feade9ae34c01a74` |
-| `verify-backup-restore.mjs`                         | `dd0090146180158db5e986e5704216f0b98b113a326736bfb59658bc0ebef20c` |
-| `seed-free-target-prelude.sql`                      | `03185d69600d95e980f53ff9b41af7b584ba219f56b4134295f27f3e5b8142e9` |
+| `critical-backup-contract.mjs`                      | `16e629ccd98a61cc38009ce05516ba427c03151453fb153a47e0b2dc68fefce3` |
+| `export-critical-tables.mjs`                        | `8d708a56c76810e4c0b88ecdba63111866bb0b9600f2b80e81d573a950ebf48c` |
+| `verify-backup-restore.mjs`                         | `d76fe23bba5e6177aff81f82641aeaeddb6806d8c3b5d79d83b8b4d582cba1fa` |
+| `seed-free-target-prelude.sql`                      | `c2abe015145b67ca8602d3fe007ac81c986f3ef05c9cc09f22b828b90246020d` |
 
 The canonical phase contract additionally binds every phase file:
 
@@ -204,6 +224,10 @@ The canonical phase contract additionally binds every phase file:
 | exact-head seed-free schema phase, run `31344323501`                     |           1 | an empty `template0` target lacked the managed `extensions` schema intentionally excluded by Supabase CLI dumps        | tracked data-free target Prelude is now manifest-checksummed and creates only that empty schema; rerun required                       |
 | exact-head application/browser/credential CI, run `31344675766`          |           0 | format, lint, typecheck, 79 files / 594 tests, safety, credentials, build, 4/4 Playwright                              | verified on `36d47ed5...`                                                                                                             |
 | exact-head Supabase reset / extended pgTAP, run `31344675766`            |           1 | local response fixture used the operation UUID where the frozen request UUID was required                              | exact claimed request identity corrected; restore step was not reached; rerun required                                                |
+| exact-head application/credential CI, run `31344881015`                  |           0 | format, lint, typecheck, 79 files / 594 tests, safety, credentials, build                                              | verified on `0a3d9277...`                                                                                                             |
+| exact-head browser CI, run `31344881015`                                 |           1 | unchanged Research-import assertion did not observe `Preview valid`; 3/4 passed                                        | no retry, timeout, or assertion weakening; fresh exact-head green run required                                                        |
+| exact-head Supabase reset / extended pgTAP, run `31344881015`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | full durable-response, 52/104, drift, privilege, and emergency-fault path green                                                       |
+| exact-head seed-free schema phase, run `31344881015`                     |           1 | `template0` target passed export, manifest, role-policy, and preflight, then lacked the empty `vault` namespace        | checksummed Prelude now creates only empty `extensions` and `vault` namespaces; no extension, table, role, migration, or row          |
 
 ## Manual gates and stop conditions
 

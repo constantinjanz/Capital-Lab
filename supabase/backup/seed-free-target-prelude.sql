@@ -3,5 +3,6 @@
 begin;
 
 create schema extensions;
+create schema vault;
 
 commit;
