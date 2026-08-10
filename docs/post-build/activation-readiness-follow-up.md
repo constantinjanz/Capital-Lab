@@ -134,7 +134,7 @@ tasks/todo.md
 | `critical-backup-contract.mjs`                      | `2369370c62cc59b0fe024386ece966281071d27ab156f148b22024adbe389f01` |
 | `export-critical-tables.mjs`                        | `8d708a56c76810e4c0b88ecdba63111866bb0b9600f2b80e81d573a950ebf48c` |
 | `verify-backup-restore.mjs`                         | `a939b4af14d228c77da30b4c1d34894a93be31986e5b5c9e5ba26085b581dd79` |
-| `prepare-seed-free-local-restore-target.mjs`        | `c203595795dca2d085bd2d43f7a78062e182e38ba1da542b7f5d8787451838b3` |
+| `prepare-seed-free-local-restore-target.mjs`        | `2aca63e34fcf1c28a5d6e10ed89641bbd6f6be4a0194b6bef130810760f5b2a2` |
 | `seed-free-target-prelude.sql`                      | `d97bdd1ec58586944bbc0e556dd72113dfee4391eededa46aae1b5ff8009e353` |
 
 The canonical phase contract additionally binds every phase file:
@@ -236,6 +236,9 @@ The canonical phase contract additionally binds every phase file:
 | exact-head application/browser CI, run `31345678279`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `9af64397...`                                                                                                             |
 | exact-head Supabase reset / extended pgTAP, run `31345678279`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green with OID-bound fingerprint                                                                           |
 | exact-head local target preparation, run `31345678279`                   |           1 | target builder failed closed with intentionally generic output                                                         | fixed, non-sensitive phase labels added; no stderr, URL, SQL value, or credential will be emitted                                     |
+| exact-head application/browser CI, run `31345975029`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `2f805bdd...`                                                                                                             |
+| exact-head Supabase reset / extended pgTAP, run `31345975029`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green                                                                                                      |
+| exact-head local target preparation, run `31345975029`                   |           1 | `source_drain` was denied for one or more Supabase service backends                                                    | physical clone removed; logical seed-free platform dump/restore requires no backend termination                                       |
 
 ## Manual gates and stop conditions
 

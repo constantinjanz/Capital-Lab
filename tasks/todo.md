@@ -157,6 +157,14 @@ deliberately generic error did not identify the subphase. Fixed allowlisted
 phase labels now distinguish baseline reset, source quiesce/drain/reopen,
 clone, and history clear without emitting stderr, URLs, SQL values, or
 credentials. A fresh exact-head restore run remains mandatory.
+Run `31345975029` again passed application, all four Playwright flows, and all
+1,851 database assertions. Its new label identified `source_drain`: the local
+database operator cannot terminate every Supabase service backend. Physical
+cloning is removed. The helper now uses `pg_dump` to create schema/data artifacts
+for the real seed-free platform baseline in an OS temporary directory, restores
+them transactionally into a new `template0` database, and removes the temporary
+directory in `finally`. This path needs no backend termination and still emits
+no dump contents, stderr, URL, SQL value, or credential.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

@@ -1,5 +1,16 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdir, rename, realpath, readdir, rmdir, stat } from 'node:fs/promises'
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  rename,
+  realpath,
+  readdir,
+  rm,
+  rmdir,
+  stat,
+} from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 
 import { postgresUrlToLibpqEnv } from './critical-backup-contract.mjs'
@@ -108,6 +119,7 @@ async function main() {
   }
 
   const psql = process.platform === 'win32' ? 'psql.exe' : 'psql'
+  const pgDump = process.platform === 'win32' ? 'pg_dump.exe' : 'pg_dump'
   const commonEnv = {
     ...process.env,
     ...source.libpqEnv,
@@ -123,37 +135,60 @@ async function main() {
     `drop database if exists ${RESTORE_DATABASE} with (force)`,
     'prior_target_drop',
   )
-  let sourceDisabled = false
+  await sql(
+    `create database ${RESTORE_DATABASE} template template0`,
+    'target_create',
+  )
+
+  const baselineDirectory = await mkdtemp(
+    path.join(os.tmpdir(), 'capital-lab-platform-baseline-'),
+  )
+  const baselineSchema = path.join(baselineDirectory, 'schema.sql')
+  const baselineData = path.join(baselineDirectory, 'data.sql')
+  const sourceEnv = { ...commonEnv, PGDATABASE: 'postgres' }
+  const targetEnv = { ...commonEnv, PGDATABASE: RESTORE_DATABASE }
   try {
-    await sql(
-      'alter database postgres with allow_connections false',
-      'source_quiesce',
+    await run(
+      pgDump,
+      ['--schema-only', '--file', baselineSchema],
+      'platform_schema_dump',
+      sourceEnv,
     )
-    sourceDisabled = true
-    await sql(
-      "select pg_terminate_backend(pid) from pg_catalog.pg_stat_activity where datname = 'postgres' and pid <> pg_backend_pid()",
-      'source_drain',
+    await run(
+      pgDump,
+      ['--data-only', '--file', baselineData],
+      'platform_data_dump',
+      sourceEnv,
     )
-    await sql(
-      `create database ${RESTORE_DATABASE} template postgres`,
-      'baseline_clone',
+    await chmod(baselineSchema, 0o600)
+    await chmod(baselineData, 0o600)
+    await run(
+      psql,
+      [...psqlArgs, '--single-transaction', '--file', baselineSchema],
+      'platform_schema_restore',
+      targetEnv,
+    )
+    await run(
+      psql,
+      [
+        ...psqlArgs,
+        '--single-transaction',
+        '--command',
+        'SET session_replication_role = replica',
+        '--file',
+        baselineData,
+      ],
+      'platform_data_restore',
+      targetEnv,
     )
   } finally {
-    if (sourceDisabled) {
-      await sql(
-        'alter database postgres with allow_connections true',
-        'source_reopen',
-      )
-    }
+    await rm(baselineDirectory, { recursive: true, force: true })
   }
 
   await sql(
     'drop schema if exists supabase_migrations cascade',
     'history_clear',
-    {
-      ...commonEnv,
-      PGDATABASE: RESTORE_DATABASE,
-    },
+    targetEnv,
   )
   process.stdout.write(
     `${JSON.stringify({ status: 'seed_free_supabase_baseline_created' })}\n`,
