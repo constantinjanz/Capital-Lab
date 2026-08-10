@@ -132,12 +132,20 @@ async function main() {
   )
   const { contract, sha256: relationContractSha256 } =
     await loadCriticalRelationContract(contractPath)
+  const restorePreludePath = path.join(
+    workspace,
+    'supabase',
+    'backup',
+    'seed-free-target-prelude.sql',
+  )
+  const restorePreludeSha256 = sha256(await readFile(restorePreludePath))
   const migrations = await repositoryMigrations(workspace)
   assertBackupManifest(manifest, {
     gitCommitSha: commitSha,
     migrations,
     relationContractSha256,
     relationNames: contract.relations.map((spec) => spec.relation),
+    restorePreludeSha256,
   })
 
   const artifacts = {}
@@ -230,6 +238,11 @@ async function main() {
     }
   }
 
+  await runPsql(psql, restoreConnection.libpqEnv, [
+    '--single-transaction',
+    '--file',
+    restorePreludePath,
+  ])
   await runPsql(psql, restoreConnection.libpqEnv, [
     '--single-transaction',
     '--file',

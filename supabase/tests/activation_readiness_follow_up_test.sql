@@ -21,6 +21,64 @@ returns jsonb language sql immutable as $$
   );
 $$;
 
+create function pg_temp.auth_noop_body()
+returns jsonb language sql stable as $$
+  select jsonb_build_object(
+    'schema_version', 2,
+    'mode', 'auth_noop',
+    'campaign_id', pg_temp.campaign_id(),
+    'correlation_id', '30000000-0000-4000-8000-000000000004'::uuid,
+    'nonce', '30000000-0000-4000-8000-000000000002'::uuid,
+    'request_id', '30000000-0000-4000-8000-000000000003'::uuid,
+    'environment', 'production',
+    'deployment_id', 'dpl_12345678901234567890',
+    'commit_sha', repeat('a', 40),
+    'status', 'authenticated_noop',
+    'terminal_reason', 'auth_noop_verified',
+    'scheduler_disabled', true,
+    'agent_disabled', true,
+    'counters', pg_temp.zero_counters()
+  );
+$$;
+
+create function pg_temp.assert_invalid_auth_response(
+  p_transport_id bigint,
+  p_body jsonb,
+  p_status integer default 200,
+  p_timed_out boolean default false,
+  p_error text default null
+)
+returns void language plpgsql as $$
+begin
+  begin
+    update private.activation_auth_noop_requests
+    set pg_net_request_id = p_transport_id, status = 'transport_terminal',
+        terminal_at = statement_timestamp()
+    where campaign_id = pg_temp.campaign_id();
+    insert into net._http_response (
+      id, status_code, content_type, headers, content, timed_out, error_msg
+    ) values (
+      p_transport_id, p_status, 'application/json', '{}'::jsonb,
+      p_body::text, p_timed_out, p_error
+    );
+    perform private.verify_activation_auth_noop(
+      pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
+      repeat('b', 64), repeat('c', 64), private.activation_database_fingerprint(),
+      '30000000-0000-4000-8000-000000000004'
+    );
+    raise exception using errcode = 'P0001', message = 'invalid auth response was accepted';
+  exception when sqlstate '55000' then
+    null;
+  end;
+  if exists (
+    select 1 from private.activation_http_responses
+    where pg_net_request_id = p_transport_id
+  ) then
+    raise exception using errcode = 'P0001', message = 'rejected response evidence escaped its failed reconciliation';
+  end if;
+end;
+$$;
+
 create function pg_temp.campaign_manifest()
 returns jsonb language sql stable as $$
   select jsonb_build_object(
@@ -291,24 +349,45 @@ select throws_ok(
   )$$,
   '55000', 'auth no-op identity is immutable; reconcile the original request', 'unknown outcome cannot be resent with a new identity'
 );
+select lives_ok(
+  $$select pg_temp.assert_invalid_auth_response(
+    90001,
+    jsonb_set(pg_temp.auth_noop_body(), '{correlation_id}', to_jsonb(gen_random_uuid()))
+  )$$,
+  'wrong auth correlation ID is rejected and rolled back'
+);
+select lives_ok(
+  $$select pg_temp.assert_invalid_auth_response(
+    90002,
+    jsonb_set(pg_temp.auth_noop_body(), '{counters,orders}', '1'::jsonb)
+  )$$,
+  'nonzero auth side-effect counter is rejected and rolled back'
+);
+select lives_ok(
+  $$select pg_temp.assert_invalid_auth_response(
+    90003, pg_temp.auth_noop_body(), 503, false, 'local transport fixture'
+  )$$,
+  'transport error response is rejected and rolled back'
+);
+select lives_ok(
+  $$select pg_temp.assert_invalid_auth_response(
+    90004,
+    jsonb_set(
+      pg_temp.auth_noop_body(), '{terminal_reason}', '"mismatched_terminal"'::jsonb
+    )
+  )$$,
+  'terminal-reason mismatch is rejected and rolled back'
+);
 update private.activation_auth_noop_requests
-set pg_net_request_id = 90001, status = 'transport_terminal', terminal_at = statement_timestamp()
+set pg_net_request_id = 90010, status = 'transport_terminal',
+    terminal_at = statement_timestamp()
 where campaign_id = pg_temp.campaign_id();
-insert into private.activation_http_responses (
-  request_id, campaign_id, owner_id, mode, pg_net_request_id, http_status,
-  timed_out, schema_valid, correlation_id, nonce, response_campaign_id,
-  response_request_id, response_environment, response_deployment_id,
-  response_commit_sha, response_status, response_terminal_reason,
-  scheduler_disabled, agent_disabled, counters
-)
-select request.request_id, request.campaign_id, request.owner_id, 'auth_noop',
-  request.pg_net_request_id, 200, false, true, request.correlation_id,
-  request.nonce, request.campaign_id, request.request_id, 'production',
-  request.expected_deployment_id, request.expected_commit_sha,
-  'authenticated_noop', 'auth_noop_verified', true, true,
-  pg_temp.zero_counters()
-from private.activation_auth_noop_requests as request
-where request.campaign_id = pg_temp.campaign_id();
+insert into net._http_response (
+  id, status_code, content_type, headers, content, timed_out, error_msg
+) values (
+  90010, 200, 'application/json', '{}'::jsonb,
+  pg_temp.auth_noop_body()::text, false, null
+);
 select lives_ok(
   $$select private.verify_activation_auth_noop(
     pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
@@ -317,6 +396,11 @@ select lives_ok(
   )$$,
   'only the persisted exact auth no-op response verifies'
 );
+select is((
+  select count(*) from private.activation_http_responses
+  where campaign_id = pg_temp.campaign_id() and mode = 'auth_noop'
+    and schema_valid and counters = pg_temp.zero_counters()
+), 1::bigint, 'auth no-op verifier persists exactly the parsed zero counters');
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auth_noop_verified', 'auth verification advances through the guarded transition');
 
 insert into public.market_calendar_manifests (
@@ -446,28 +530,45 @@ select lives_ok(
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'running', 'first authenticated event advances armed to running');
 select is((select count(*) from private.no_ai_shadow_dry_run_events where dry_run_id = pg_temp.campaign_id() and authenticated_count = 1 and terminal_reason is not null), 104::bigint, 'all 104 route events have terminal no-side-effect evidence');
 
-insert into private.activation_http_responses (
-  request_id, campaign_id, owner_id, event_id, mode, pg_net_request_id,
-  http_status, timed_out, schema_valid, correlation_id,
-  response_campaign_id, response_event_id, response_request_id,
-  response_cycle_id, response_environment, response_deployment_id,
-  response_commit_sha, response_status, response_terminal_reason,
-  response_job, response_slot_number, scheduler_disabled, agent_disabled,
-  cycles_claimed, cycles_reconciled, counters
+insert into net._http_response (
+  id, status_code, content_type, headers, content, timed_out, error_msg
 )
-select event.request_id, event.dry_run_id, event.owner_id, event.id, 'dry_run',
-  event.pg_net_request_id, 200, false, true, event.correlation_id,
-  event.dry_run_id, event.id, event.request_id, event.cycle_id, 'production',
-  campaign.production_deployment_id, campaign.prepared_commit_sha, 'completed',
-  case when event.event_type = 'market_dispatcher'
-    then 'no_ai_shadow_cycle_recorded' else 'dry_run_evidence_reconciled' end,
-  event.event_type, event.slot_number, false, true,
-  case when event.event_type = 'market_dispatcher' then 1 else 0 end,
-  0, pg_temp.zero_counters()
+select event.pg_net_request_id, 200, 'application/json', '{}'::jsonb,
+  jsonb_build_object(
+    'schema_version', 2,
+    'mode', 'dry_run',
+    'campaign_id', event.dry_run_id,
+    'event_id', event.id,
+    'correlation_id', event.correlation_id,
+    'request_id', event.request_id,
+    'cycle_id', event.cycle_id,
+    'job', event.event_type,
+    'slot_number', event.slot_number,
+    'environment', 'production',
+    'deployment_id', campaign.production_deployment_id,
+    'commit_sha', campaign.prepared_commit_sha,
+    'status', 'completed',
+    'terminal_reason', case when event.event_type = 'market_dispatcher'
+      then 'no_ai_shadow_cycle_recorded' else 'dry_run_evidence_reconciled' end,
+    'scheduler_disabled', false,
+    'agent_disabled', true,
+    'cycles_claimed', case when event.event_type = 'market_dispatcher' then 1 else 0 end,
+    'cycles_reconciled', 0,
+    'counters', pg_temp.zero_counters()
+  )::text,
+  false, null
 from private.no_ai_shadow_dry_run_events as event
 join private.no_ai_shadow_dry_runs as campaign on campaign.id = event.dry_run_id
 where event.dry_run_id = pg_temp.campaign_id();
+select is(
+  private.capture_activation_http_responses(),
+  104,
+  'reconciler parses and persists all 104 exact local pg_net responses'
+);
 select is((select count(*) from private.activation_http_responses where campaign_id = pg_temp.campaign_id() and mode = 'dry_run' and schema_valid), 104::bigint, '104 sanitized exact responses persist independently of pg_net TTL');
+select is((select count(*) from private.no_ai_shadow_dry_run_events where dry_run_id = pg_temp.campaign_id() and model_call_count = 0 and budget_reservation_count = 0 and order_count = 0 and fill_count = 0 and ledger_entry_count = 0), 104::bigint, 'actual parsed zero counters are copied into every event');
+delete from net._http_response where id between 100001 and 100104;
+select is((select count(*) from private.activation_http_responses where campaign_id = pg_temp.campaign_id() and mode = 'dry_run'), 104::bigint, 'expired pg_net transport rows cannot erase durable reconciliation evidence');
 
 select lives_ok($$select private.emergency_kill_activation_controls(pg_temp.campaign_id())$$, 'phase one emergency kill commits only database gates');
 select lives_ok($$select private.emergency_kill_activation_controls(pg_temp.campaign_id())$$, 'repeated emergency kill is idempotent');
@@ -477,6 +578,61 @@ select is((select count(*) from private.application_settings where owner_id = (s
   'paid_model_calls_enabled', 'openai_canary_enabled', 'openai_web_search_enabled',
   'sol_challenger_enabled', 'sol_live_execution_enabled', 'real_broker_enabled'
 ) and value = 'false'::jsonb), 9::bigint, 'all nine dangerous controls are false after phase one');
+select throws_ok(
+  $$select private.finalize_activation_campaign(
+    pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
+    repeat('b', 64), repeat('c', 64), private.activation_database_fingerprint(),
+    gen_random_uuid(), gen_random_uuid()
+  )$$,
+  '55000', 'campaign finalization is too early or in the wrong state',
+  'finalize remains closed during the mandatory 300-second post-stop window'
+);
+select cron.alter_job(
+  (select jobid from activation_jobs where job_role = 'dispatcher'),
+  command := 'select 1;', active := true
+);
+select throws_ok(
+  $$select private.disable_activation_jobs_after_emergency(
+    pg_temp.campaign_id(), '60000000-0000-4000-8000-000000000011',
+    '60000000-0000-4000-8000-000000000012'
+  )$$,
+  '55000', 'Cron job definition drift or tampering detected',
+  'phase-two Cron failure cannot roll back the committed phase-one controls'
+);
+select is((select count(*) from private.application_settings where owner_id = (select owner_id from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()) and setting_key in (
+  'scheduler_enabled', 'agent_enabled', 'autonomous_paper_execution_enabled',
+  'paid_model_calls_enabled', 'openai_canary_enabled', 'openai_web_search_enabled',
+  'sol_challenger_enabled', 'sol_live_execution_enabled', 'real_broker_enabled'
+) and value = 'false'::jsonb), 9::bigint, 'phase-one controls survive the failed Cron phase');
+select cron.alter_job(
+  (select jobid from activation_jobs where job_role = 'dispatcher'),
+  command := $$select private.dispatch_no_ai_shadow_dry_run_event('market_dispatcher', statement_timestamp());$$,
+  active := true
+);
+create function pg_temp.fail_activation_audit_write()
+returns trigger language plpgsql as $$
+begin
+  raise exception using errcode = 'P0001', message = 'injected audit failure';
+end;
+$$;
+create trigger inject_activation_audit_failure
+before insert on private.no_ai_shadow_dry_run_transitions
+for each statement execute function pg_temp.fail_activation_audit_write();
+select throws_ok(
+  $$select private.disable_activation_jobs_after_emergency(
+    pg_temp.campaign_id(), '60000000-0000-4000-8000-000000000021',
+    '60000000-0000-4000-8000-000000000022'
+  )$$,
+  'P0001', 'injected audit failure',
+  'phase-two audit failure cannot roll back the committed phase-one controls'
+);
+drop trigger inject_activation_audit_failure on private.no_ai_shadow_dry_run_transitions;
+drop function pg_temp.fail_activation_audit_write();
+select is((select count(*) from private.application_settings where owner_id = (select owner_id from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()) and setting_key in (
+  'scheduler_enabled', 'agent_enabled', 'autonomous_paper_execution_enabled',
+  'paid_model_calls_enabled', 'openai_canary_enabled', 'openai_web_search_enabled',
+  'sol_challenger_enabled', 'sol_live_execution_enabled', 'real_broker_enabled'
+) and value = 'false'::jsonb), 9::bigint, 'phase-one controls survive the failed audit phase');
 select lives_ok(
   $$select private.disable_activation_jobs_after_emergency(
     pg_temp.campaign_id(), '60000000-0000-4000-8000-000000000001',
@@ -502,6 +658,21 @@ select lives_ok(
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'passed', '52-slot 104-event deterministic happy path reaches passed');
 select is((select terminal_status from private.activation_terminal_evidence where campaign_id = pg_temp.campaign_id()), 'passed', 'terminal evidence records passed before job removal');
 select is((select complete_response_count from private.activation_terminal_evidence where campaign_id = pg_temp.campaign_id()), 104, 'finalizer uses all 104 persisted responses');
+select is(private.dispatch_no_ai_shadow_dry_run_event('reconciler', statement_timestamp()), null::bigint, 'duplicate terminal tick is idempotent');
+select cron.alter_job(
+  (select jobid from activation_jobs where job_role = 'reconciler'),
+  command := 'select 1;', active := false
+);
+select throws_ok(
+  $$select private.unschedule_terminal_activation_jobs(pg_temp.campaign_id())$$,
+  '55000', 'Cron job definition drift or tampering detected',
+  'unschedule fails closed on terminal job drift without changing safe controls'
+);
+select cron.alter_job(
+  (select jobid from activation_jobs where job_role = 'reconciler'),
+  command := $$select private.dispatch_no_ai_shadow_dry_run_event('reconciler', statement_timestamp());$$,
+  active := false
+);
 select lives_ok($$select private.unschedule_terminal_activation_jobs(pg_temp.campaign_id())$$, 'terminal jobs unschedule only after terminal evidence');
 
 select is(public.claim_paid_canary(

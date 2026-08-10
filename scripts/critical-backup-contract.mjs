@@ -250,6 +250,9 @@ export function assertBackupManifest(manifest, expected) {
       manifest.relationContractSha256 === expected.relationContractSha256,
     relation_set:
       canonicalJson(relationNames) === canonicalJson(expected.relationNames),
+    restore_prelude:
+      SHA256.test(manifest.restorePreludeSha256 ?? '') &&
+      manifest.restorePreludeSha256 === expected.restorePreludeSha256,
     schema_contract:
       manifest.schemaVersion === 2 &&
       manifest.schemaContractVersion === 'capital-lab-activation-backup-v2',

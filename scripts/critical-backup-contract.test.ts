@@ -44,6 +44,7 @@ const manifest = {
   schemaContractVersion: 'capital-lab-activation-backup-v2',
   gitCommitSha: 'c'.repeat(40),
   relationContractSha256: hashA,
+  restorePreludeSha256: hashB,
   relations,
   migrations,
   source: {
@@ -62,6 +63,7 @@ const expected = {
   gitCommitSha: 'c'.repeat(40),
   relationContractSha256: hashA,
   relationNames: Object.keys(relations).sort(),
+  restorePreludeSha256: hashB,
   migrations,
 }
 

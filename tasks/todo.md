@@ -112,6 +112,17 @@ Same-server disposable restores require exact role-policy equality and do not
 mutate shared roles; truly separate servers still restore and reverify roles.
 The focused contract suite passes 1 file / 10 tests; exact-head schema/data
 restore and full evidence comparison remain mandatory.
+Run `31344323501` passed every gate through role-policy and empty-target
+preflight. Schema restore then proved that Supabase CLI intentionally assumes a
+pre-provisioned target and excludes the extension-managed schema namespace.
+The seed-free target now applies one tracked, manifest-checksummed Prelude that
+creates only the empty `extensions` schema: no table, extension, migration,
+role, or row. The pgTAP path now also uses local `net._http_response` fixtures
+instead of direct durable-evidence inserts, rolls back invalid correlation,
+counter, transport-error, and terminal-reason cases, copies parsed counters,
+expires ephemeral transport rows, injects post-kill Cron/audit faults, rejects
+early finalization and drifted unschedule, and checks duplicate terminal ticks.
+A new exact-head pgTAP and full schema/data restore run is mandatory.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

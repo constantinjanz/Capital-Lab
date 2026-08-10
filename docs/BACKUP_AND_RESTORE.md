@@ -73,15 +73,19 @@ database-name confirmation.
 
 The verifier first checks clean HEAD, contract/schema versions, migration list
 and checksums, exact relation set, safe source/server fingerprints, artifact
-hashes, the password-free role-policy fingerprint, and an empty target. It then
-restores in this order:
+hashes, the password-free role-policy fingerprint, the exact tracked
+seed-free-target Prelude checksum, and an empty target. The Prelude creates only
+the empty `extensions` schema expected by Supabase CLI dumps; it contains no
+table, migration, role, extension, or data. The verifier then restores in this
+order:
 
 1. roles (or, for a disposable database in the same PostgreSQL cluster,
    verifies the identical cluster-global role policy without replaying global
    role mutations into the still-running source cluster);
-2. schema;
-3. data;
-4. independently regenerated relation/column evidence.
+2. the checksummed data-free target Prelude;
+3. schema;
+4. data;
+5. independently regenerated relation/column evidence.
 
 Every `psql` invocation uses `-X`, `ON_ERROR_STOP=1`, explicit transaction
 boundaries where the dump format permits them, and bounded process time. A

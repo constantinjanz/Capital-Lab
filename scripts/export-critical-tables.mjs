@@ -157,6 +157,13 @@ async function main() {
   )
   const { contract, sha256: relationContractSha256 } =
     await loadCriticalRelationContract(contractPath)
+  const restorePreludePath = path.join(
+    workspace,
+    'supabase',
+    'backup',
+    'seed-free-target-prelude.sql',
+  )
+  const restorePreludeSha256 = sha256(await readFile(restorePreludePath))
   const migrationDirectory = path.join(workspace, 'supabase', 'migrations')
   const migrationFiles = (await readdir(migrationDirectory))
     .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/.test(name))
@@ -280,6 +287,7 @@ async function main() {
     gitCommitSha: commitSha,
     migrations,
     relationContractSha256,
+    restorePreludeSha256,
     relations: evidenceBefore.relations,
     schemaContractVersion: 'capital-lab-activation-backup-v2',
     schemaVersion: 2,
