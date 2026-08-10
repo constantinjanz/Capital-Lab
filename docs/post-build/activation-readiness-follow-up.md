@@ -126,15 +126,16 @@ tasks/todo.md
 
 | Artifact                                            | SHA-256                                                            |
 | --------------------------------------------------- | ------------------------------------------------------------------ |
-| `20260809150417_activation_readiness_follow_up.sql` | `53463890f9532d6e54375ed6008e3266b92db57d634a0dcdce42dee7a6684fd2` |
+| `20260809150417_activation_readiness_follow_up.sql` | `98705c6fd920ed49fd061fb0136032cbda42214be4df269f56a8456312c6c7bb` |
 | `phase-contract.json`                               | `d795b4b100f932479e183316e82710bb5bc25693fee49163f6d1fc019bcb07f8` |
 | `critical-relations.v2.json`                        | `ce65298a8b8e93954ca787b610bcedc988f04ce7645ba971395227aff6ba306d` |
 | `run-activation-phase.mjs`                          | `90d943f61a22e18236912d635438f25490e21838a6a9ff862c654d3251c25b0d` |
 | `check-credential-patterns.mjs`                     | `6541199b6bb8d545a5bc46f13ea0d92c6d9fdb0f3363e3f67ebfe5ba8a018a00` |
-| `critical-backup-contract.mjs`                      | `16e629ccd98a61cc38009ce05516ba427c03151453fb153a47e0b2dc68fefce3` |
+| `critical-backup-contract.mjs`                      | `2369370c62cc59b0fe024386ece966281071d27ab156f148b22024adbe389f01` |
 | `export-critical-tables.mjs`                        | `8d708a56c76810e4c0b88ecdba63111866bb0b9600f2b80e81d573a950ebf48c` |
-| `verify-backup-restore.mjs`                         | `d76fe23bba5e6177aff81f82641aeaeddb6806d8c3b5d79d83b8b4d582cba1fa` |
-| `seed-free-target-prelude.sql`                      | `c2abe015145b67ca8602d3fe007ac81c986f3ef05c9cc09f22b828b90246020d` |
+| `verify-backup-restore.mjs`                         | `a939b4af14d228c77da30b4c1d34894a93be31986e5b5c9e5ba26085b581dd79` |
+| `prepare-seed-free-local-restore-target.mjs`        | `b693c06aebfccb66bf1e585a4dffb20ff8c35778634552365214c92919faf798` |
+| `seed-free-target-prelude.sql`                      | `d97bdd1ec58586944bbc0e556dd72113dfee4391eededa46aae1b5ff8009e353` |
 
 The canonical phase contract additionally binds every phase file:
 
@@ -228,6 +229,10 @@ The canonical phase contract additionally binds every phase file:
 | exact-head browser CI, run `31344881015`                                 |           1 | unchanged Research-import assertion did not observe `Preview valid`; 3/4 passed                                        | no retry, timeout, or assertion weakening; fresh exact-head green run required                                                        |
 | exact-head Supabase reset / extended pgTAP, run `31344881015`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | full durable-response, 52/104, drift, privilege, and emergency-fault path green                                                       |
 | exact-head seed-free schema phase, run `31344881015`                     |           1 | `template0` target passed export, manifest, role-policy, and preflight, then lacked the empty `vault` namespace        | checksummed Prelude now creates only empty `extensions` and `vault` namespaces; no extension, table, role, migration, or row          |
+| exact-head application CI, run `31345275407`                             |           0 | format, lint, typecheck, 79 files / 594 tests, safety, credentials, build                                              | verified on `d6d682bd...`                                                                                                             |
+| exact-head browser CI, run `31345275407`                                 |           1 | Research-import again did not expose `Preview valid`; 3/4 passed                                                       | repeated failure is under root-cause investigation; no assertion or timeout weakened                                                  |
+| exact-head Supabase reset / extended pgTAP, run `31345275407`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green                                                                                                      |
+| exact-head seed-free schema phase, run `31345275407`                     |           1 | `template0` advanced through `extensions`/`vault`, then lacked managed `auth`                                          | target construction now clones a real seed-free local Supabase platform baseline; validation Prelude no longer synthesizes namespaces |
 
 ## Manual gates and stop conditions
 

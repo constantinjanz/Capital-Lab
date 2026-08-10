@@ -85,6 +85,7 @@ describe('critical backup contract', () => {
     expect(buildRolePolicySql()).toMatch(/pg_catalog\.pg_roles/)
     expect(buildRolePolicySql()).not.toMatch(/password/iu)
     expect(buildServerIdentitySql()).toMatch(/system_identifier/)
+    expect(buildServerIdentitySql()).toMatch(/pg_catalog\.pg_database/)
   })
 
   it('decomposes a loopback URL into explicit libpq fields without a URI', () => {

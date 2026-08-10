@@ -138,6 +138,18 @@ only empty `extensions` and `vault` namespaces; it installs no extension and
 creates no table, role, migration, or row. One unchanged Research-import browser
 assertion was transiently red (3/4); no retry, timeout, or assertion was
 weakened. A fresh exact-head full restore and browser run remain mandatory.
+Run `31345275407` again passed the complete application gate and all 1,851
+database assertions. The `template0` restore advanced through the extension
+namespaces and then proved the deeper contract error: official Supabase dumps
+expect the managed Auth/Storage platform baseline of a provisioned target.
+Target preparation now exports first, temporarily holds only the exact project
+migrations, runs pinned `supabase db reset --no-seed`, restores the files,
+clones that real local platform baseline to a distinct database, and removes
+only its empty migration-history schema. The checksummed Prelude validates the
+baseline without creating it. The database fingerprint now includes the
+server-side database OID. Research import again failed at the same preview
+assertion (3/4), so it is now tracked as a repeated root-cause investigation,
+not dismissed as transient.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

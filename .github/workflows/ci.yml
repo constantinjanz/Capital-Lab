@@ -80,8 +80,7 @@ jobs:
           backup_dir="$(mktemp -d)"
           export CAPITAL_LAB_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
           node scripts/export-critical-tables.mjs "--output-dir=${backup_dir}"
-          psql -X --no-psqlrc "$CAPITAL_LAB_DATABASE_URL" -v ON_ERROR_STOP=1 \
-            -c 'create database capital_lab_restore template template0'
+          node scripts/prepare-seed-free-local-restore-target.mjs
           manifest_path="$(find "$backup_dir" -maxdepth 1 -name '*-manifest.json' -print -quit)"
           test -n "$manifest_path"
           export CAPITAL_LAB_RESTORE_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:54322/capital_lab_restore'

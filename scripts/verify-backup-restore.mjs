@@ -186,19 +186,29 @@ async function main() {
     ['--tuples-only', '--no-align'],
     `select jsonb_build_object(
       'user_relations', count(*) filter (where namespace.nspname in ('public','private','supabase_migrations')),
-      'database_identity', current_database() || ':' || current_setting('server_version_num')
-        || ':' || max(control.system_identifier)::text,
+      'managed_baseline', to_regclass('auth.users') is not null
+        and to_regprocedure('auth.uid()') is not null
+        and to_regclass('storage.buckets') is not null
+        and to_regnamespace('extensions') is not null
+        and to_regnamespace('vault') is not null,
+      'database_identity', max(database.oid)::text || ':' || current_database() || ':'
+        || current_setting('server_version_num') || ':' || max(control.system_identifier)::text,
       'server_identity', current_setting('server_version_num')
         || ':' || max(control.system_identifier)::text
     )
     from pg_catalog.pg_class as class
     join pg_catalog.pg_namespace as namespace on namespace.oid = class.relnamespace
     cross join pg_catalog.pg_control_system() as control
-    where class.relkind in ('r','p');\n`,
+    cross join pg_catalog.pg_database as database
+    where class.relkind in ('r','p')
+      and database.datname = current_database();\n`,
   )
   const preflightEvidence = JSON.parse(preflight.trim())
   if (preflightEvidence.user_relations !== 0) {
     fail('Restore target is not an empty seed-free disposable database')
+  }
+  if (preflightEvidence.managed_baseline !== true) {
+    fail('Restore target is not a provisioned Supabase baseline')
   }
   if (
     sha256(preflightEvidence.database_identity) ===

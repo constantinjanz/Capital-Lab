@@ -49,42 +49,53 @@ code-review run unless separately authorized.
 
 ## Seed-free disposable target
 
-Use an empty disposable PostgreSQL/Supabase database on loopback. Do not run
-`supabase db reset`: migrations and `supabase/seed.sql` would contaminate the
-target and invalidate the restore proof. The target database must contain no
-user relations before restore and must not be the source database.
+Use a fully disposable local Supabase stack on loopback. A plain `template0`
+database is not a valid target because official Supabase dumps assume the
+managed Auth, Storage, extension, and Vault baseline of a freshly provisioned
+project. The target must contain that platform baseline, no project migration,
+no seed, no user relation, and a database OID/name fingerprint distinct from
+the exported source.
 
-For the local Supabase container, create a blank database explicitly:
+The CI sequence exports first, temporarily holds the exact project migration
+files, runs pinned `supabase db reset --no-seed`, restores every migration file,
+clones that seed-free platform baseline to `capital_lab_restore`, and removes
+the clone's empty migration-history schema before verification. The helper
+derives the paths itself, accepts no arguments, uses `shell:false`, and refuses
+a dirty tree. Run it only in a disposable local stack because rebuilding the
+local source database is destructive:
 
 ```powershell
-docker exec supabase_db_capital-lab createdb -U postgres capital_lab_restore
-$env:CAPITAL_LAB_RESTORE_DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/capital_lab_restore?sslmode=disable'
-$env:CAPITAL_LAB_RESTORE_CONFIRM_DISPOSABLE = 'seed-free-disposable-database-confirmed'
-pnpm backup:restore:test -- `
-  --manifest=D:\Capital-Lab-Backups\capital-lab-<timestamp>-manifest.json
-Remove-Item Env:\CAPITAL_LAB_RESTORE_DATABASE_URL
-Remove-Item Env:\CAPITAL_LAB_RESTORE_CONFIRM_DISPOSABLE
+$env:CAPITAL_LAB_DATABASE_URL = '<loopback-source-url>'
+try {
+  node scripts/prepare-seed-free-local-restore-target.mjs
+  $env:CAPITAL_LAB_RESTORE_DATABASE_URL = '<loopback-restore-url>'
+  $env:CAPITAL_LAB_RESTORE_CONFIRM_DISPOSABLE = 'seed-free-disposable-database-confirmed'
+  pnpm backup:restore:test -- `
+    --manifest=D:\Capital-Lab-Backups\capital-lab-<timestamp>-manifest.json
+} finally {
+  Remove-Item Env:\CAPITAL_LAB_DATABASE_URL -ErrorAction SilentlyContinue
+  Remove-Item Env:\CAPITAL_LAB_RESTORE_DATABASE_URL -ErrorAction SilentlyContinue
+  Remove-Item Env:\CAPITAL_LAB_RESTORE_CONFIRM_DISPOSABLE -ErrorAction SilentlyContinue
+}
 ```
 
-Use the actual local container name reported by `docker ps`; never interpolate a
-Hosted hostname. The verifier accepts loopback only and requires the exact
-database-name confirmation.
+Never substitute a Hosted hostname. Both helpers accept loopback only; the
+verifier also requires the exact disposable confirmation.
 
 ## Restore order and failure contract
 
 The verifier first checks clean HEAD, contract/schema versions, migration list
 and checksums, exact relation set, safe source/server fingerprints, artifact
 hashes, the password-free role-policy fingerprint, the exact tracked
-seed-free-target Prelude checksum, and an empty target. The Prelude creates only
-the empty `extensions` schema expected by Supabase CLI dumps; it contains no
+seed-free-target Prelude checksum, an empty user-schema target, and the required
+managed Supabase baseline. The Prelude is validation-only: it creates no schema,
 table, migration, role, extension, or data. The verifier then restores in this
 order:
 
 1. roles (or, for a disposable database in the same PostgreSQL cluster,
    verifies the identical cluster-global role policy without replaying global
    role mutations into the still-running source cluster);
-2. the checksummed data-free target Prelude, which creates only the empty
-   `extensions` and `vault` namespaces required by the Supabase schema dump;
+2. the checksummed validation-only target Prelude;
 3. schema;
 4. data in the same transaction after
    `SET session_replication_role = replica`;

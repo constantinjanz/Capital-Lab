@@ -1461,11 +1461,13 @@ security invoker
 set search_path = ''
 as $$
   select encode(extensions.digest(convert_to(
-    current_database() || ':' || current_setting('server_version_num') || ':'
-      || control.system_identifier::text,
+    database.oid::text || ':' || database.datname || ':'
+      || current_setting('server_version_num') || ':' || control.system_identifier::text,
     'UTF8'
   ), 'sha256'), 'hex')
-  from pg_catalog.pg_control_system() as control;
+  from pg_catalog.pg_control_system() as control
+  cross join pg_catalog.pg_database as database
+  where database.datname = current_database();
 $$;
 
 create function private.activation_relation_contract_hash()

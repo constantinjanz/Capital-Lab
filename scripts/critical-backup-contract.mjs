@@ -30,12 +30,14 @@ export function sha256(bytes) {
 
 export function buildServerIdentitySql() {
   return `select jsonb_build_object(
-    'databaseIdentity', current_database() || ':' || current_setting('server_version_num')
-      || ':' || control.system_identifier::text,
+    'databaseIdentity', database.oid::text || ':' || database.datname || ':'
+      || current_setting('server_version_num') || ':' || control.system_identifier::text,
     'serverIdentity', current_setting('server_version_num') || ':'
       || control.system_identifier::text
   )
-  from pg_catalog.pg_control_system() as control;\n`
+  from pg_catalog.pg_control_system() as control
+  cross join pg_catalog.pg_database as database
+  where database.datname = current_database();\n`
 }
 
 export function buildRolePolicySql() {
