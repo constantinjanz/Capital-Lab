@@ -91,6 +91,12 @@ to loopback or `db.example.com` are internally removed before CRED-008 matching;
 all other files, hosts, credential classes, and 100-commit history scanning
 remain fail-closed. Local scan now reports only the pre-existing ignored
 `.env.local` categories, never their values.
+Run `31343512116` passed application, browser, credential scan, all database
+assertions, source export, and strict manifest validation. The first empty
+target preflight failed before roles/schema/data restore. Exporter and verifier
+now share one tested PostgreSQL error redactor; a fixture proves literals and
+URLs are removed. Nine focused backup-contract tests pass, and the next
+exact-head run remains mandatory.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

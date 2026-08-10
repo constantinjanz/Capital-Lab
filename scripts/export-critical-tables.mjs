@@ -7,6 +7,7 @@ import {
   canonicalJson,
   loadCriticalRelationContract,
   postgresUrlToLibpqEnv,
+  redactedPostgresError,
   sha256,
 } from './critical-backup-contract.mjs'
 
@@ -50,18 +51,6 @@ function redactedDirtyPathSummary(status) {
       return `${state}:${sensitivePath ? '[sensitive-path]' : filePath}`
     })
     .join(', ')
-}
-
-function redactedPostgresError(stderr) {
-  const errorLine = stderr
-    .split(/\r?\n/u)
-    .find((line) => /(?:^|:\s)error:/iu.test(line))
-  if (!errorLine) return 'postgres-error-unclassified'
-  return errorLine
-    .replace(/'[^']*'/gu, "'[redacted-literal]'")
-    .replace(/(?:postgres(?:ql)?|https?):\/\/\S+/giu, '[redacted-url]')
-    .replace(/\s+/gu, ' ')
-    .slice(0, 400)
 }
 
 async function spawnBounded(command, args, options = {}) {

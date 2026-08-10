@@ -4,6 +4,7 @@ import {
   assertBackupManifest,
   assertRestoredEvidence,
   postgresUrlToLibpqEnv,
+  redactedPostgresError,
 } from './critical-backup-contract.mjs'
 
 const hashA = 'a'.repeat(64)
@@ -99,6 +100,14 @@ describe('critical backup contract', () => {
         'postgresql://postgres:postgres@127.0.0.1:54322/postgres?application_name=unsafe',
       ),
     ).toThrow('target or TLS policy')
+  })
+
+  it('redacts PostgreSQL literals and URLs from failure evidence', () => {
+    expect(
+      redactedPostgresError(
+        "psql: error: invalid value 'sensitive' at postgresql://user:password@db.example.com/db",
+      ),
+    ).toBe("psql: error: invalid value '[redacted-literal]' at [redacted-url]")
   })
 
   it('rejects HEAD, migration checksum, and relation-set drift', () => {

@@ -20,6 +20,18 @@ export function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
+export function redactedPostgresError(stderr) {
+  const errorLine = stderr
+    .split(/\r?\n/u)
+    .find((line) => /(?:^|:\s)error:/iu.test(line))
+  if (!errorLine) return 'postgres-error-unclassified'
+  return errorLine
+    .replace(/'[^']*'/gu, "'[redacted-literal]'")
+    .replace(/(?:postgres(?:ql)?|https?):\/\/\S+/giu, '[redacted-url]')
+    .replace(/\s+/gu, ' ')
+    .slice(0, 400)
+}
+
 export function postgresUrlToLibpqEnv(value, { localOnly = false } = {}) {
   let parsed
   try {

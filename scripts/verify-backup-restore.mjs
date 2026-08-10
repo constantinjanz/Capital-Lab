@@ -9,6 +9,7 @@ import {
   canonicalJson,
   loadCriticalRelationContract,
   postgresUrlToLibpqEnv,
+  redactedPostgresError,
   sha256,
 } from './critical-backup-contract.mjs'
 
@@ -64,9 +65,13 @@ async function runPsql(psql, connectionEnv, args, input = undefined) {
     const timer = setTimeout(() => child.kill('SIGTERM'), PROCESS_TIMEOUT_MS)
     child.once('exit', (code, signal) => {
       clearTimeout(timer)
-      if (code !== 0 || signal)
-        reject(new Error('psql restore or evidence step failed'))
-      else resolve(stdout)
+      if (code !== 0 || signal) {
+        reject(
+          new Error(
+            `psql restore or evidence step failed; redacted database error: ${redactedPostgresError(stderr)}`,
+          ),
+        )
+      } else resolve(stdout)
     })
     if (input === undefined) child.stdin.end()
     else child.stdin.end(input)
