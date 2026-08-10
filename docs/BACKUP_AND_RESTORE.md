@@ -39,7 +39,8 @@ path only, with credential-file paths redacted.
 - a canonical manifest containing clean Git SHA, migration filenames and
   SHA-256 values, schema/contract versions, exact relation-set hash, safe source
   fingerprint metadata, tool versions, dump hashes, full relation counts,
-  complete content hashes, column signatures, and evidence-rule results.
+  complete content hashes, column signatures, a password-free role-policy
+  fingerprint, and evidence-rule results.
 
 Pre- and post-dump evidence must be identical. Any concurrent critical-row or
 schema change aborts the export. No production export is part of an activation
@@ -71,10 +72,13 @@ database-name confirmation.
 ## Restore order and failure contract
 
 The verifier first checks clean HEAD, contract/schema versions, migration list
-and checksums, exact relation set, safe source fingerprint, artifact hashes, and
-an empty target. It then restores in this order:
+and checksums, exact relation set, safe source/server fingerprints, artifact
+hashes, the password-free role-policy fingerprint, and an empty target. It then
+restores in this order:
 
-1. roles;
+1. roles (or, for a disposable database in the same PostgreSQL cluster,
+   verifies the identical cluster-global role policy without replaying global
+   role mutations into the still-running source cluster);
 2. schema;
 3. data;
 4. independently regenerated relation/column evidence.

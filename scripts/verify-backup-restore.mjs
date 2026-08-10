@@ -6,7 +6,9 @@ import {
   assertBackupManifest,
   assertRestoredEvidence,
   buildCriticalEvidenceSql,
+  buildRolePolicySql,
   canonicalJson,
+  fingerprintRolePolicy,
   loadCriticalRelationContract,
   postgresUrlToLibpqEnv,
   redactedPostgresError,
@@ -176,6 +178,8 @@ async function main() {
     `select jsonb_build_object(
       'user_relations', count(*) filter (where namespace.nspname in ('public','private','supabase_migrations')),
       'database_identity', current_database() || ':' || current_setting('server_version_num')
+        || ':' || max(control.system_identifier)::text,
+      'server_identity', current_setting('server_version_num')
         || ':' || max(control.system_identifier)::text
     )
     from pg_catalog.pg_class as class
@@ -194,7 +198,38 @@ async function main() {
     fail('Restore target fingerprint equals the source database')
   }
 
-  await runPsql(psql, restoreConnection.libpqEnv, ['--file', artifacts.roles])
+  const rolePolicyOutput = await runPsql(
+    psql,
+    restoreConnection.libpqEnv,
+    ['--tuples-only', '--no-align'],
+    buildRolePolicySql(),
+  )
+  const targetRolePolicyFingerprint = fingerprintRolePolicy(
+    JSON.parse(rolePolicyOutput.trim()),
+  )
+  const sameServer =
+    sha256(preflightEvidence.server_identity) ===
+    manifest.source.serverFingerprint
+  if (sameServer) {
+    if (targetRolePolicyFingerprint !== manifest.source.rolePolicyFingerprint) {
+      fail('Same-server disposable target role policy differs from the source')
+    }
+  } else {
+    await runPsql(psql, restoreConnection.libpqEnv, ['--file', artifacts.roles])
+    const restoredRolePolicyOutput = await runPsql(
+      psql,
+      restoreConnection.libpqEnv,
+      ['--tuples-only', '--no-align'],
+      buildRolePolicySql(),
+    )
+    if (
+      fingerprintRolePolicy(JSON.parse(restoredRolePolicyOutput.trim())) !==
+      manifest.source.rolePolicyFingerprint
+    ) {
+      fail('Restored database role policy differs from the backup manifest')
+    }
+  }
+
   await runPsql(psql, restoreConnection.libpqEnv, [
     '--single-transaction',
     '--file',

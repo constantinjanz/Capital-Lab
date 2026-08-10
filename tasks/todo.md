@@ -102,6 +102,16 @@ Run `31343752298` identified the empty-target preflight error: the server
 own aggregate. It now uses `max(system_identifier)` in the same one-row
 server-side identity query. No restore phase ran; the next exact-head target
 preflight and full restore remain mandatory.
+Run `31343987544` passed application, browser, credentials, Supabase start,
+reset, all 1,836 pgTAP assertions, export, manifest validation, and the empty
+target preflight. Role replay then failed because PostgreSQL roles are
+cluster-global: replaying the dump into a second database on the still-running
+source server attempted a privileged global setting mutation. The contract now
+freezes a password-free full role-policy fingerprint and a server fingerprint.
+Same-server disposable restores require exact role-policy equality and do not
+mutate shared roles; truly separate servers still restore and reverify roles.
+The focused contract suite passes 1 file / 10 tests; exact-head schema/data
+restore and full evidence comparison remain mandatory.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

@@ -4,7 +4,10 @@ import path from 'node:path'
 
 import {
   buildCriticalEvidenceSql,
+  buildRolePolicySql,
+  buildServerIdentitySql,
   canonicalJson,
+  fingerprintRolePolicy,
   loadCriticalRelationContract,
   postgresUrlToLibpqEnv,
   redactedPostgresError,
@@ -203,6 +206,16 @@ async function main() {
     sourceConnection.libpqEnv,
     evidenceSql,
   )
+  const sourceIdentityBefore = await psqlEvidence(
+    psql,
+    sourceConnection.libpqEnv,
+    buildServerIdentitySql(),
+  )
+  const rolePolicyBefore = await psqlEvidence(
+    psql,
+    sourceConnection.libpqEnv,
+    buildRolePolicySql(),
+  )
   const dumpCommands = [
     [
       'db',
@@ -235,9 +248,22 @@ async function main() {
     sourceConnection.libpqEnv,
     evidenceSql,
   )
+  const sourceIdentityAfter = await psqlEvidence(
+    psql,
+    sourceConnection.libpqEnv,
+    buildServerIdentitySql(),
+  )
+  const rolePolicyAfter = await psqlEvidence(
+    psql,
+    sourceConnection.libpqEnv,
+    buildRolePolicySql(),
+  )
   if (
     evidenceBefore.databaseFingerprint !== evidenceAfter.databaseFingerprint ||
-    canonicalJson(evidenceBefore) !== canonicalJson(evidenceAfter)
+    canonicalJson(evidenceBefore) !== canonicalJson(evidenceAfter) ||
+    canonicalJson(sourceIdentityBefore) !==
+      canonicalJson(sourceIdentityAfter) ||
+    canonicalJson(rolePolicyBefore) !== canonicalJson(rolePolicyAfter)
   ) {
     fail('Backup source changed or database identity switched during export')
   }
@@ -260,7 +286,9 @@ async function main() {
     source: {
       appliedMigrations: evidenceBefore.appliedMigrations,
       databaseFingerprint: evidenceBefore.databaseFingerprint,
+      rolePolicyFingerprint: fingerprintRolePolicy(rolePolicyBefore),
       serverVersion: evidenceBefore.serverVersion,
+      serverFingerprint: sha256(sourceIdentityBefore.serverIdentity),
     },
     toolVersions: {
       psql: psqlVersion.stdout.trim(),

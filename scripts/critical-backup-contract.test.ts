@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   assertBackupManifest,
   assertRestoredEvidence,
+  buildRolePolicySql,
+  buildServerIdentitySql,
+  fingerprintRolePolicy,
   postgresUrlToLibpqEnv,
   redactedPostgresError,
 } from './critical-backup-contract.mjs'
@@ -46,6 +49,8 @@ const manifest = {
   source: {
     appliedMigrations: [{ version: '20260809150417', name: 'activation' }],
     databaseFingerprint: hashB,
+    rolePolicyFingerprint: hashA,
+    serverFingerprint: hashB,
     serverVersion: '170006',
   },
   toolVersions: {
@@ -61,6 +66,23 @@ const expected = {
 }
 
 describe('critical backup contract', () => {
+  it('hashes a secret-free deterministic role policy and server boundary', () => {
+    const roles = [
+      {
+        name: 'authenticator',
+        canLogin: true,
+        configuration: ['statement_timeout=8s'],
+      },
+    ]
+    expect(fingerprintRolePolicy(roles)).toMatch(/^[0-9a-f]{64}$/)
+    expect(() => fingerprintRolePolicy({ roles })).toThrow(
+      'role policy evidence is invalid',
+    )
+    expect(buildRolePolicySql()).toMatch(/pg_catalog\.pg_roles/)
+    expect(buildRolePolicySql()).not.toMatch(/password/iu)
+    expect(buildServerIdentitySql()).toMatch(/system_identifier/)
+  })
+
   it('decomposes a loopback URL into explicit libpq fields without a URI', () => {
     const parsed = postgresUrlToLibpqEnv(
       'postgresql://postgres:p%40ss@127.0.0.1:54322/capital_lab',

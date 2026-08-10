@@ -20,6 +20,40 @@ export function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
+export function buildServerIdentitySql() {
+  return `select jsonb_build_object(
+    'databaseIdentity', current_database() || ':' || current_setting('server_version_num')
+      || ':' || control.system_identifier::text,
+    'serverIdentity', current_setting('server_version_num') || ':'
+      || control.system_identifier::text
+  )
+  from pg_catalog.pg_control_system() as control;\n`
+}
+
+export function buildRolePolicySql() {
+  return `select coalesce(jsonb_agg(jsonb_build_object(
+    'name', role.rolname,
+    'superuser', role.rolsuper,
+    'inherit', role.rolinherit,
+    'createRole', role.rolcreaterole,
+    'createDatabase', role.rolcreatedb,
+    'canLogin', role.rolcanlogin,
+    'replication', role.rolreplication,
+    'connectionLimit', role.rolconnlimit,
+    'bypassRls', role.rolbypassrls,
+    'validUntil', role.rolvaliduntil,
+    'configuration', role.rolconfig
+  ) order by role.rolname), '[]'::jsonb)
+  from pg_catalog.pg_roles as role;\n`
+}
+
+export function fingerprintRolePolicy(rolePolicy) {
+  if (!Array.isArray(rolePolicy)) {
+    throw new Error('Database role policy evidence is invalid')
+  }
+  return sha256(canonicalJson(rolePolicy))
+}
+
 export function redactedPostgresError(stderr) {
   const errorLine = stderr
     .split(/\r?\n/u)
@@ -220,6 +254,12 @@ export function assertBackupManifest(manifest, expected) {
       manifest.schemaVersion === 2 &&
       manifest.schemaContractVersion === 'capital-lab-activation-backup-v2',
     source_fingerprint: SHA256.test(manifest.source?.databaseFingerprint ?? ''),
+    source_role_policy: SHA256.test(
+      manifest.source?.rolePolicyFingerprint ?? '',
+    ),
+    source_server_fingerprint: SHA256.test(
+      manifest.source?.serverFingerprint ?? '',
+    ),
     source_server_version: /^\d+$/.test(manifest.source?.serverVersion ?? ''),
     supabase_cli: manifest.toolVersions?.supabase === '2.113.0',
     psql_version: /^psql \(PostgreSQL\) \d+(?:\.\d+)*(?: [ -~]{1,120})?$/.test(
