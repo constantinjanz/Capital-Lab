@@ -134,7 +134,7 @@ tasks/todo.md
 | `critical-backup-contract.mjs`                      | `2369370c62cc59b0fe024386ece966281071d27ab156f148b22024adbe389f01` |
 | `export-critical-tables.mjs`                        | `8d708a56c76810e4c0b88ecdba63111866bb0b9600f2b80e81d573a950ebf48c` |
 | `verify-backup-restore.mjs`                         | `a939b4af14d228c77da30b4c1d34894a93be31986e5b5c9e5ba26085b581dd79` |
-| `prepare-seed-free-local-restore-target.mjs`        | `b693c06aebfccb66bf1e585a4dffb20ff8c35778634552365214c92919faf798` |
+| `prepare-seed-free-local-restore-target.mjs`        | `c203595795dca2d085bd2d43f7a78062e182e38ba1da542b7f5d8787451838b3` |
 | `seed-free-target-prelude.sql`                      | `d97bdd1ec58586944bbc0e556dd72113dfee4391eededa46aae1b5ff8009e353` |
 
 The canonical phase contract additionally binds every phase file:
@@ -233,6 +233,9 @@ The canonical phase contract additionally binds every phase file:
 | exact-head browser CI, run `31345275407`                                 |           1 | Research-import again did not expose `Preview valid`; 3/4 passed                                                       | repeated failure is under root-cause investigation; no assertion or timeout weakened                                                  |
 | exact-head Supabase reset / extended pgTAP, run `31345275407`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green                                                                                                      |
 | exact-head seed-free schema phase, run `31345275407`                     |           1 | `template0` advanced through `extensions`/`vault`, then lacked managed `auth`                                          | target construction now clones a real seed-free local Supabase platform baseline; validation Prelude no longer synthesizes namespaces |
+| exact-head application/browser CI, run `31345678279`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `9af64397...`                                                                                                             |
+| exact-head Supabase reset / extended pgTAP, run `31345678279`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green with OID-bound fingerprint                                                                           |
+| exact-head local target preparation, run `31345678279`                   |           1 | target builder failed closed with intentionally generic output                                                         | fixed, non-sensitive phase labels added; no stderr, URL, SQL value, or credential will be emitted                                     |
 
 ## Manual gates and stop conditions
 

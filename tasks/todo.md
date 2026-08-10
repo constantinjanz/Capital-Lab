@@ -150,6 +150,13 @@ baseline without creating it. The database fingerprint now includes the
 server-side database OID. Research import again failed at the same preview
 assertion (3/4), so it is now tracked as a repeated root-cause investigation,
 not dismissed as transient.
+Run `31345678279` passed the complete application gate, all four Playwright
+flows, migration compile/reset, and all 1,851 database assertions with the
+OID-bound fingerprint. The new local target builder failed closed, but its
+deliberately generic error did not identify the subphase. Fixed allowlisted
+phase labels now distinguish baseline reset, source quiesce/drain/reopen,
+clone, and history clear without emitting stderr, URLs, SQL values, or
+credentials. A fresh exact-head restore run remains mandatory.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

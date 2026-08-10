@@ -32,7 +32,7 @@ async function exists(filename) {
   }
 }
 
-async function run(command, args, env = process.env) {
+async function run(command, args, phase, env = process.env) {
   return new Promise((resolve, reject) => {
     let settled = false
     const child = spawn(command, args, {
@@ -53,7 +53,7 @@ async function run(command, args, env = process.env) {
       settled = true
       clearTimeout(timer)
       if (code !== 0 || signal)
-        reject(new Error('Local database preparation failed'))
+        reject(new Error(`Local database preparation failed: ${phase}`))
       else resolve()
     })
   })
@@ -96,7 +96,7 @@ async function main() {
     await rename(path.join(migrations, name), path.join(heldMigrations, name))
   }
   try {
-    await run(supabase, ['db', 'reset', '--no-seed'])
+    await run(supabase, ['db', 'reset', '--no-seed'], 'baseline_reset')
   } finally {
     for (const name of migrationNames) {
       await rename(path.join(heldMigrations, name), path.join(migrations, name))
@@ -116,28 +116,45 @@ async function main() {
     PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
   }
   const psqlArgs = ['-X', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1']
-  const sql = async (statement, env = commonEnv) =>
-    run(psql, [...psqlArgs, '--command', statement], env)
+  const sql = async (statement, phase, env = commonEnv) =>
+    run(psql, [...psqlArgs, '--command', statement], phase, env)
 
-  await sql(`drop database if exists ${RESTORE_DATABASE} with (force)`)
+  await sql(
+    `drop database if exists ${RESTORE_DATABASE} with (force)`,
+    'prior_target_drop',
+  )
   let sourceDisabled = false
   try {
-    await sql('alter database postgres with allow_connections false')
+    await sql(
+      'alter database postgres with allow_connections false',
+      'source_quiesce',
+    )
     sourceDisabled = true
     await sql(
       "select pg_terminate_backend(pid) from pg_catalog.pg_stat_activity where datname = 'postgres' and pid <> pg_backend_pid()",
+      'source_drain',
     )
-    await sql(`create database ${RESTORE_DATABASE} template postgres`)
+    await sql(
+      `create database ${RESTORE_DATABASE} template postgres`,
+      'baseline_clone',
+    )
   } finally {
     if (sourceDisabled) {
-      await sql('alter database postgres with allow_connections true')
+      await sql(
+        'alter database postgres with allow_connections true',
+        'source_reopen',
+      )
     }
   }
 
-  await sql('drop schema if exists supabase_migrations cascade', {
-    ...commonEnv,
-    PGDATABASE: RESTORE_DATABASE,
-  })
+  await sql(
+    'drop schema if exists supabase_migrations cascade',
+    'history_clear',
+    {
+      ...commonEnv,
+      PGDATABASE: RESTORE_DATABASE,
+    },
+  )
   process.stdout.write(
     `${JSON.stringify({ status: 'seed_free_supabase_baseline_created' })}\n`,
   )
