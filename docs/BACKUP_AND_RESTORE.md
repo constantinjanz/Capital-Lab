@@ -58,13 +58,14 @@ the exported source.
 
 The CI sequence exports first, temporarily holds the exact project migration
 files, runs pinned `supabase db reset --no-seed`, restores every migration file,
-and creates a short-lived logical dump of that real platform baseline outside
-the repository. It restores the baseline into a new `template0` database,
-removes the target's empty migration-history schema, and securely discards the
-temporary baseline artifacts before verification. The helper derives the paths
-itself, accepts no arguments, uses `shell:false`, and refuses a dirty tree. Run
-it only in a disposable local stack because rebuilding the local source
-database is destructive:
+and uses the pinned Supabase CLI to create a short-lived logical dump of the
+allowlisted `auth,storage,extensions,vault` platform baseline outside the
+repository. It restores the baseline into a new `template0` database, removes
+the target's empty migration-history schema, and securely discards the temporary
+baseline artifacts before verification. The helper derives the paths itself,
+accepts no arguments, uses `shell:false`, and refuses a dirty tree. Run it only
+in a disposable local stack because rebuilding the local source database is
+destructive:
 
 ```powershell
 $env:CAPITAL_LAB_DATABASE_URL = '<loopback-source-url>'

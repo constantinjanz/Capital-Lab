@@ -20,6 +20,7 @@ import {
 
 const PROCESS_TIMEOUT_MS = 600_000
 const RESTORE_DATABASE = 'capital_lab_restore'
+const PLATFORM_SCHEMAS = 'auth,storage,extensions,vault'
 
 function fail(message) {
   throw new Error(message)
@@ -131,7 +132,6 @@ async function main() {
   }
 
   const psql = process.platform === 'win32' ? 'psql.exe' : 'psql'
-  const pgDump = process.platform === 'win32' ? 'pg_dump.exe' : 'pg_dump'
   const commonEnv = {
     ...process.env,
     ...source.libpqEnv,
@@ -157,20 +157,37 @@ async function main() {
   )
   const baselineSchema = path.join(baselineDirectory, 'schema.sql')
   const baselineData = path.join(baselineDirectory, 'data.sql')
-  const sourceEnv = { ...commonEnv, PGDATABASE: 'postgres' }
   const targetEnv = { ...commonEnv, PGDATABASE: RESTORE_DATABASE }
   try {
     await run(
-      pgDump,
-      ['--schema-only', '--file', baselineSchema],
+      supabase,
+      [
+        'db',
+        'dump',
+        '--db-url',
+        connectionValue,
+        '--schema',
+        PLATFORM_SCHEMAS,
+        '--file',
+        baselineSchema,
+      ],
       'platform_schema_dump',
-      sourceEnv,
     )
     await run(
-      pgDump,
-      ['--data-only', '--file', baselineData],
+      supabase,
+      [
+        'db',
+        'dump',
+        '--db-url',
+        connectionValue,
+        '--data-only',
+        '--use-copy',
+        '--schema',
+        PLATFORM_SCHEMAS,
+        '--file',
+        baselineData,
+      ],
       'platform_data_dump',
-      sourceEnv,
     )
     await chmod(baselineSchema, 0o600)
     await chmod(baselineData, 0o600)

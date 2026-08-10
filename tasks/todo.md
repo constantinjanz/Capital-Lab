@@ -176,6 +176,12 @@ startup/reset, and all 1,851 database assertions. The logical builder reached
 the tested PostgreSQL redactor only for fixed `platform_*` phases: the next run
 may emit only the first error category line with literals/URLs redacted and a
 400-character cap; dump contents and stdout remain suppressed.
+Run `31346632981` passed application, all four Playwright flows, and all 1,851
+database assertions. The redacted diagnostic proved the runner `pg_dump` major
+version differs from the Supabase database. The baseline export now uses the
+same pinned Supabase CLI `2.113.0` dump path already proven by the critical
+export, with schemas fixed to `auth,storage,extensions,vault`; no arbitrary
+schema input or mismatched host client remains.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only
