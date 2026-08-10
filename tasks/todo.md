@@ -212,6 +212,16 @@ E2E flow explicitly observes before upload. A new clean local-only rollback
 rehearsal applies both PR migrations in one bounded transaction, verifies their
 probe relation, rolls back, proves absence, and restores the exact migration
 bytes; Hosted rehearsal remains unauthorized.
+Run `31404735561` passed the complete application and browser jobs, including
+the hydration-gated Research import, plus pinned local startup, the new
+rollback-only migration rehearsal, full reset, and all 1,851 pgTAP assertions.
+The seed-free builder and role-policy gate completed; schema restore then
+failed because a schema-filtered platform dump does not carry the global empty
+`supabase_realtime` publication that official Supabase application dumps expect
+to exist. The disposable builder now creates exactly that local publication,
+and both the verifier preflight and checksummed Prelude require its non-all-table
+default DML policy. No Hosted publication or Realtime configuration was read or
+changed.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

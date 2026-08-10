@@ -139,9 +139,9 @@ tasks/todo.md
 | `check-credential-patterns.mjs`                     | `6541199b6bb8d545a5bc46f13ea0d92c6d9fdb0f3363e3f67ebfe5ba8a018a00` |
 | `critical-backup-contract.mjs`                      | `9035ea8de4053f94c9ee03ff90be51711edc00761a090285949eacb7223ffeec` |
 | `export-critical-tables.mjs`                        | `8d708a56c76810e4c0b88ecdba63111866bb0b9600f2b80e81d573a950ebf48c` |
-| `verify-backup-restore.mjs`                         | `b00e80e21ce5c081da6c3084c320e7e68a7a126b7f2fb85fb8bc2dee1ff9093d` |
-| `prepare-seed-free-local-restore-target.mjs`        | `fc3f99ecafcb6f7250272d5bdedaf7c02db1c9e004199ee0221bcd1daddfec5d` |
-| `seed-free-target-prelude.sql`                      | `6f28145b4576682d198241e56142cdbd2c06a495a103e2426d9e92d92a0fd826` |
+| `verify-backup-restore.mjs`                         | `87f84dbda91c4c7d4eefd43932474d0b3db7541f16edd5ca545595ee8dd33c57` |
+| `prepare-seed-free-local-restore-target.mjs`        | `1b1639662579cdb612ab26a1c48395404a1afdc68b2fcee1659446edc9acca15` |
+| `seed-free-target-prelude.sql`                      | `2857a4ec4001d8e8c53fc2eb632b04d2ec92f9068893c1814d951e3f1321342c` |
 | `migration-rehearsal-contract.mjs`                  | `566d1ab92b61c63c93a4dd69ba0a93187e8a7a3316492c62bb426c3e65401eb6` |
 | `run-local-rollback-migration-rehearsal.mjs`        | `6ce6b9675cadd79fbccc4a15f55e49524c434980ca523dabcbe5fcd2e651f256` |
 
@@ -268,6 +268,9 @@ The canonical phase contract additionally binds every phase file:
 | exact-head seed-free platform baseline, run `31347387043`                |           0 | managed baseline schema/data and unpinned local Vault extension provisioned                                            | local-only builder completed without Hosted mutation                                                                                  |
 | exact-head role restore, run `31347387043`                               |           1 | redundant distinct-server role replay lacked authority for a cluster-global setting                                    | full password-free role attributes/memberships now skip replay on equality and reverify any required distinct-server replay           |
 | exact-head browser CI, run `31347387043`                                 |           1 | file input was changed before hydration attached its handler; `Preview valid` remained absent                          | SSR-disabled/client-enabled hydration boundary added; semantic assertion retained                                                     |
+| exact-head application/browser CI, run `31404735561`                     |           0 | complete application gates and 4/4 Playwright flows                                                                    | verified on `c2a864ae...`; hydration-gated import is deterministic                                                                    |
+| exact-head rollback/reset/pgTAP, run `31404735561`                       |           0 | rollback-only PR migration rehearsal, full reset, 14 pgTAP files / 1,851 assertions                                    | migration rollback and database contracts verified                                                                                    |
+| exact-head seed-free schema restore, run `31404735561`                   |           1 | schema-filtered platform baseline lacked the global empty `supabase_realtime` publication                              | disposable builder now creates the exact non-all-table default-DML publication; preflight and checksummed Prelude require it          |
 
 ## Manual gates and stop conditions
 

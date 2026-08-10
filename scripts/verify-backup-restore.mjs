@@ -191,7 +191,24 @@ async function main() {
         and to_regprocedure('auth.uid()') is not null
         and to_regclass('storage.buckets') is not null
         and to_regnamespace('extensions') is not null
-        and to_regclass('vault.secrets') is not null,
+        and to_regclass('vault.secrets') is not null
+        and exists (
+          select 1
+          from pg_catalog.pg_publication as publication
+          where publication.pubname = 'supabase_realtime'
+            and publication.puballtables = false
+            and publication.pubinsert
+            and publication.pubupdate
+            and publication.pubdelete
+            and publication.pubtruncate
+        )
+        and not exists (
+          select 1
+          from pg_catalog.pg_publication as publication
+          join pg_catalog.pg_publication_rel as relation
+            on relation.prpubid = publication.oid
+          where publication.pubname = 'supabase_realtime'
+        ),
       'database_identity', max(database.oid)::text || ':' || current_database() || ':'
         || current_setting('server_version_num') || ':' || max(control.system_identifier)::text,
       'server_identity', current_setting('server_version_num')

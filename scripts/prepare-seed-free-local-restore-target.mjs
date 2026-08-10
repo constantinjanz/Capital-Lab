@@ -205,6 +205,11 @@ async function main() {
       'platform_vault_extension',
       platformAdminEnv,
     )
+    await sql(
+      'create publication supabase_realtime',
+      'platform_realtime_publication',
+      targetEnv,
+    )
     await run(
       psql,
       [

@@ -52,9 +52,10 @@ code-review run unless separately authorized.
 Use a fully disposable local Supabase stack on loopback. A plain `template0`
 database is not a valid target because official Supabase dumps assume the
 managed Auth, Storage, extension, and Vault baseline of a freshly provisioned
-project. The target must contain that platform baseline, no project migration,
-no seed, no user relation, and a database OID/name fingerprint distinct from
-the exported source.
+project. The target must contain that platform baseline plus the exact empty
+`supabase_realtime` publication, no project migration, no seed, no user
+relation, and a database OID/name fingerprint distinct from the exported
+source.
 
 The CI sequence exports first, temporarily holds the exact project migration
 files, runs pinned `supabase db reset --no-seed`, restores every migration file,
@@ -62,9 +63,10 @@ and uses the pinned Supabase CLI to create a short-lived logical schema dump of
 the allowlisted `auth,storage,extensions,vault` platform baseline plus an
 `auth,storage`-only data dump outside the repository. It restores the baseline
 into a new `template0` database, installs local `supabase_vault` without a
-version pin through `CREATE EXTENSION IF NOT EXISTS`, removes
-the target's empty migration-history schema, and securely discards the temporary
-baseline artifacts before verification. The helper derives the paths itself,
+version pin through `CREATE EXTENSION IF NOT EXISTS`, creates the local empty
+`supabase_realtime` publication expected by an official schema dump, removes
+the target's empty migration-history schema, and securely discards the
+temporary baseline artifacts before verification. The helper derives the paths itself,
 accepts no arguments, uses `shell:false`, and refuses a dirty tree. Run it only
 in a disposable local stack because rebuilding the local source database is
 destructive. Only the allowlisted managed baseline is restored as the fixed
