@@ -13,6 +13,7 @@ import {
   loadCriticalRelationContract,
   postgresUrlToLibpqEnv,
   redactedPostgresError,
+  roleRestoreRequired,
   sha256,
 } from './critical-backup-contract.mjs'
 
@@ -229,11 +230,13 @@ async function main() {
   const sameServer =
     sha256(preflightEvidence.server_identity) ===
     manifest.source.serverFingerprint
-  if (sameServer) {
-    if (targetRolePolicyFingerprint !== manifest.source.rolePolicyFingerprint) {
-      fail('Same-server disposable target role policy differs from the source')
-    }
-  } else {
+  if (
+    roleRestoreRequired(
+      manifest.source.rolePolicyFingerprint,
+      targetRolePolicyFingerprint,
+      sameServer,
+    )
+  ) {
     await runPsql(psql, restoreConnection.libpqEnv, ['--file', artifacts.roles])
     const restoredRolePolicyOutput = await runPsql(
       psql,

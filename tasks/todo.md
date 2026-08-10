@@ -197,6 +197,21 @@ installs `supabase_vault` with no version pin through `CREATE EXTENSION IF NOT
 EXISTS ... WITH SCHEMA vault`, copies data only for `auth,storage`, and requires
 the actual `vault.secrets` relation in both Prelude and target preflight. No
 Hosted extension or Vault object was changed.
+Run `31347387043` passed the complete application gate, pinned local reset, and
+all 14 pgTAP files / 1,851 assertions. The local platform-baseline builder now
+completed, including the unpinned local Vault extension; restore then attempted
+to replay cluster-global role settings on a freshly reset local server even
+though the password-free policy was already provisioned. The contract now
+compares complete role attributes and memberships first, skips redundant
+global replay on exact equality, rejects a same-server mismatch, and replays
+plus reverifies only a differing policy on a distinct server. The repeated
+Research-import browser failure was traced to interaction before React attached
+the file-change handler: the input is now disabled through SSR and becomes
+enabled only after the client hydration snapshot, which the unchanged semantic
+E2E flow explicitly observes before upload. A new clean local-only rollback
+rehearsal applies both PR migrations in one bounded transaction, verifies their
+probe relation, rolls back, proves absence, and restores the exact migration
+bytes; Hosted rehearsal remains unauthorized.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

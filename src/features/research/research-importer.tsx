@@ -1,9 +1,18 @@
 'use client'
 
 import { CheckCircle2, FileSearch, UploadCloud } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
+
+const subscribeToHydration = () => () => undefined
+const getClientHydrationSnapshot = () => true
+const getServerHydrationSnapshot = () => false
 
 export function ResearchImporter() {
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot,
+  )
   const [file, setFile] = useState<{ name: string; size: string } | null>(null)
   const [committed, setCommitted] = useState(false)
 
@@ -20,6 +29,7 @@ export function ResearchImporter() {
           id="research-file"
           type="file"
           accept=".md,.json,.csv,text/markdown,application/json,text/csv"
+          disabled={!hydrated}
           onChange={(event) => {
             const selected = event.target.files?.[0]
             if (!selected) return

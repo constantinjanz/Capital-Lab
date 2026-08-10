@@ -21,6 +21,7 @@
     "pricing:verify": "node --import tsx scripts/verify-model-pricing.ts",
     "backup:critical": "node scripts/export-critical-tables.mjs",
     "backup:restore:test": "node scripts/verify-backup-restore.mjs",
+    "migration:rehearse:local": "node scripts/run-local-rollback-migration-rehearsal.mjs",
     "activation:phase": "node scripts/run-activation-phase.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

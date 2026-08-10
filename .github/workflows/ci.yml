@@ -71,6 +71,10 @@ jobs:
           version: 2.113.0
       - run: supabase --version
       - run: node scripts/run-ci-gate.mjs --id supabase-start -- supabase start
+      - name: Rollback-only migration rehearsal
+        env:
+          CAPITAL_LAB_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: node scripts/run-ci-gate.mjs --id migration-rollback-rehearsal -- node scripts/run-local-rollback-migration-rehearsal.mjs
       - run: node scripts/run-ci-gate.mjs --id database-reset -- supabase db reset
       - run: node scripts/run-ci-gate.mjs --id database-pgtap -- supabase test db
       - name: Seed-free critical backup and disposable restore

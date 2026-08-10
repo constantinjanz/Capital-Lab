@@ -40,8 +40,8 @@ path only, with credential-file paths redacted.
 - a canonical manifest containing clean Git SHA, migration filenames and
   SHA-256 values, schema/contract versions, exact relation-set hash, safe source
   fingerprint metadata, tool versions, dump hashes, full relation counts,
-  complete content hashes, column signatures, a password-free role-policy
-  fingerprint, and evidence-rule results.
+  complete content hashes, column signatures, a password-free role-attribute
+  and role-membership policy fingerprint, and evidence-rule results.
 
 Pre- and post-dump evidence must be identical. Any concurrent critical-row or
 schema change aborts the export. No production export is part of an activation
@@ -99,9 +99,10 @@ managed Supabase baseline. The Prelude is validation-only: it creates no schema,
 table, migration, role, extension, or data. The verifier then restores in this
 order:
 
-1. roles (or, for a disposable database in the same PostgreSQL cluster,
-   verifies the identical cluster-global role policy without replaying global
-   role mutations into the still-running source cluster);
+1. exact password-free role attributes and memberships are verified first;
+   when they differ, the roles artifact is replayed only on a distinct server
+   and reverified, while a same-server mismatch fails rather than mutating
+   cluster-global state;
 2. the checksummed validation-only target Prelude;
 3. schema;
 4. data in the same transaction after
@@ -114,6 +115,20 @@ boundaries where the dump format permits them, and bounded process time. A
 role, schema, data, relation-set, column-signature, migration, HEAD, count, or
 content-hash mismatch is terminal. Partial or unknown outcomes are failures;
 the verifier never manufactures missing evidence.
+
+## Local rollback-only migration rehearsal
+
+The database CI also proves the two PR migrations without retaining them. On a
+clean checkout and loopback-only disposable Supabase stack,
+`pnpm migration:rehearse:local` temporarily holds exactly the two allowlisted
+PR migration files, runs `supabase db reset --no-seed`, restores their bytes,
+requires exactly one outer `BEGIN`/`COMMIT` pair per file, applies both bodies
+inside one bounded `psql -X --no-psqlrc` transaction, verifies the activation
+probe relation, rolls back, and verifies the relation is absent. Git HEAD,
+complete dirty-tree state, and migration hashes are checked before and after.
+CI then performs a normal full reset before pgTAP. The command rejects every
+non-loopback target and is never a substitute for a separately authorized
+Hosted rehearsal or migration apply.
 
 A backup is complete only after a disposable restore exits zero and reproduces
 the entire versioned contract, including the global paid-Canary one-shot lock,

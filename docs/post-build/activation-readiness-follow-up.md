@@ -80,20 +80,26 @@ still a manual gate.
 docs/BACKUP_AND_RESTORE.md
 docs/post-build/activation-readiness-follow-up.md
 docs/post-build/hosting-safety-audit.md
+e2e/mock-mode.spec.ts
 package.json
 scripts/activation-artifacts.test.ts
 scripts/check-credential-patterns.mjs
 scripts/critical-backup-contract.mjs
 scripts/critical-backup-contract.test.ts
 scripts/export-critical-tables.mjs
+scripts/migration-rehearsal-contract.mjs
+scripts/migration-rehearsal-contract.test.ts
+scripts/prepare-seed-free-local-restore-target.mjs
 scripts/run-activation-phase.mjs
 scripts/run-activation-phase.test.ts
+scripts/run-local-rollback-migration-rehearsal.mjs
 scripts/run-openai-paid-canary-child.mjs
 scripts/verify-backup-restore.mjs
 src/app/api/health/route.test.ts
 src/app/api/health/route.ts
 src/app/api/internal/scheduler/route.test.ts
 src/app/api/internal/scheduler/route.ts
+src/features/research/research-importer.tsx
 src/lib/supabase/scheduler-runtime-repository.ts
 supabase/activation/disable-hosted-scheduler.sql
 supabase/activation/drain-reconcile.sql
@@ -131,11 +137,13 @@ tasks/todo.md
 | `critical-relations.v2.json`                        | `ce65298a8b8e93954ca787b610bcedc988f04ce7645ba971395227aff6ba306d` |
 | `run-activation-phase.mjs`                          | `90d943f61a22e18236912d635438f25490e21838a6a9ff862c654d3251c25b0d` |
 | `check-credential-patterns.mjs`                     | `6541199b6bb8d545a5bc46f13ea0d92c6d9fdb0f3363e3f67ebfe5ba8a018a00` |
-| `critical-backup-contract.mjs`                      | `2369370c62cc59b0fe024386ece966281071d27ab156f148b22024adbe389f01` |
+| `critical-backup-contract.mjs`                      | `9035ea8de4053f94c9ee03ff90be51711edc00761a090285949eacb7223ffeec` |
 | `export-critical-tables.mjs`                        | `8d708a56c76810e4c0b88ecdba63111866bb0b9600f2b80e81d573a950ebf48c` |
-| `verify-backup-restore.mjs`                         | `727698f5ce40271fe3db47b539d5a27ba3f1f52b76f718767489d5dc26b51532` |
+| `verify-backup-restore.mjs`                         | `b00e80e21ce5c081da6c3084c320e7e68a7a126b7f2fb85fb8bc2dee1ff9093d` |
 | `prepare-seed-free-local-restore-target.mjs`        | `fc3f99ecafcb6f7250272d5bdedaf7c02db1c9e004199ee0221bcd1daddfec5d` |
 | `seed-free-target-prelude.sql`                      | `6f28145b4576682d198241e56142cdbd2c06a495a103e2426d9e92d92a0fd826` |
+| `migration-rehearsal-contract.mjs`                  | `566d1ab92b61c63c93a4dd69ba0a93187e8a7a3316492c62bb426c3e65401eb6` |
+| `run-local-rollback-migration-rehearsal.mjs`        | `6ce6b9675cadd79fbccc4a15f55e49524c434980ca523dabcbe5fcd2e651f256` |
 
 The canonical phase contract additionally binds every phase file:
 
@@ -168,6 +176,8 @@ The canonical phase contract additionally binds every phase file:
 | complete Vitest                                                          |           0 | 79 files / 589 tests                                                                                                   | locally verified                                                                                                                      |
 | `node scripts/check-paper-only.mjs`                                      |           0 | PAPER-only scan passed                                                                                                 | locally verified                                                                                                                      |
 | `git diff --check`                                                       |           0 | no whitespace errors                                                                                                   | locally verified                                                                                                                      |
+| focused backup/rollback Vitest                                           |           0 | 2 files / 15 tests                                                                                                     | locally verified                                                                                                                      |
+| focused changed-file ESLint plus strict TypeScript                       |           0 | zero warnings / strict                                                                                                 | locally verified after hydration and rollback additions                                                                               |
 | local credentials                                                        | not claimed | ignored `.env.local` contains redacted credential categories                                                           | expected local owner gate; values never emitted                                                                                       |
 | local Supabase/pgTAP                                                     | unavailable | Docker, Supabase CLI, and psql absent                                                                                  | exact clean CI required                                                                                                               |
 | local seed-free export/restore                                           | unavailable | Docker/psql absent                                                                                                     | exact clean CI required                                                                                                               |
@@ -253,6 +263,11 @@ The canonical phase contract additionally binds every phase file:
 | exact-head application/browser CI, run `31347131750`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `91785215...`                                                                                                             |
 | exact-head Supabase reset / extended pgTAP, run `31347131750`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green                                                                                                      |
 | exact-head platform data restore, run `31347131750`                      |           1 | extension-owned `vault.secrets` was absent while Vault data COPY was attempted                                         | local unpinned `supabase_vault` install added; baseline data narrowed to `auth,storage`; preflight requires actual Vault relation     |
+| exact-head application CI, run `31347387043`                             |           0 | format, lint, typecheck, 79 files / 594 tests, safety, credentials, build                                              | verified on `b6089025...`                                                                                                             |
+| exact-head Supabase reset / extended pgTAP, run `31347387043`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remains green                                                                                                       |
+| exact-head seed-free platform baseline, run `31347387043`                |           0 | managed baseline schema/data and unpinned local Vault extension provisioned                                            | local-only builder completed without Hosted mutation                                                                                  |
+| exact-head role restore, run `31347387043`                               |           1 | redundant distinct-server role replay lacked authority for a cluster-global setting                                    | full password-free role attributes/memberships now skip replay on equality and reverify any required distinct-server replay           |
+| exact-head browser CI, run `31347387043`                                 |           1 | file input was changed before hydration attached its handler; `Preview valid` remained absent                          | SSR-disabled/client-enabled hydration boundary added; semantic assertion retained                                                     |
 
 ## Manual gates and stop conditions
 

@@ -8,6 +8,7 @@ import {
   fingerprintRolePolicy,
   postgresUrlToLibpqEnv,
   redactedPostgresError,
+  roleRestoreRequired,
 } from './critical-backup-contract.mjs'
 
 const hashA = 'a'.repeat(64)
@@ -71,21 +72,36 @@ const expected = {
 
 describe('critical backup contract', () => {
   it('hashes a secret-free deterministic role policy and server boundary', () => {
-    const roles = [
-      {
-        name: 'authenticator',
-        canLogin: true,
-        configuration: ['statement_timeout=8s'],
-      },
-    ]
-    expect(fingerprintRolePolicy(roles)).toMatch(/^[0-9a-f]{64}$/)
-    expect(() => fingerprintRolePolicy({ roles })).toThrow(
+    const rolePolicy = {
+      roles: [
+        {
+          name: 'authenticator',
+          canLogin: true,
+          configuration: ['statement_timeout=8s'],
+        },
+      ],
+      memberships: [
+        { role: 'authenticated', member: 'authenticator', adminOption: false },
+      ],
+    }
+    expect(fingerprintRolePolicy(rolePolicy)).toMatch(/^[0-9a-f]{64}$/)
+    expect(() => fingerprintRolePolicy(rolePolicy.roles)).toThrow(
       'role policy evidence is invalid',
     )
     expect(buildRolePolicySql()).toMatch(/pg_catalog\.pg_roles/)
+    expect(buildRolePolicySql()).toMatch(/pg_catalog\.pg_auth_members/)
     expect(buildRolePolicySql()).not.toMatch(/password/iu)
     expect(buildServerIdentitySql()).toMatch(/system_identifier/)
     expect(buildServerIdentitySql()).toMatch(/pg_catalog\.pg_database/)
+  })
+
+  it('restores roles only for a differing policy on a different server', () => {
+    expect(roleRestoreRequired(hashA, hashA, true)).toBe(false)
+    expect(roleRestoreRequired(hashA, hashA, false)).toBe(false)
+    expect(roleRestoreRequired(hashA, hashB, false)).toBe(true)
+    expect(() => roleRestoreRequired(hashA, hashB, true)).toThrow(
+      'Same-server disposable target role policy differs',
+    )
   })
 
   it('decomposes a loopback URL into explicit libpq fields without a URI', () => {

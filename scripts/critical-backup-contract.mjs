@@ -41,27 +41,67 @@ export function buildServerIdentitySql() {
 }
 
 export function buildRolePolicySql() {
-  return `select coalesce(jsonb_agg(jsonb_build_object(
-    'name', role.rolname,
-    'superuser', role.rolsuper,
-    'inherit', role.rolinherit,
-    'createRole', role.rolcreaterole,
-    'createDatabase', role.rolcreatedb,
-    'canLogin', role.rolcanlogin,
-    'replication', role.rolreplication,
-    'connectionLimit', role.rolconnlimit,
-    'bypassRls', role.rolbypassrls,
-    'validUntil', role.rolvaliduntil,
-    'configuration', role.rolconfig
-  ) order by role.rolname), '[]'::jsonb)
-  from pg_catalog.pg_roles as role;\n`
+  return `select jsonb_build_object(
+    'roles', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'name', role.rolname,
+        'superuser', role.rolsuper,
+        'inherit', role.rolinherit,
+        'createRole', role.rolcreaterole,
+        'createDatabase', role.rolcreatedb,
+        'canLogin', role.rolcanlogin,
+        'replication', role.rolreplication,
+        'connectionLimit', role.rolconnlimit,
+        'bypassRls', role.rolbypassrls,
+        'validUntil', role.rolvaliduntil,
+        'configuration', role.rolconfig
+      ) order by role.rolname), '[]'::jsonb)
+      from pg_catalog.pg_roles as role
+    ),
+    'memberships', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'role', granted_role.rolname,
+        'member', member_role.rolname,
+        'adminOption', membership.admin_option
+      ) order by granted_role.rolname, member_role.rolname), '[]'::jsonb)
+      from pg_catalog.pg_auth_members as membership
+      join pg_catalog.pg_roles as granted_role on granted_role.oid = membership.roleid
+      join pg_catalog.pg_roles as member_role on member_role.oid = membership.member
+    )
+  );\n`
 }
 
 export function fingerprintRolePolicy(rolePolicy) {
-  if (!Array.isArray(rolePolicy)) {
+  if (
+    !rolePolicy ||
+    typeof rolePolicy !== 'object' ||
+    Array.isArray(rolePolicy) ||
+    !Array.isArray(rolePolicy.roles) ||
+    !Array.isArray(rolePolicy.memberships) ||
+    Object.keys(rolePolicy).sort().join(',') !== 'memberships,roles'
+  ) {
     throw new Error('Database role policy evidence is invalid')
   }
   return sha256(canonicalJson(rolePolicy))
+}
+
+export function roleRestoreRequired(
+  sourceRolePolicyFingerprint,
+  targetRolePolicyFingerprint,
+  sameServer,
+) {
+  if (
+    !SHA256.test(sourceRolePolicyFingerprint) ||
+    !SHA256.test(targetRolePolicyFingerprint) ||
+    typeof sameServer !== 'boolean'
+  ) {
+    throw new Error('Role-policy restore evidence is invalid')
+  }
+  if (sourceRolePolicyFingerprint === targetRolePolicyFingerprint) return false
+  if (sameServer) {
+    throw new Error('Same-server disposable target role policy differs')
+  }
+  return true
 }
 
 export function redactedPostgresError(stderr) {
