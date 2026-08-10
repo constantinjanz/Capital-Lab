@@ -133,9 +133,9 @@ tasks/todo.md
 | `check-credential-patterns.mjs`                     | `6541199b6bb8d545a5bc46f13ea0d92c6d9fdb0f3363e3f67ebfe5ba8a018a00` |
 | `critical-backup-contract.mjs`                      | `2369370c62cc59b0fe024386ece966281071d27ab156f148b22024adbe389f01` |
 | `export-critical-tables.mjs`                        | `8d708a56c76810e4c0b88ecdba63111866bb0b9600f2b80e81d573a950ebf48c` |
-| `verify-backup-restore.mjs`                         | `a939b4af14d228c77da30b4c1d34894a93be31986e5b5c9e5ba26085b581dd79` |
-| `prepare-seed-free-local-restore-target.mjs`        | `1b0efa496116d47e2b50c24ffba6ec11078ccd8c3214d0b917ce2540be54920c` |
-| `seed-free-target-prelude.sql`                      | `d97bdd1ec58586944bbc0e556dd72113dfee4391eededa46aae1b5ff8009e353` |
+| `verify-backup-restore.mjs`                         | `727698f5ce40271fe3db47b539d5a27ba3f1f52b76f718767489d5dc26b51532` |
+| `prepare-seed-free-local-restore-target.mjs`        | `fc3f99ecafcb6f7250272d5bdedaf7c02db1c9e004199ee0221bcd1daddfec5d` |
+| `seed-free-target-prelude.sql`                      | `6f28145b4576682d198241e56142cdbd2c06a495a103e2426d9e92d92a0fd826` |
 
 The canonical phase contract additionally binds every phase file:
 
@@ -250,6 +250,9 @@ The canonical phase contract additionally binds every phase file:
 | exact-head application/browser CI, run `31346865611`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `72f923f2...`                                                                                                             |
 | exact-head Supabase reset / extended pgTAP, run `31346865611`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green                                                                                                      |
 | exact-head platform schema restore, run `31346865611`                    |           1 | managed dump required `SET ROLE supabase_admin`; generic operator is not a member                                      | managed baseline alone now restores through fixed local `supabase_admin`; app restore/evidence remain operator-bound                  |
+| exact-head application/browser CI, run `31347131750`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `91785215...`                                                                                                             |
+| exact-head Supabase reset / extended pgTAP, run `31347131750`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green                                                                                                      |
+| exact-head platform data restore, run `31347131750`                      |           1 | extension-owned `vault.secrets` was absent while Vault data COPY was attempted                                         | local unpinned `supabase_vault` install added; baseline data narrowed to `auth,storage`; preflight requires actual Vault relation     |
 
 ## Manual gates and stop conditions
 

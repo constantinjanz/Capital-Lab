@@ -58,9 +58,11 @@ the exported source.
 
 The CI sequence exports first, temporarily holds the exact project migration
 files, runs pinned `supabase db reset --no-seed`, restores every migration file,
-and uses the pinned Supabase CLI to create a short-lived logical dump of the
-allowlisted `auth,storage,extensions,vault` platform baseline outside the
-repository. It restores the baseline into a new `template0` database, removes
+and uses the pinned Supabase CLI to create a short-lived logical schema dump of
+the allowlisted `auth,storage,extensions,vault` platform baseline plus an
+`auth,storage`-only data dump outside the repository. It restores the baseline
+into a new `template0` database, installs local `supabase_vault` without a
+version pin through `CREATE EXTENSION IF NOT EXISTS`, removes
 the target's empty migration-history schema, and securely discards the temporary
 baseline artifacts before verification. The helper derives the paths itself,
 accepts no arguments, uses `shell:false`, and refuses a dirty tree. Run it only

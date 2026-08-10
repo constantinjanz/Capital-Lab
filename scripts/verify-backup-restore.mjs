@@ -190,7 +190,7 @@ async function main() {
         and to_regprocedure('auth.uid()') is not null
         and to_regclass('storage.buckets') is not null
         and to_regnamespace('extensions') is not null
-        and to_regnamespace('vault') is not null,
+        and to_regclass('vault.secrets') is not null,
       'database_identity', max(database.oid)::text || ':' || current_database() || ':'
         || current_setting('server_version_num') || ':' || max(control.system_identifier)::text,
       'server_identity', current_setting('server_version_num')

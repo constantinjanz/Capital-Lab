@@ -20,7 +20,8 @@ import {
 
 const PROCESS_TIMEOUT_MS = 600_000
 const RESTORE_DATABASE = 'capital_lab_restore'
-const PLATFORM_SCHEMAS = 'auth,storage,extensions,vault'
+const PLATFORM_SCHEMA_SCHEMAS = 'auth,storage,extensions,vault'
+const PLATFORM_DATA_SCHEMAS = 'auth,storage'
 const PLATFORM_ADMIN = 'supabase_admin'
 
 function fail(message) {
@@ -169,7 +170,7 @@ async function main() {
         '--db-url',
         connectionValue,
         '--schema',
-        PLATFORM_SCHEMAS,
+        PLATFORM_SCHEMA_SCHEMAS,
         '--file',
         baselineSchema,
       ],
@@ -185,7 +186,7 @@ async function main() {
         '--data-only',
         '--use-copy',
         '--schema',
-        PLATFORM_SCHEMAS,
+        PLATFORM_DATA_SCHEMAS,
         '--file',
         baselineData,
       ],
@@ -197,6 +198,11 @@ async function main() {
       psql,
       [...psqlArgs, '--single-transaction', '--file', baselineSchema],
       'platform_schema_restore',
+      platformAdminEnv,
+    )
+    await sql(
+      'create extension if not exists supabase_vault with schema vault',
+      'platform_vault_extension',
       platformAdminEnv,
     )
     await run(

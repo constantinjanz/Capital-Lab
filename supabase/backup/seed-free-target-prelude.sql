@@ -9,6 +9,7 @@ begin
     or to_regclass('auth.users') is null
     or to_regprocedure('auth.uid()') is null
     or to_regclass('storage.buckets') is null
+    or to_regclass('vault.secrets') is null
   then
     raise exception using
       errcode = '55000',

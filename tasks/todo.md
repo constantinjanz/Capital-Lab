@@ -189,6 +189,14 @@ commands are not stripped. Only the allowlisted managed baseline now restores
 as the fixed local `supabase_admin` with the existing non-logged loopback
 password; the Capital Lab schema/data restore and all evidence queries remain
 bound to the parsed operator.
+Run `31347131750` passed application, all four Playwright flows, and all 1,851
+database assertions. Managed schema restore then succeeded under its preserved
+role identity; baseline data failed because extension-owned `vault.secrets` was
+not recreated by a schema-filtered dump. The local disposable builder now
+installs `supabase_vault` with no version pin through `CREATE EXTENSION IF NOT
+EXISTS ... WITH SCHEMA vault`, copies data only for `auth,storage`, and requires
+the actual `vault.secrets` relation in both Prelude and target preflight. No
+Hosted extension or Vault object was changed.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only
