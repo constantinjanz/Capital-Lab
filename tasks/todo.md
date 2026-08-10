@@ -123,6 +123,12 @@ counter, transport-error, and terminal-reason cases, copies parsed counters,
 expires ephemeral transport rows, injects post-kill Cron/audit faults, rejects
 early finalization and drifted unschedule, and checks duplicate terminal ticks.
 A new exact-head pgTAP and full schema/data restore run is mandatory.
+Run `31344675766` kept all application and browser gates green (79 files / 594
+tests and 4/4 Playwright). The expanded pgTAP path rejected the nominal auth
+fixture because its JSON used the operation UUID in the `request_id` field
+instead of the request UUID frozen by the claim. The fixture now uses the exact
+persisted request identity; no production code or acceptance condition was
+weakened. Backup/restore was correctly skipped after the pgTAP failure.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

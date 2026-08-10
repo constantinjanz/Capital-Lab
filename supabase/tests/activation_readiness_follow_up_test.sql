@@ -29,7 +29,7 @@ returns jsonb language sql stable as $$
     'campaign_id', pg_temp.campaign_id(),
     'correlation_id', '30000000-0000-4000-8000-000000000004'::uuid,
     'nonce', '30000000-0000-4000-8000-000000000002'::uuid,
-    'request_id', '30000000-0000-4000-8000-000000000003'::uuid,
+    'request_id', '30000000-0000-4000-8000-000000000001'::uuid,
     'environment', 'production',
     'deployment_id', 'dpl_12345678901234567890',
     'commit_sha', repeat('a', 40),
