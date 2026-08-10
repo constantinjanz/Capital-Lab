@@ -165,6 +165,11 @@ for the real seed-free platform baseline in an OS temporary directory, restores
 them transactionally into a new `template0` database, and removes the temporary
 directory in `finally`. This path needs no backend termination and still emits
 no dump contents, stderr, URL, SQL value, or credential.
+Run `31346276617` passed application and all four Playwright flows but did not
+exercise any database code: the ephemeral runner already had local port 54322
+bound before `supabase start`. Reset, pgTAP, export, and restore were skipped.
+No retry loop or port override was added; a fresh exact-head clean runner is
+required.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only
