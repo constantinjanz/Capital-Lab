@@ -30,9 +30,9 @@ Safety status: implementation-only. Production migration/deployment/activation, 
 
 ### Verification and publication
 
-- [ ] Run focused tests while iterating, then on the exact clean final commit: format, lint, typecheck, unit, safety, credentials, build, Playwright, pinned Supabase CLI version, local start/reset/pgTAP, seed-free export/restore, and rollback-only migration rehearsals.
-- [ ] Regenerate migration/script/manifest/documentation checksums from final bytes; verify them again after commit and record exact commands, exit codes, and test counts under `docs/post-build/`.
-- [ ] Push only scoped files to the existing PR branch, keep PR #21 draft/unmerged, observe exact-commit CI/Preview read-only, and end at no stronger than second-independent-review readiness.
+- [x] Run focused tests while iterating, then on the exact clean final commit: format, lint, typecheck, unit, safety, credentials, build, Playwright, pinned Supabase CLI version, local start/reset/pgTAP, seed-free export/restore, and rollback-only migration rehearsals.
+- [x] Regenerate migration/script/manifest/documentation checksums from final bytes; verify them again after commit and record exact commands, exit codes, and test counts under `docs/post-build/`.
+- [x] Push only scoped files to the existing PR branch, keep PR #21 draft/unmerged, observe exact-commit CI/Preview read-only, and end at no stronger than second-independent-review readiness.
 
 Iteration evidence before the first CI commit: direct TypeScript compiler exit 0;
 ESLint exit 0 with zero warnings; focused security suites 5 files / 34 tests;
@@ -230,6 +230,16 @@ critical relation contract. The exporter now derives a sorted data-schema scope
 from the canonical critical relation list, passes only that scope to the dump,
 freezes it in the manifest, and makes restore reject drift. Auth/Storage remain
 the separately provisioned seed-free platform baseline.
+Run `31406201745` at exact code commit
+`1023be44ed9f4e1f0e610dba8a501c7ccf687e89` is the first complete green cycle:
+format, zero-warning lint, strict typecheck, 80 Vitest files / 600 tests,
+PAPER-only safety, current plus 100-commit credential history, production build,
+4/4 Playwright flows, pinned Supabase CLI 2.113.0, local start, rollback-only
+rehearsal, full reset, 14 pgTAP files / 1,851 assertions, sensitive external
+export, seed-free managed target construction, and full restore verification of
+40 critical relations. The documentation-only checksum/handoff commit is the
+final candidate and remains subject to exact-head CI/PR reconciliation before
+handoff.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

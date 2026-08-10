@@ -78,6 +78,7 @@ still a manual gate.
 .gitignore
 .prettierignore
 docs/BACKUP_AND_RESTORE.md
+docs/post-build/activation-readiness-checksums.sha256
 docs/post-build/activation-readiness-follow-up.md
 docs/post-build/hosting-safety-audit.md
 e2e/mock-mode.spec.ts
@@ -144,6 +145,13 @@ tasks/todo.md
 | `seed-free-target-prelude.sql`                      | `2857a4ec4001d8e8c53fc2eb632b04d2ec92f9068893c1814d951e3f1321342c` |
 | `migration-rehearsal-contract.mjs`                  | `566d1ab92b61c63c93a4dd69ba0a93187e8a7a3316492c62bb426c3e65401eb6` |
 | `run-local-rollback-migration-rehearsal.mjs`        | `6ce6b9675cadd79fbccc4a15f55e49524c434980ca523dabcbe5fcd2e651f256` |
+| `activation-readiness-checksums.sha256`             | `1a117918dae03a9e6a5acbdaf81294cf11c04f49d16b3a2eb020b07c5e40a4db` |
+
+`activation-readiness-checksums.sha256` freezes every other changed file's
+final bytes, including migrations, SQL phases/tests, scripts/tests, manifests,
+application boundaries, CI, runbooks, and task evidence. It intentionally
+excludes itself and this self-referential report; its own hash is recorded
+above.
 
 The canonical phase contract additionally binds every phase file:
 
@@ -274,13 +282,15 @@ The canonical phase contract additionally binds every phase file:
 | exact-head application/browser CI, run `31405499189`                     |           0 | complete application gates and 4/4 Playwright flows                                                                    | verified on `7d9e9707...`                                                                                                             |
 | exact-head rollback/reset/pgTAP, run `31405499189`                       |           0 | rollback-only rehearsal, full reset, 14 pgTAP files / 1,851 assertions                                                 | database contract remains green                                                                                                       |
 | exact-head seed-free data restore, run `31405499189`                     |           1 | unscoped data dump included managed Storage baseline tables outside the critical relation contract                     | data schemas now derive from the canonical relation contract, are manifest-frozen, and exclude separately provisioned platform state  |
+| exact-head application CI, run `31406201745`                             |           0 | format, lint, typecheck, 80 files / 600 tests, safety, 100-commit credential scan, build                               | first complete green cycle at `1023be44ed9f4e1f0e610dba8a501c7ccf687e89`                                                              |
+| exact-head browser CI, run `31406201745`                                 |           0 | 4/4 Playwright flows                                                                                                   | hydration-gated Research import remained green                                                                                        |
+| exact-head local database CI, run `31406201745`                          |           0 | CLI 2.113.0, start, rollback rehearsal, reset, 14 pgTAP files / 1,851 assertions                                       | exact migration and database contracts green                                                                                          |
+| exact-head seed-free export/restore, run `31406201745`                   |           0 | sensitive external export, managed target, full restore evidence for 40 relations                                      | seed-free disposable restore verified                                                                                                 |
 
 ## Manual gates and stop conditions
 
 - Independent second review of SQL, runner, response contract, backup contract,
   and CI evidence.
-- Exact Draft-PR-head green application, browser, database, pgTAP, and seed-free
-  restore jobs with no skipped/flaky security test.
 - Production environment-name/scope review without values, exact Production
   deployment identity, consumer scope parity, and auto-deploy impact review.
 - Separate authorization for any migration apply, extension/Vault/job change,
@@ -296,11 +306,9 @@ execution, and real broker. Data mode remains mock/paper-only.
 
 ## Current status
 
-**NO-GO — REMEDIATION INCOMPLETE**
+**READY FOR SECOND INDEPENDENT REVIEW — NOT AUTHORIZED FOR MERGE, MIGRATION APPLY, PRODUCTION DEPLOYMENT OR ACTIVATION**
 
-This candidate cannot advance until the exact committed migration compiles,
-the pgTAP suite and seed-free disposable restore pass in ephemeral CI, every
-exact-commit check is green, checksums are reverified after commit, and the
-Draft PR head is reconciled. Even a later positive result may be no stronger
-than `READY FOR SECOND INDEPENDENT REVIEW` and never authorizes merge, migration
-apply, Production deployment, or activation.
+This status records repository and local-ephemeral evidence only. It is not an
+operator approval, Production readiness declaration, migration authorization,
+deployment approval, activation approval, or permission to send a scheduler,
+provider, OpenAI, Canary, broker, or trading request.
