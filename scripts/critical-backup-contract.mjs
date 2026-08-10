@@ -198,6 +198,26 @@ export async function loadCriticalRelationContract(filename) {
   return { contract, sha256: sha256(bytes) }
 }
 
+export function criticalRelationSchemas(contract) {
+  if (!contract || !Array.isArray(contract.relations)) {
+    throw new Error('Critical-relation schema scope is invalid')
+  }
+  const schemas = [
+    ...new Set(
+      contract.relations.map((spec) => {
+        if (!spec || !RELATION.test(spec.relation)) {
+          throw new Error('Critical-relation schema scope is invalid')
+        }
+        return spec.relation.split('.')[0]
+      }),
+    ),
+  ].sort()
+  if (schemas.length === 0) {
+    throw new Error('Critical-relation schema scope is invalid')
+  }
+  return schemas
+}
+
 function quoteIdentifier(identifier) {
   if (!IDENTIFIER.test(identifier)) throw new Error('Unsafe SQL identifier')
   return `"${identifier}"`
@@ -289,6 +309,9 @@ export function assertBackupManifest(manifest, expected) {
     applied_migrations: appliedMigrationsValid,
     artifact_metadata: artifactsValid,
     created_at: !Number.isNaN(Date.parse(manifest.createdAt)),
+    data_schemas:
+      canonicalJson(manifest.dataSchemas) ===
+      canonicalJson(expected.dataSchemas),
     evidence_shape: evidenceValid,
     git_commit:
       /^[0-9a-f]{40}$/.test(manifest.gitCommitSha) &&
@@ -304,8 +327,8 @@ export function assertBackupManifest(manifest, expected) {
       SHA256.test(manifest.restorePreludeSha256 ?? '') &&
       manifest.restorePreludeSha256 === expected.restorePreludeSha256,
     schema_contract:
-      manifest.schemaVersion === 2 &&
-      manifest.schemaContractVersion === 'capital-lab-activation-backup-v2',
+      manifest.schemaVersion === 3 &&
+      manifest.schemaContractVersion === 'capital-lab-activation-backup-v3',
     source_fingerprint: SHA256.test(manifest.source?.databaseFingerprint ?? ''),
     source_role_policy: SHA256.test(
       manifest.source?.rolePolicyFingerprint ?? '',

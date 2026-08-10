@@ -137,9 +137,9 @@ tasks/todo.md
 | `critical-relations.v2.json`                        | `ce65298a8b8e93954ca787b610bcedc988f04ce7645ba971395227aff6ba306d` |
 | `run-activation-phase.mjs`                          | `90d943f61a22e18236912d635438f25490e21838a6a9ff862c654d3251c25b0d` |
 | `check-credential-patterns.mjs`                     | `6541199b6bb8d545a5bc46f13ea0d92c6d9fdb0f3363e3f67ebfe5ba8a018a00` |
-| `critical-backup-contract.mjs`                      | `9035ea8de4053f94c9ee03ff90be51711edc00761a090285949eacb7223ffeec` |
-| `export-critical-tables.mjs`                        | `8d708a56c76810e4c0b88ecdba63111866bb0b9600f2b80e81d573a950ebf48c` |
-| `verify-backup-restore.mjs`                         | `87f84dbda91c4c7d4eefd43932474d0b3db7541f16edd5ca545595ee8dd33c57` |
+| `critical-backup-contract.mjs`                      | `ed9cf2b51831e8df4f69419661e285b291531617c43b849b66419b5051b4e0c9` |
+| `export-critical-tables.mjs`                        | `5cd88bc7529d35ed933af1034a2a053d041dc845f8a5ff66a69e4e48abdeca53` |
+| `verify-backup-restore.mjs`                         | `0ad78110e103100c9109dafe2054ca91edd9c4cc48fa1d820963988de1e7e65c` |
 | `prepare-seed-free-local-restore-target.mjs`        | `1b1639662579cdb612ab26a1c48395404a1afdc68b2fcee1659446edc9acca15` |
 | `seed-free-target-prelude.sql`                      | `2857a4ec4001d8e8c53fc2eb632b04d2ec92f9068893c1814d951e3f1321342c` |
 | `migration-rehearsal-contract.mjs`                  | `566d1ab92b61c63c93a4dd69ba0a93187e8a7a3316492c62bb426c3e65401eb6` |
@@ -271,6 +271,9 @@ The canonical phase contract additionally binds every phase file:
 | exact-head application/browser CI, run `31404735561`                     |           0 | complete application gates and 4/4 Playwright flows                                                                    | verified on `c2a864ae...`; hydration-gated import is deterministic                                                                    |
 | exact-head rollback/reset/pgTAP, run `31404735561`                       |           0 | rollback-only PR migration rehearsal, full reset, 14 pgTAP files / 1,851 assertions                                    | migration rollback and database contracts verified                                                                                    |
 | exact-head seed-free schema restore, run `31404735561`                   |           1 | schema-filtered platform baseline lacked the global empty `supabase_realtime` publication                              | disposable builder now creates the exact non-all-table default-DML publication; preflight and checksummed Prelude require it          |
+| exact-head application/browser CI, run `31405499189`                     |           0 | complete application gates and 4/4 Playwright flows                                                                    | verified on `7d9e9707...`                                                                                                             |
+| exact-head rollback/reset/pgTAP, run `31405499189`                       |           0 | rollback-only rehearsal, full reset, 14 pgTAP files / 1,851 assertions                                                 | database contract remains green                                                                                                       |
+| exact-head seed-free data restore, run `31405499189`                     |           1 | unscoped data dump included managed Storage baseline tables outside the critical relation contract                     | data schemas now derive from the canonical relation contract, are manifest-frozen, and exclude separately provisioned platform state  |
 
 ## Manual gates and stop conditions
 

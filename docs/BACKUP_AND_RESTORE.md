@@ -43,6 +43,12 @@ path only, with credential-file paths redacted.
   complete content hashes, column signatures, a password-free role-attribute
   and role-membership policy fingerprint, and evidence-rule results.
 
+The data artifact's schema scope is not an independent allowlist. It is derived
+from the critical-relation contract, sorted, and frozen in the manifest. This
+keeps the current `private,public` application evidence separate from the
+freshly provisioned Auth/Storage platform baseline and makes any later critical
+schema addition an explicit contract and restore change.
+
 Pre- and post-dump evidence must be identical. Any concurrent critical-row or
 schema change aborts the export. No production export is part of an activation
 code-review run unless separately authorized.

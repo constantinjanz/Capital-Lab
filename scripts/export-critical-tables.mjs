@@ -8,6 +8,7 @@ import {
   buildRolePolicySql,
   buildServerIdentitySql,
   canonicalJson,
+  criticalRelationSchemas,
   fingerprintRolePolicy,
   loadCriticalRelationContract,
   postgresUrlToLibpqEnv,
@@ -158,6 +159,7 @@ async function main() {
   )
   const { contract, sha256: relationContractSha256 } =
     await loadCriticalRelationContract(contractPath)
+  const dataSchemas = criticalRelationSchemas(contract)
   const restorePreludePath = path.join(
     workspace,
     'supabase',
@@ -250,6 +252,8 @@ async function main() {
       databaseUrl,
       '--data-only',
       '--use-copy',
+      '--schema',
+      dataSchemas.join(','),
       '--file',
       paths.data,
     ],
@@ -315,13 +319,14 @@ async function main() {
   const manifest = {
     artifacts,
     createdAt: new Date().toISOString(),
+    dataSchemas,
     gitCommitSha: commitSha,
     migrations,
     relationContractSha256,
     restorePreludeSha256,
     relations: evidenceBefore.relations,
-    schemaContractVersion: 'capital-lab-activation-backup-v2',
-    schemaVersion: 2,
+    schemaContractVersion: 'capital-lab-activation-backup-v3',
+    schemaVersion: 3,
     source: {
       appliedMigrations: evidenceBefore.appliedMigrations,
       databaseFingerprint: evidenceBefore.databaseFingerprint,

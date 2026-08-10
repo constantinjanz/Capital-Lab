@@ -222,6 +222,14 @@ to exist. The disposable builder now creates exactly that local publication,
 and both the verifier preflight and checksummed Prelude require its non-all-table
 default DML policy. No Hosted publication or Realtime configuration was read or
 changed.
+Run `31405499189` again passed application, all four browser flows, rollback
+rehearsal, reset, and all 1,851 pgTAP assertions. The Realtime publication gate
+allowed schema restore to complete; data restore then exposed that the default
+Supabase data dump also carried managed Storage baseline tables outside the
+critical relation contract. The exporter now derives a sorted data-schema scope
+from the canonical critical relation list, passes only that scope to the dump,
+freezes it in the manifest, and makes restore reject drift. Auth/Storage remain
+the separately provisioned seed-free platform baseline.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

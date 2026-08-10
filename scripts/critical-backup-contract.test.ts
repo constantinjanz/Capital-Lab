@@ -5,6 +5,7 @@ import {
   assertRestoredEvidence,
   buildRolePolicySql,
   buildServerIdentitySql,
+  criticalRelationSchemas,
   fingerprintRolePolicy,
   postgresUrlToLibpqEnv,
   redactedPostgresError,
@@ -43,8 +44,9 @@ const manifest = {
     historyData: { file: 'history-data.sql', sha256: hashB },
   },
   createdAt: '2026-08-10T00:00:00.000Z',
-  schemaVersion: 2,
-  schemaContractVersion: 'capital-lab-activation-backup-v2',
+  dataSchemas: ['private'],
+  schemaVersion: 3,
+  schemaContractVersion: 'capital-lab-activation-backup-v3',
   gitCommitSha: 'c'.repeat(40),
   relationContractSha256: hashA,
   restorePreludeSha256: hashB,
@@ -63,6 +65,7 @@ const manifest = {
   },
 }
 const expected = {
+  dataSchemas: ['private'],
   gitCommitSha: 'c'.repeat(40),
   relationContractSha256: hashA,
   relationNames: Object.keys(relations).sort(),
@@ -101,6 +104,21 @@ describe('critical backup contract', () => {
     expect(roleRestoreRequired(hashA, hashB, false)).toBe(true)
     expect(() => roleRestoreRequired(hashA, hashB, true)).toThrow(
       'Same-server disposable target role policy differs',
+    )
+  })
+
+  it('derives the deterministic data-dump scope from the relation contract', () => {
+    expect(
+      criticalRelationSchemas({
+        relations: [
+          { relation: 'public.orders' },
+          { relation: 'private.audit_log' },
+          { relation: 'public.positions' },
+        ],
+      }),
+    ).toEqual(['private', 'public'])
+    expect(() => criticalRelationSchemas({ relations: [] })).toThrow(
+      'schema scope is invalid',
     )
   })
 
@@ -187,6 +205,12 @@ describe('critical backup contract', () => {
         expected,
       ),
     ).toThrow(/artifact_metadata/)
+    expect(() =>
+      assertBackupManifest(
+        { ...manifest, dataSchemas: ['private', 'storage'] },
+        expected,
+      ),
+    ).toThrow(/data_schemas/)
   })
 
   it.each([

@@ -9,6 +9,7 @@ import {
   buildCriticalEvidenceSql,
   buildRolePolicySql,
   canonicalJson,
+  criticalRelationSchemas,
   fingerprintRolePolicy,
   loadCriticalRelationContract,
   postgresUrlToLibpqEnv,
@@ -134,6 +135,7 @@ async function main() {
   )
   const { contract, sha256: relationContractSha256 } =
     await loadCriticalRelationContract(contractPath)
+  const dataSchemas = criticalRelationSchemas(contract)
   const restorePreludePath = path.join(
     workspace,
     'supabase',
@@ -143,6 +145,7 @@ async function main() {
   const restorePreludeSha256 = sha256(await readFile(restorePreludePath))
   const migrations = await repositoryMigrations(workspace)
   assertBackupManifest(manifest, {
+    dataSchemas,
     gitCommitSha: commitSha,
     migrations,
     relationContractSha256,
