@@ -97,6 +97,11 @@ target preflight failed before roles/schema/data restore. Exporter and verifier
 now share one tested PostgreSQL error redactor; a fixture proves literals and
 URLs are removed. Nine focused backup-contract tests pass, and the next
 exact-head run remains mandatory.
+Run `31343752298` identified the empty-target preflight error: the server
+`system_identifier` column was selected beside an aggregate count without its
+own aggregate. It now uses `max(system_identifier)` in the same one-row
+server-side identity query. No restore phase ran; the next exact-head target
+preflight and full restore remain mandatory.
 Run `31342645890` passed application, all four browser flows, Supabase startup,
 reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
 canonical evidence query fails before any dump. The exporter now emits only

@@ -112,7 +112,7 @@ tasks/todo.md
 | `check-credential-patterns.mjs`                     | `6541199b6bb8d545a5bc46f13ea0d92c6d9fdb0f3363e3f67ebfe5ba8a018a00` |
 | `critical-backup-contract.mjs`                      | `36e31683ce8d4db0cfae09e7a6f389d4fd03f293e46a584cd87a3b68821cdf81` |
 | `export-critical-tables.mjs`                        | `01c99dda40d04d6889f7063aa2c0b0d04998ee9bc36dc300f283fab456c10aa7` |
-| `verify-backup-restore.mjs`                         | `7c94fca44a8af0d8c745f891458ae86794aeda62a1520b43759f669dc9324e0a` |
+| `verify-backup-restore.mjs`                         | `9c61295ec736cd81ee14b6e4b741b97554ed19404c2e0175f0422c02e9091835` |
 
 The canonical phase contract additionally binds every phase file:
 
@@ -191,6 +191,9 @@ The canonical phase contract additionally binds every phase file:
 | exact-head application/browser/credential CI, run `31343512116`          |           0 | complete application, 4/4 Playwright, current/history credential gate                                               | verified on `641c78fe...`                                                                                                             |
 | exact-head Supabase start/reset/pgTAP/export/manifest, run `31343512116` |           0 | pinned CLI, 1,836 assertions, sensitive external export, strict manifest validation                                 | source/export/manifest chain verified                                                                                                 |
 | exact-head seed-free target preflight, run `31343512116`                 |           1 | first target `psql` preflight failed before roles/schema/data restore                                               | shared literal-/URL-redacted PostgreSQL diagnostic added; rerun required                                                              |
+| exact-head application/browser/credential CI, run `31343752298`          |           0 | complete application, 4/4 Playwright, current/history credential gate                                               | verified on `94c530ef...`                                                                                                             |
+| exact-head Supabase start/reset/pgTAP/export/manifest, run `31343752298` |           0 | pinned CLI, 1,836 assertions, sensitive external export, strict manifest validation                                 | source/export/manifest chain remains green                                                                                            |
+| exact-head seed-free target preflight, run `31343752298`                 |           1 | `system_identifier` was not aggregated beside the empty-target relation count                                       | server identifier now uses `max()` in the same preflight aggregate; rerun required                                                    |
 
 ## Manual gates and stop conditions
 

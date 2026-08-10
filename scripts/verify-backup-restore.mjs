@@ -176,7 +176,7 @@ async function main() {
     `select jsonb_build_object(
       'user_relations', count(*) filter (where namespace.nspname in ('public','private','supabase_migrations')),
       'database_identity', current_database() || ':' || current_setting('server_version_num')
-        || ':' || control.system_identifier::text
+        || ':' || max(control.system_identifier)::text
     )
     from pg_catalog.pg_class as class
     join pg_catalog.pg_namespace as namespace on namespace.oid = class.relnamespace
