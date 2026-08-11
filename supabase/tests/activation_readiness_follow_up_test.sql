@@ -231,6 +231,49 @@ select is((
   ) and classification = 'forbidden'
 ), 7::bigint, 'market, portfolio, risk, simulator, trade, decision, and experiment state is forbidden');
 
+-- Seed the deterministic local market-calendar fixture before a Campaign
+-- exists. Once endpoint verification begins these relations are intentionally
+-- forbidden, so fixture setup after that gate would correctly trigger the
+-- DB-first emergency stop.
+insert into public.market_calendar_manifests (
+  id, owner_id, manifest_id, calendar_year, timezone, definition,
+  content_hash, reviewed_at
+) values (
+  '40000000-0000-4000-8000-000000000001',
+  (select user_id from public.app_users where role = 'owner' and is_active),
+  'activation_dynamic_fixture', extract(year from statement_timestamp())::integer,
+  'America/New_York', '{"fixture":"local-only"}'::jsonb, repeat('d', 64),
+  statement_timestamp()
+);
+insert into public.market_sessions (
+  id, exchange_id, session_date, opens_at, closes_at, session_type,
+  calendar_source_id, source_identifier, available_at, calendar_manifest_id
+)
+select gen_random_uuid(), exchange.id, day::date,
+  (day::date + time '13:30') at time zone 'UTC',
+  ((day::date + time '13:30') at time zone 'UTC') + interval '6 hours 30 minutes',
+  'regular', null, 'activation-' || day::date::text,
+  statement_timestamp() - interval '1 day',
+  '40000000-0000-4000-8000-000000000001'
+from generate_series(
+  (statement_timestamp() at time zone 'America/New_York')::date,
+  (statement_timestamp() at time zone 'America/New_York')::date + 30,
+  interval '1 day'
+) as day
+cross join lateral (select id from public.exchanges where mic = 'XNAS') as exchange
+where extract(isodow from day) between 1 and 5
+on conflict (exchange_id, session_date) do update
+set calendar_manifest_id = excluded.calendar_manifest_id,
+    available_at = excluded.available_at,
+    opens_at = excluded.opens_at,
+    closes_at = excluded.closes_at,
+    session_type = excluded.session_type;
+update public.experiments set lifecycle_status = 'paused'
+where owner_id = (
+    select user_id from public.app_users where role = 'owner' and is_active
+  )
+  and lifecycle_status = 'active';
+
 insert into private.application_settings (owner_id, setting_key, value, is_secret)
 select app_user.user_id, setting.setting_key, 'false'::jsonb, false
 from public.app_users as app_user
@@ -636,43 +679,6 @@ savepoint experiment_side_effect_guard;
 update public.experiments set id = id where false;
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auto_stopped', 'experiment mutation trips the DB-first kill');
 rollback to savepoint experiment_side_effect_guard;
-
-insert into public.market_calendar_manifests (
-  id, owner_id, manifest_id, calendar_year, timezone, definition,
-  content_hash, reviewed_at
-) values (
-  '40000000-0000-4000-8000-000000000001',
-  (select user_id from public.app_users where role = 'owner' and is_active),
-  'activation_dynamic_fixture', extract(year from statement_timestamp())::integer,
-  'America/New_York', '{"fixture":"local-only"}'::jsonb, repeat('d', 64),
-  statement_timestamp()
-);
-insert into public.market_sessions (
-  id, exchange_id, session_date, opens_at, closes_at, session_type,
-  calendar_source_id, source_identifier, available_at, calendar_manifest_id
-)
-select gen_random_uuid(), exchange.id, day::date,
-  (day::date + time '13:30') at time zone 'UTC',
-  ((day::date + time '13:30') at time zone 'UTC') + interval '6 hours 30 minutes',
-  'regular', null, 'activation-' || day::date::text,
-  statement_timestamp() - interval '1 day',
-  '40000000-0000-4000-8000-000000000001'
-from generate_series(
-  (statement_timestamp() at time zone 'America/New_York')::date,
-  (statement_timestamp() at time zone 'America/New_York')::date + 30,
-  interval '1 day'
-) as day
-cross join lateral (select id from public.exchanges where mic = 'XNAS') as exchange
-where extract(isodow from day) between 1 and 5
-on conflict (exchange_id, session_date) do update
-set calendar_manifest_id = excluded.calendar_manifest_id,
-    available_at = excluded.available_at,
-    opens_at = excluded.opens_at,
-    closes_at = excluded.closes_at,
-    session_type = excluded.session_type;
-update public.experiments set lifecycle_status = 'paused'
-where owner_id = (select owner_id from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id())
-  and lifecycle_status = 'active';
 
 select lives_ok(
   $$select private.freeze_activation_baseline(

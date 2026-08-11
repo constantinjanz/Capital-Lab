@@ -83,6 +83,17 @@ set. The post-migration backup contract was regenerated from the resulting
 migration bytes. The two restores remained correctly skipped; the replacement
 exact-head CI run is mandatory.
 
+Exact-head CI run `31483832916` passed the complete application, Windows, and
+4/4 browser jobs, then passed Supabase start, both rollback rehearsals, and the
+fresh reset. The three earlier pgTAP root causes were resolved: the 401 sequence
+and privilege contract advanced cleanly. The next first failure showed the
+test's synthetic market-calendar/session setup mutating forbidden relations
+after `runtime_deployment_verified`; the production guard correctly performed
+the DB-first stop. The deterministic fixture and experiment pause now occur
+before Campaign preparation, while the later adversarial mutation assertions
+remain in the protected states. Restores were correctly skipped after pgTAP;
+the replacement exact-head run remains mandatory.
+
 ## PR #21 activation-readiness adversarial hardening (2026-08-09)
 
 Safety status: implementation-only. Production migration/deployment/activation, Hosted extension/Vault/Cron mutation, scheduler HTTP, provider/model calls, Canary execution, broker connectivity, and PR merge/undraft are prohibited.
