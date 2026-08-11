@@ -979,6 +979,11 @@ select is(public.claim_paid_canary(
   '70000000-0000-4000-8000-000000000001'
 ), true, 'first global Canary claim succeeds only after the dry run is terminal');
 select is((select count(*) from private.paid_canary_runs), 3::bigint, 'global Canary claim freezes all three exact models');
+select is((
+  select count(*) from private.paid_canary_runs
+  where result ->> 'activation_campaign_id' = pg_temp.campaign_id()::text
+    and result -> 'activation_terminal_passed' = 'true'::jsonb
+), 3::bigint, 'every Canary lock preserves the immutable passed-Activation prerequisite');
 select is(public.claim_paid_canary(
   (select owner_id from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()),
   '70000000-0000-4000-8000-000000000002'

@@ -94,6 +94,16 @@ before Campaign preparation, while the later adversarial mutation assertions
 remain in the protected states. Restores were correctly skipped after pgTAP;
 the replacement exact-head run remains mandatory.
 
+Exact-head CI run `31484467384` again passed application, Windows, browser,
+Supabase start, rollback rehearsal, and reset. pgTAP then executed the complete
+52-slot/104-event path and reached the positive post-terminal Canary claim; only
+that claim aborted because its final insert named a nonexistent `metadata`
+column on `private.paid_canary_runs`. The immutable prerequisite payload now
+uses the table's existing `result` evidence column, and pgTAP explicitly checks
+that all three globally locked model rows bind to the passed Activation Campaign.
+The post-migration backup contract was regenerated. Both restores remained
+correctly skipped after pgTAP; a replacement exact-head run is mandatory.
+
 ## PR #21 activation-readiness adversarial hardening (2026-08-09)
 
 Safety status: implementation-only. Production migration/deployment/activation, Hosted extension/Vault/Cron mutation, scheduler HTTP, provider/model calls, Canary execution, broker connectivity, and PR merge/undraft are prohibited.

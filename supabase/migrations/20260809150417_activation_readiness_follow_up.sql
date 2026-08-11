@@ -4978,7 +4978,7 @@ begin
     return false;
   end if;
   insert into private.paid_canary_runs (
-    owner_id, operation_id, campaign_key, model, status, metadata
+    owner_id, operation_id, campaign_key, model, status, result
   ) select p_owner_id, p_operation_id, campaign, model_name, 'claimed',
       jsonb_build_object('activation_campaign_id', terminal_campaign.id,
         'activation_terminal_passed', true)
