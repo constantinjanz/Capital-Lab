@@ -50,8 +50,12 @@ No activation phase was executed in this remediation.
   `20260809150000` and `20260809150417` absent.
 - Fifteen same-name version discrepancies were mapped one-to-one to the Hosted
   applied identifiers. Each repository rename is 100% byte-identical in Git.
-  Hosted history was not mutated and migration repair was not used. Exact schema
-  equivalence remains an exact-head pre/post baseline and restore CI assertion.
+  Hosted history was not mutated and migration repair was not used. A final
+  read-only metadata comparison found the exact same 82 public/private base
+  relation names in Hosted and the pre-activation contract, with RLS enabled on
+  all 82. The exact local pre/post schema, migration-history, grant, relation,
+  column, constraint, index, policy, trigger, function/view, and row-evidence
+  restore contracts passed in CI. No Hosted rows were exported.
 - Read-only extension metadata showed `pg_cron` and `pg_net` absent. The
   platform-managed Vault extension exists. Vault values and entries were not read.
   No Hosted Cron/job/Vault mutation or scheduler request was made.
@@ -67,20 +71,20 @@ No activation phase was executed in this remediation.
 
 ## Finding-by-finding disposition
 
-| Finding                     | Root cause                                                                             | Executable remediation                                                                                                                                                                                                      | Test/evidence                                                                                                               | Remaining gate or risk                                                                  |
-| --------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| P0-1 two Vercel deployments | One deployment identity incorrectly represented disabled auth and enabled runtime      | Append-only role bindings `auth_disabled` and `no_ai_runtime_enabled`; distinct immutable IDs; required `runtime_deployment_verified` state before freeze/arm; Runtime envelopes use only the Runtime binding               | Route, domain, runner and pgTAP happy/negative paths prohibit equal IDs and role/commit/project/environment drift           | Future real deployments require separately reviewed read-only proofs; none created here |
-| P0-2 trusted endpoint       | URL syntax and operator strings could bless an attacker origin                         | Checksummed project identity contract plus read-only Vercel proof verifier for team/project/READY/production/commit/deployment/alias/path; canonical no-port/userinfo/query/fragment origin; sanitized proof hash           | Hostile arbitrary host, redirect, alias, team/project, Preview, commit/deployment drift and forged-echo fixtures            | Live proof intentionally not executed in this repository-only run                       |
-| P0-3 mandatory 401 probes   | Auth-noop could skip missing/invalid Bearer validation                                 | Mandatory endpoint/probe-claimed/probes-verified/auth-noop/runtime states; exactly one durable missing and one invalid identity; exact 401/schema/no-redirect/zero-effects evidence; original request reconciliation only   | pgTAP happy path runs the probes; Auth-Noop-before-probes and replacement/unknown-outcome paths fail                        | No real request sent by design                                                          |
-| P0-4 pre-migration backup   | Existing exporter referenced post-migration objects and covered a partial relation set | Separate versioned pre (82 relations) and post (105 relations) contracts; catalog-complete classification; migration/history/role/server/schema/content evidence; external manifest hash; safe seed-free target preparation | Unit tamper matrix includes relation/column/history/schema/artifact/hash drift; CI owns both real seed-free export/restores | Docker absent locally; exact-head CI result is mandatory and must not be inferred       |
-| P0-5 handoff checksums      | Stale hashes and omitted changed files were not enforced                               | Deterministic status-aware merge-base generator; A/M hash HEAD bytes, D hashes merge-base bytes; exact casing/uniqueness/set verification; CRLF/LF-sensitive                                                                | Stale, omitted, extra, duplicate, rename/delete, casing and byte-difference tests                                           | Manifest excludes only itself and this report                                           |
-| Break-glass availability    | General runner rejected dirty trees and required Campaign/Vercel artifacts             | Minimal emergency runner allows unrelated dirt, verifies its own HEAD blobs, structurally binds TLS/project/database, requires UUID and exact phrase, runs bounded DB-first kill/readback without Vercel/manifest           | Dirty tree, absent manifest, Vercel unavailable, replay, target/campaign mismatch, timeout/unknown tests                    | Requires a future authorized database operator and valid target credentials             |
-| Side-effect completeness    | A fixed 22-table list omitted mutable application state                                | Every public/private base table is exactly activation evidence, scheduler envelope, forbidden, or explicit platform exclusion; new tables fail CI classification                                                            | Catalog equality plus adversarial market/portfolio/risk/simulator/trade/decision/experiment mutation tests                  | Schema growth must update the reviewed contract                                         |
-| Paid Canary prerequisite    | Paid claim was not tied to passed no-AI terminal evidence                              | Claim requires exactly one immutable passed Campaign, all dangerous controls false, jobs inactive/absent, and no unresolved network outcome                                                                                 | Canary-before-terminal and state-drift negatives                                                                            | Canary remains disabled and was not executed                                            |
-| Retry-safe terminal work    | Unknown commits could repeat or overwrite operations                                   | Operation-ID keyed append-only terminal operations return same evidence on retry and reject different identities                                                                                                            | Duplicate/unknown finalize, unschedule and emergency phase-two tests                                                        | Operator runbook must preserve the original operation ID                                |
-| Runtime/Windows/credentials | Mixed Node versions, shallow CI history, unsafe subprocess assumptions                 | Node 24.x everywhere; 100-commit bounded scanner with binary/size guards; executable resolution, argument arrays, `shell:false`, timeouts/signals, safe junction/case handling, held-file `try/finally`                     | Windows subprocess/metacharacter/path/fault tests and redacted current/history scan                                         | Local database gates need Docker; CI supplies the clean Linux database run              |
-| Database privilege/evidence | Administrative paths and append-only evidence needed stronger denial                   | Fixed empty `search_path`, qualified SQL, owner/campaign checks, composite FKs, minimal wrapper grants, no service-role admin transitions, UPDATE/DELETE/TRUNCATE guards                                                    | pgTAP RLS/grants/SECURITY DEFINER/TRUNCATE/service-role tests                                                               | Database owner retains unavoidable DDL authority                                        |
-| Reconcile/finalize          | Ephemeral pg_net and owner availability could strand or fabricate outcomes             | Capture first on every tick, exact JSON bindings/counters, fresh snapshots, missing evidence becomes inconclusive, drain before job disable, exact 52 slots/104 events, server-time final gates                             | Deterministic full path and late/duplicate/missing/error/correlation/counter/terminal mismatch tests                        | Real transport remains a later authorized gate                                          |
+| Finding                     | Root cause                                                                             | Executable remediation                                                                                                                                                                                                                                    | Test/evidence                                                                                                     | Remaining gate or risk                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| P0-1 two Vercel deployments | One deployment identity incorrectly represented disabled auth and enabled runtime      | Append-only role bindings `auth_disabled` and `no_ai_runtime_enabled`; distinct immutable IDs; required `runtime_deployment_verified` state before freeze/arm; Runtime envelopes use only the Runtime binding                                             | Route, domain, runner and pgTAP happy/negative paths prohibit equal IDs and role/commit/project/environment drift | Future real deployments require separately reviewed read-only proofs; none created here |
+| P0-2 trusted endpoint       | URL syntax and operator strings could bless an attacker origin                         | Checksummed project identity contract plus read-only Vercel proof verifier for team/project/READY/production/commit/deployment/alias/path; canonical no-port/userinfo/query/fragment origin; sanitized proof hash                                         | Hostile arbitrary host, redirect, alias, team/project, Preview, commit/deployment drift and forged-echo fixtures  | Live proof intentionally not executed in this repository-only run                       |
+| P0-3 mandatory 401 probes   | Auth-noop could skip missing/invalid Bearer validation                                 | Mandatory endpoint/probe-claimed/probes-verified/auth-noop/runtime states; exactly one durable missing and one invalid identity; exact 401/schema/no-redirect/zero-effects evidence; original request reconciliation only                                 | pgTAP happy path runs the probes; Auth-Noop-before-probes and replacement/unknown-outcome paths fail              | No real request sent by design                                                          |
+| P0-4 pre-migration backup   | Existing exporter referenced post-migration objects and covered a partial relation set | Separate versioned pre (82 relations) and post (105 relations) contracts; catalog-complete classification; migration/history/role/server/schema/content evidence; external manifest hash; version-5 default-ACL policy; safe seed-free target preparation | Unit tamper matrix plus exact-head CI exported/restored and verified 82/82 pre and 105/105 post relations         | Production export/restore remains an independently authorized operator gate             |
+| P0-5 handoff checksums      | Stale hashes and omitted changed files were not enforced                               | Deterministic status-aware merge-base generator; A/M hash HEAD bytes, D hashes merge-base bytes; exact casing/uniqueness/set verification; CRLF/LF-sensitive                                                                                              | Stale, omitted, extra, duplicate, rename/delete, casing and byte-difference tests                                 | Manifest excludes only itself and this report                                           |
+| Break-glass availability    | General runner rejected dirty trees and required Campaign/Vercel artifacts             | Minimal emergency runner allows unrelated dirt, verifies its own HEAD blobs, structurally binds TLS/project/database, requires UUID and exact phrase, runs bounded DB-first kill/readback without Vercel/manifest                                         | Dirty tree, absent manifest, Vercel unavailable, replay, target/campaign mismatch, timeout/unknown tests          | Requires a future authorized database operator and valid target credentials             |
+| Side-effect completeness    | A fixed 22-table list omitted mutable application state                                | Every public/private base table is exactly activation evidence, scheduler envelope, forbidden, or explicit platform exclusion; new tables fail CI classification                                                                                          | Catalog equality plus adversarial market/portfolio/risk/simulator/trade/decision/experiment mutation tests        | Schema growth must update the reviewed contract                                         |
+| Paid Canary prerequisite    | Paid claim was not tied to passed no-AI terminal evidence                              | Claim requires exactly one immutable passed Campaign, all dangerous controls false, jobs inactive/absent, and no unresolved network outcome                                                                                                               | Canary-before-terminal and state-drift negatives                                                                  | Canary remains disabled and was not executed                                            |
+| Retry-safe terminal work    | Unknown commits could repeat or overwrite operations                                   | Operation-ID keyed append-only terminal operations return same evidence on retry and reject different identities                                                                                                                                          | Duplicate/unknown finalize, unschedule and emergency phase-two tests                                              | Operator runbook must preserve the original operation ID                                |
+| Runtime/Windows/credentials | Mixed Node versions, shallow CI history, unsafe subprocess assumptions                 | Node 24.x everywhere; 100-commit bounded scanner with binary/size guards; executable resolution, argument arrays, `shell:false`, timeouts/signals, safe junction/case handling, held-file `try/finally`                                                   | Windows subprocess/metacharacter/path/fault tests and redacted current/history scan                               | Local database gates need Docker; CI supplies the clean Linux database run              |
+| Database privilege/evidence | Administrative paths and append-only evidence needed stronger denial                   | Fixed empty `search_path`, qualified SQL, owner/campaign checks, composite FKs, minimal wrapper grants, no service-role admin transitions, UPDATE/DELETE/TRUNCATE guards                                                                                  | pgTAP RLS/grants/SECURITY DEFINER/TRUNCATE/service-role tests                                                     | Database owner retains unavoidable DDL authority                                        |
+| Reconcile/finalize          | Ephemeral pg_net and owner availability could strand or fabricate outcomes             | Capture first on every tick, exact JSON bindings/counters, fresh snapshots, missing evidence becomes inconclusive, drain before job disable, exact 52 slots/104 events, server-time final gates                                                           | Deterministic full path and late/duplicate/missing/error/correlation/counter/terminal mismatch tests              | Real transport remains a later authorized gate                                          |
 
 ## Checksums from final implementation bytes
 
@@ -94,7 +98,7 @@ No activation phase was executed in this remediation.
 | `post-activation.v1.json`                           | `e1bf901b7e34177acff0884bd2138cb28359b69b40adc9d3504fe27a7cfb91b3` |
 | `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
 | `phase-contract.json` (18 phases)                   | `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d` |
-| handoff checksum manifest (115 entries)             | `ccac95aaf3e3a042882ef64fb4b868c2cdcbac965909c2429c36a0c5c8d1dbd5` |
+| handoff checksum manifest (115 entries)             | `42173c56c38f96550ec008dbad9b97b30f072b276eb7a2ca8d07d6be3cbd2c88` |
 
 ### Phase SQL
 
@@ -144,10 +148,11 @@ passed. No assertion, timeout, retry, or safety gate was weakened.
 | `docker version`                             | unavailable | executable absent; no local DB gate claimed     |
 
 The local seed-free pre/post restore, Supabase start/reset/pgTAP, and rollback
-rehearsals were not run because Docker is unavailable. They remain mandatory
-exact-head CI gates. CI run IDs, exact pgTAP assertion count, both restore
-results, Preview deployment ID, and final handoff SHA are recorded after the
-final push; until they are green this report remains NO-GO.
+rehearsals were not run because Docker is unavailable. Exact-head CI run
+`31489442949` supplied those clean ephemeral-database gates. The final
+report/manifest-only commit is run through the same workflow; its exact SHA, CI
+run, and Preview deployment are recorded in the Draft PR and chat handoff rather
+than creating a self-referential report commit.
 
 CI run `31478991594` was a deliberate fail-closed remediation run. Its Windows
 subprocess job and 4/4 Playwright flows passed. The application job stopped at
@@ -278,6 +283,21 @@ and removes its intermediate archive/TOC. The exact current grant fingerprint
 remains mandatory after restore. The post restore did not run after the pre
 failure. This failed run is not readiness evidence; a replacement exact-head run
 remains mandatory.
+
+CI run `31489442949` is the complete green implementation run at exact handoff
+head `8afa83e36fd47def562eac3c15218fe4d7b79921`: application 87 files / 635
+tests, formatting, zero-warning lint, strict TypeScript, PAPER-only scan,
+worktree plus 100-commit credential scan with zero redacted findings, Node-24
+production build, Windows 4 files / 14 tests, and 4/4 mock browser flows passed.
+Supabase CLI 2.113.0 started the ephemeral stack; both pending migrations passed
+rollback-only rehearsals; reset and all 14 pgTAP files / 1,927 assertions passed.
+The seed-free pre contract exported and restored 82/82 relations with manifest
+SHA-256 `2994fbd798a0891641572748fe5df2c3c3d5af2b889acf48919f326a672006cb`.
+The post contract exported and restored 105/105 relations with manifest SHA-256
+`0f490a59df1c4f4b2cb19219dc8def5049c48baf5859ad76711aa128e012da8b`.
+Both verifiers reproduced migration history, schema/catalog evidence, column
+contracts, current grants, and deterministic full-row evidence exactly. No
+Production data or credential was used.
 
 ## Exact status-aware changed-file set
 
@@ -418,6 +438,6 @@ M  vitest.config.ts
   evidence, relation/schema/history mismatch, or non-false dangerous control is
   an immediate fail-closed stop.
 
-## Current conclusion before exact-head CI
+## Conclusion
 
-NO-GO — BLOCKER REMAINS
+READY FOR THIRD INDEPENDENT REVIEW — NOT AUTHORIZED FOR MERGE, MIGRATION APPLY, PRODUCTION DEPLOYMENT OR ACTIVATION
