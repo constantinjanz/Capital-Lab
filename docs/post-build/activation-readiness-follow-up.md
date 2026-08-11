@@ -10,7 +10,7 @@ Draft PR: `#21` (must remain Draft and unmerged)
 
 Verified starting SHA: `e705f67db819be13c99f759e07186c63f114b831`
 
-Implementation SHA: `11103cb43cccf221d9df954ff71a1681e1c1f008`
+Implementation SHA: `e60344ca24d7f31694e0e738aee7ced44032ee8f`
 
 Final report/handoff SHA: intentionally recorded in the Draft PR and final chat
 handoff after this report is committed. A Git commit cannot contain its own SHA
@@ -94,7 +94,7 @@ No activation phase was executed in this remediation.
 | `post-activation.v1.json`                           | `917e8e525984b4657efb137a75406c8c26ccbb1d4be2a7a3729e3f9545721039` |
 | `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
 | `phase-contract.json` (18 phases)                   | `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d` |
-| handoff checksum manifest (115 entries)             | `83bb7dcfec0d73dda216c36f3dad9868af2873c3019c4496b8ffcb29ff83ffa7` |
+| handoff checksum manifest (115 entries)             | `d262110e8d8f5810974895c0696441a73526f63f580f7983e7d38e9409613d68` |
 
 ### Phase SQL
 
@@ -159,6 +159,17 @@ migrations to the ephemeral stack, then stopped because the Ubuntu image had a
 `psql` wrapper without a versioned client package. CI now explicitly installs
 and verifies PostgreSQL 17 client tools. No failed/skipped gate is counted as a
 pass; the replacement exact-head run is mandatory.
+
+CI run `31480224272` then proved all three canonical contracts on Linux and
+again passed the Windows and 4/4 browser jobs. Application reached the full
+unit suite and found that the simulated-Windows resolver fixture still applied
+the host Linux execute-bit rule; the real Windows smoke job was green. The
+resolver now uses its explicitly selected platform consistently, with focused
+Linux and Windows-fixture coverage. Database stopped before Supabase because
+Ubuntu Noble's default Apt sources do not contain PostgreSQL client 17. The
+workflow now binds the official PGDG repository to the full expected signing-key
+fingerprint, installs client 17, and asserts major version 17. This run is also
+recorded as failed, not retried or reclassified.
 
 ## Exact status-aware changed-file set
 
