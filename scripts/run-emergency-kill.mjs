@@ -4,6 +4,8 @@ import { readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
+
 import {
   resolvedArguments,
   resolveNativeExecutable,
@@ -90,8 +92,12 @@ async function committedFileMatches(repository, relativePath) {
   )
   if (result.status !== 0 || result.signal || result.error) return false
   return (
-    digest(result.stdout) ===
-    digest(await readFile(path.join(repository, relativePath)))
+    digest(canonicalRepositoryTextBytes(result.stdout)) ===
+    digest(
+      canonicalRepositoryTextBytes(
+        await readFile(path.join(repository, relativePath)),
+      ),
+    )
   )
 }
 

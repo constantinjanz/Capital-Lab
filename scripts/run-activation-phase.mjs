@@ -4,6 +4,7 @@ import { readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
 import {
   resolvedArguments,
   resolveNativeExecutable,
@@ -220,8 +221,14 @@ export function validateDatabaseTarget(databaseUrlValue, target) {
   }
 }
 
-async function loadCanonicalJson(filename, expectedHash, label) {
-  const bytes = await readFile(filename)
+async function loadCanonicalJson(
+  filename,
+  expectedHash,
+  label,
+  repositoryText = false,
+) {
+  const source = await readFile(filename)
+  const bytes = repositoryText ? canonicalRepositoryTextBytes(source) : source
   if (digest(bytes) !== expectedHash) {
     throw new Error(`${label} checksum does not match reviewed evidence`)
   }
@@ -419,6 +426,7 @@ async function main() {
     projectIdentityPath,
     manifest.project_identity_contract_sha256,
     'Project identity contract',
+    true,
   )
   validateSchedulerIdentity(manifest, projectIdentity)
 
@@ -426,6 +434,7 @@ async function main() {
     contractPath,
     manifest.phase_contract_sha256,
     'Phase contract',
+    true,
   )
   exactKeys(contract, ['phases', 'schema_version'], 'phase contract')
   if (contract.schema_version !== 3 || !contract.phases?.[phase]) {
@@ -496,7 +505,7 @@ async function main() {
   const scriptPath = await realpath(path.join(activationRoot, phaseEntry.file))
   if (!isWithin(activationRoot, scriptPath))
     fail('Phase file escaped activation root')
-  const scriptBytes = await readFile(scriptPath)
+  const scriptBytes = canonicalRepositoryTextBytes(await readFile(scriptPath))
   const scriptHash = digest(scriptBytes)
   if (scriptHash !== phaseEntry.sha256) fail('Phase file checksum drifted')
 

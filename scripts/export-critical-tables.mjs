@@ -24,6 +24,7 @@ import {
   redactedPostgresError,
   sha256,
 } from './critical-backup-contract.mjs'
+import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
 import {
   resolvedArguments,
   resolveNativeExecutable,
@@ -206,7 +207,9 @@ async function main() {
     for (const migration of contract.migrations) {
       if (
         sha256(
-          await readFile(path.join(migrationDirectory, migration.name)),
+          canonicalRepositoryTextBytes(
+            await readFile(path.join(migrationDirectory, migration.name)),
+          ),
         ) !== migration.sha256
       ) {
         throw new Error('Backup migration checksum contract drifted')

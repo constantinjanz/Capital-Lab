@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
+import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
 import { canonicalJson } from './run-activation-phase.mjs'
 
 const root = process.cwd()
@@ -75,7 +76,7 @@ describe('activation phase separation', () => {
       'activation',
       'phase-contract.json',
     )
-    const bytes = await readFile(contractPath)
+    const bytes = canonicalRepositoryTextBytes(await readFile(contractPath))
     const contract = JSON.parse(bytes.toString('utf8')) as {
       schema_version: number
       phases: Record<string, { file: string; sha256: string }>
@@ -103,8 +104,8 @@ describe('activation phase separation', () => {
       'vault-verification',
     ])
     for (const phase of Object.values(contract.phases)) {
-      const phaseBytes = await readFile(
-        path.join(root, 'supabase', 'activation', phase.file),
+      const phaseBytes = canonicalRepositoryTextBytes(
+        await readFile(path.join(root, 'supabase', 'activation', phase.file)),
       )
       expect(createHash('sha256').update(phaseBytes).digest('hex')).toBe(
         phase.sha256,

@@ -3,6 +3,8 @@ import { readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
+
 const PENDING = new Set([
   '20260809150000_post_build_hosting_safety.sql',
   '20260809150417_activation_readiness_follow_up.sql',
@@ -133,7 +135,9 @@ async function buildContract(migrationDirectory, kind, files) {
       : files
   const migrations = await Promise.all(
     selected.map(async (name) => {
-      const bytes = await readFile(path.join(migrationDirectory, name))
+      const bytes = canonicalRepositoryTextBytes(
+        await readFile(path.join(migrationDirectory, name)),
+      )
       return {
         name,
         sha256: sha256(bytes),

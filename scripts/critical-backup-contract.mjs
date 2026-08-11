@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 
+import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
+
 const RELATION = /^(?:public|private)\.[a-z][a-z0-9_]{0,62}$/
 const IDENTIFIER = /^[a-z][a-z0-9_]{0,62}$/
 const SHA256 = /^[0-9a-f]{64}$/
@@ -166,7 +168,7 @@ export function postgresUrlToLibpqEnv(value, { localOnly = false } = {}) {
 }
 
 export async function loadCriticalRelationContract(filename, expectedKind) {
-  const bytes = await readFile(filename)
+  const bytes = canonicalRepositoryTextBytes(await readFile(filename))
   const contract = JSON.parse(bytes.toString('utf8'))
   if (bytes.toString('utf8') !== `${canonicalJson(contract)}\n`) {
     throw new Error('Critical-relation contract must be canonical JSON')

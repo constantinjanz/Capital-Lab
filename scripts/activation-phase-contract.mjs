@@ -3,6 +3,8 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
+
 const PHASE_FILES = Object.freeze({
   arm: 'enable-hosted-scheduler.sql',
   'auth-endpoint-verify': 'verify-auth-deployment.sql',
@@ -46,7 +48,11 @@ export async function buildActivationPhaseContract(repository) {
   for (const [phase, file] of Object.entries(PHASE_FILES)) {
     phases[phase] = {
       file,
-      sha256: sha256(await readFile(path.join(activationRoot, file))),
+      sha256: sha256(
+        canonicalRepositoryTextBytes(
+          await readFile(path.join(activationRoot, file)),
+        ),
+      ),
     }
   }
   return { phases, schema_version: 3 }

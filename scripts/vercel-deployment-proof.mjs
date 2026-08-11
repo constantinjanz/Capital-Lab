@@ -3,6 +3,8 @@ import { chmod, readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
+
 const DEPLOYMENT_ID = /^dpl_[A-Za-z0-9]{20,64}$/u
 const GIT_SHA = /^[0-9a-f]{40}$/u
 const VERCEL_ID = /^(?:prj|team)_[A-Za-z0-9]{20,64}$/u
@@ -224,7 +226,9 @@ async function main() {
     'activation',
     'project-identity.v1.json',
   )
-  const contractBytes = await readFile(contractPath)
+  const contractBytes = canonicalRepositoryTextBytes(
+    await readFile(contractPath),
+  )
   const contract = validateProjectIdentityContract(
     JSON.parse(contractBytes.toString('utf8')),
   )

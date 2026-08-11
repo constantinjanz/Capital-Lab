@@ -30,15 +30,25 @@ model, Canary, broker, or trading execution is authorized.
 - [ ] Regenerate final-byte phase/migration/handoff checksums, update the post-build report with honest implementation/handoff SHAs and non-execution evidence, commit only scoped files, push the existing branch, and keep PR #21 Draft and unmerged.
 
 Local pre-commit evidence on Node `v24.14.0`: phase contract 18 files / SHA-256
-`bd1bd6a9192ca4fd3aba734e9c1d991e430609f0e9b6f6153ff9e970d23436d5`;
+`19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d`;
 backup contracts 82 pre-migration and 105 post-migration relations; Prettier exit
-0; ESLint exit 0 with zero warnings; strict TypeScript exit 0; Vitest 86 files /
-631 tests; PAPER-only scan exit 0; redacted credential scan exit 0 across the
+0; ESLint exit 0 with zero warnings; strict TypeScript exit 0; Vitest 87 files /
+633 tests; PAPER-only scan exit 0; redacted credential scan exit 0 across the
 working tree and 100 commits; Next.js 16.3 production build exit 0; Playwright
 4/4 mock-only flows with fail-on-flaky exit 0; Supabase CLI `2.113.0` verified.
 This workstation has no Docker executable, so Supabase start/reset, pgTAP,
 rollback rehearsal, and the two seed-free export/restore contracts are not
 claimed locally and remain mandatory on the exact committed CI head.
+
+Exact-head CI run `31478991594` passed Windows subprocess and all four browser
+flows, then failed closed before application gates because phase hashes had
+captured Windows CRLF checkout bytes. The database job independently compiled
+and applied all migrations to its ephemeral stack, then stopped because the
+runner image had a `psql` wrapper but no versioned PostgreSQL client package.
+Repository-derived text contracts now hash canonical UTF-8/LF bytes with
+cross-platform tests; external evidence remains raw-byte exact. CI now installs
+and verifies PostgreSQL 17 client tools before any rehearsal. A fresh exact-head
+run remains mandatory; neither failure authorized or caused Hosted mutation.
 
 ## PR #21 activation-readiness adversarial hardening (2026-08-09)
 
