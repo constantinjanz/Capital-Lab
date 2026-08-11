@@ -10,7 +10,7 @@ Draft PR: `#21` (must remain Draft and unmerged)
 
 Verified starting SHA: `e705f67db819be13c99f759e07186c63f114b831`
 
-Implementation SHA: `aaaff13c68eb05231b86d22784f18fc8a16689d1`
+Implementation SHA: `726296a09aa99a81d2e1bf3e884fe87ebb841d26`
 
 Final report/handoff SHA: intentionally recorded in the Draft PR and final chat
 handoff after this report is committed. A Git commit cannot contain its own SHA
@@ -89,12 +89,12 @@ No activation phase was executed in this remediation.
 | Artifact                                            | SHA-256                                                            |
 | --------------------------------------------------- | ------------------------------------------------------------------ |
 | `20260809150000_post_build_hosting_safety.sql`      | `ee9a1390a6cf1abfca9a8664d6dfe492bc217741265f2d0d5e8b010af6c0352e` |
-| `20260809150417_activation_readiness_follow_up.sql` | `513e6f8e7740ecc5eb5228ce2e2c5480acfe53dd700e4e9adad7790dd12ab994` |
+| `20260809150417_activation_readiness_follow_up.sql` | `6cd205c3854fc93cc12a043171452a6ab86308ef69ee69c6d91a8a49bf402d10` |
 | `pre-activation.v1.json`                            | `98fad4a3292bf2f0e1d62e8967f04b165f5464e62590d164d80659c26239c706` |
-| `post-activation.v1.json`                           | `336482a386740e0b6ab2b536d17bb64f5a50c692f89f0b3cdf860a51cb51a8be` |
+| `post-activation.v1.json`                           | `b82a5ca1d5d066a4ad8fbe9b599c9e63f9b90d5ef73e5db3f6f17549607f739a` |
 | `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
 | `phase-contract.json` (18 phases)                   | `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d` |
-| handoff checksum manifest (115 entries)             | `6374f422011805fb31acda43ca80a62094b9f17fcf4b877fae03683d991dff3c` |
+| handoff checksum manifest (115 entries)             | `4e47ee2d20e99322015bd40be7c23792d687add54472975140a2b740844d9566` |
 
 ### Phase SQL
 
@@ -203,6 +203,18 @@ runs before Campaign preparation, while every protected-state mutation test and
 its emergency-stop assertion remains unchanged. The restores were correctly
 skipped after pgTAP. This failed run is not readiness evidence; a replacement
 exact-head run remains mandatory.
+
+CI run `31484467384` passed application, Windows, browser, Supabase start, both
+rollback rehearsals, and reset. pgTAP then completed the two-deployment,
+mandatory-401, 52-slot/104-event, emergency, finalization, unschedule, and
+pre-terminal Canary-denial paths; one of 1,920 assertions aborted at the first
+allowed post-terminal Canary claim because the insert named nonexistent column
+`metadata`. The immutable prerequisite payload now uses the existing `result`
+evidence column, and a new assertion requires all three globally locked model
+rows to bind to the exact passed Activation Campaign. The post-migration backup
+contract was regenerated. Restores were correctly skipped after pgTAP. This
+failed run is not readiness evidence; a replacement exact-head run remains
+mandatory.
 
 ## Exact status-aware changed-file set
 
