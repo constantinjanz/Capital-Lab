@@ -17,7 +17,7 @@ e46065913f7975eb1e3f89c86c6c649c674873af3f16ba82e20309d2166fe457  M  README.md
 eb18d01b104e6d4fd96bdfa12803a0ee5cfed1dead86f32f5b8e91aefb67b73e  A  scripts/activation-phase-contract.mjs
 a63966e92e91e5668282a9267d588bef0a1512c431b374d7fa3d8baf8658069d  A  scripts/check-credential-patterns.mjs
 63bc3ae8b38965cac28b3934b76dbed9280586f242671f0fbc490de43f6d3bfa  A  scripts/critical-backup-contract.mjs
-0d35cf27a677d0d1b27f88e4a6b69fd62d1c599b1f3430993731694d77a0fe00  A  scripts/critical-backup-contract.test.ts
+7ab08d2b08f79d61ff7aa6442d5c0ba7fc385a68e72b15659ba8d24c177a1da0  A  scripts/critical-backup-contract.test.ts
 c05df84237677de727de6bbb9bc527258aa00a1d118becb45729d8d675cf3d89  M  scripts/export-critical-tables.mjs
 996b0756e3b2a46abed82d563551ea8ff6e1fca49618a42dcbc3dc0f3d1ea63f  A  scripts/generate-backup-contracts.mjs
 a3deb618934376676010ec202c381e8c9811cd5ab95b9af0bf84e2f7991b209b  A  scripts/generate-backup-contracts.test.ts
@@ -31,7 +31,7 @@ f02da74e6d63bc04313fe344d5bf65afe85371728fae4af7b24fdafcd1bc3715  A  scripts/lib
 55e129f67480c2bf3683b5d39848238c662efcc1b3a8c0d44765ca386bfe6f8a  A  scripts/lib/safe-process.test.ts
 566d1ab92b61c63c93a4dd69ba0a93187e8a7a3316492c62bb426c3e65401eb6  A  scripts/migration-rehearsal-contract.mjs
 43bc5d5c90c4b4f50b906625e4c94a697dee5363be42ed0087497503d4324981  A  scripts/migration-rehearsal-contract.test.ts
-fd34f84535c33d28f97e2ad126a8c570b428a6768fae92cb09da53a60ee126f6  A  scripts/prepare-seed-free-local-restore-target.mjs
+51d9fec8efcb736dd2810aa11fc6c4abc7e86ee2626050f4ebcf6db09cd54b38  A  scripts/prepare-seed-free-local-restore-target.mjs
 7bfcd17a9a5989213436f99d91f44c7b645cd3532b4503d2d670988eac535ba1  A  scripts/run-activation-phase.mjs
 e1e48747d4557388c53e228b2d94fe63e01a59925c996eb09067df6a62cd3a77  A  scripts/run-activation-phase.test.ts
 1c6d23652209f94b4353d04d37395327cd347c8e59fb7935314c29ca87da4768  A  scripts/run-ci-gate.mjs
@@ -111,5 +111,5 @@ a1e40d79625a5950a2da55fc9e56364d215c5ce3b29d0b14c2324d1ba43baf37  A  supabase/mi
 9033e2778ecd514c834feaadcef5e14db68f343946193ab73031f29f07a0222e  A  supabase/tests/activation_readiness_follow_up_test.sql
 a3c973b24e93519cba8209fb89af67de1b6981c592fb8c7b888c27b5153f9d10  M  supabase/tests/post_build_hosting_safety_test.sql
 b6071a603a25aae2034edc5d84335ded7e3d5ad9ce0d8b6b2c142451171e1e1f  M  tasks/lessons.md
-284ab600308382dc33a858777e02e5a32ba7b14edab0e2752bc0bcba6c3d385e  M  tasks/todo.md
+e525974877bdd0affd2a20305b047930b121483e8c97f69cd7c2e546da0793a6  M  tasks/todo.md
 5682b50deced79ecaeec8102e140dce60d5110bf9910a72ee2c2907de8ee0078  M  vitest.config.ts

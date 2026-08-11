@@ -10,7 +10,7 @@ Draft PR: `#21` (must remain Draft and unmerged)
 
 Verified starting SHA: `e705f67db819be13c99f759e07186c63f114b831`
 
-Implementation SHA: `65a727c4454c3c0f509906e80d70a1304d2cbae9`
+Implementation SHA: `0b8bf4903288a105c9b89429d08a032160f31838`
 
 Final report/handoff SHA: intentionally recorded in the Draft PR and final chat
 handoff after this report is committed. A Git commit cannot contain its own SHA
@@ -94,7 +94,7 @@ No activation phase was executed in this remediation.
 | `post-activation.v1.json`                           | `e1bf901b7e34177acff0884bd2138cb28359b69b40adc9d3504fe27a7cfb91b3` |
 | `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
 | `phase-contract.json` (18 phases)                   | `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d` |
-| handoff checksum manifest (115 entries)             | `d97b2601b6bfe320a4c2beb254f39c6dbad116d86112fe42acc7343087b5818c` |
+| handoff checksum manifest (115 entries)             | `3cd2684d88e2158375577890cc291fb27d056403ece37d77758f371b16a9bb90` |
 
 ### Phase SQL
 
@@ -131,7 +131,7 @@ passed. No assertion, timeout, retry, or safety gate was weakened.
 | `prettier --check .`                         |           0 | all matched files formatted                     |
 | `eslint . --max-warnings=0`                  |           0 | zero warnings                                   |
 | `tsc --noEmit`                               |           0 | strict TypeScript passed                        |
-| `vitest run`                                 |           0 | 87 files, 633 tests passed                      |
+| `vitest run`                                 |           0 | 87 files, 634 tests passed                      |
 | `node scripts/check-paper-only.mjs`          |           0 | PAPER-only scanner passed                       |
 | `node scripts/check-credential-patterns.mjs` |           0 | worktree + 100 commits, zero redacted findings  |
 | `next build`                                 |           0 | Next.js 16.3 production build passed on Node 24 |
@@ -227,6 +227,17 @@ evidence and the transition's operation/correlation identity before returning.
 The post-migration backup contract was regenerated. Restores were correctly
 skipped after pgTAP. This failed run is not readiness evidence; a replacement
 exact-head run remains mandatory.
+
+CI run `31485769952` passed application, Windows, browser, Supabase start, both
+rollback rehearsals, reset, and every pgTAP assertion. The restore gate then
+successfully created the 82-relation pre-activation backup and entered disposable
+target preparation, where it failed closed because `supabase_vault WITH SCHEMA
+vault` was requested before the new `template0` database contained schema
+`vault`. The local-only target path now creates that schema under
+`supabase_admin` before installing the extension, and a unit test freezes this
+ordering. No Hosted extension or Vault state was inspected or mutated. The post
+restore did not run after the pre-target failure. This failed run is not
+readiness evidence; a replacement exact-head run remains mandatory.
 
 ## Exact status-aware changed-file set
 
