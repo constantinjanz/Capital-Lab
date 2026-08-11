@@ -8,6 +8,7 @@ import {
   buildRolePolicySql,
   buildServerIdentitySql,
   criticalRelationSchemas,
+  filterApplicationSchemaArchiveToc,
   fingerprintRolePolicy,
   postgresUrlToLibpqEnv,
   redactedPostgresError,
@@ -50,8 +51,14 @@ const manifest = {
   createdAt: '2026-08-10T00:00:00.000Z',
   contractKind: 'post_activation',
   dataSchemas: ['private'],
-  schemaVersion: 4,
-  schemaContractVersion: 'capital-lab-post_activation-backup-v4',
+  defaultAclPolicy: {
+    applicationEntryCount: 6,
+    applicationOwner: 'postgres',
+    platformExcludedEntryCount: 3,
+    platformExcludedOwner: 'supabase_admin',
+  },
+  schemaVersion: 5,
+  schemaContractVersion: 'capital-lab-post_activation-backup-v5',
   schemaFingerprintSha256: hashA,
   gitCommitSha: 'c'.repeat(40),
   relationContractSha256: hashA,
@@ -68,6 +75,9 @@ const manifest = {
     serverVersion: '170006',
   },
   toolVersions: {
+    pgDump: 'pg_dump (PostgreSQL) 17.6',
+    pgDumpall: 'pg_dumpall (PostgreSQL) 17.6',
+    pgRestore: 'pg_restore (PostgreSQL) 17.6',
     psql: 'psql (PostgreSQL) 17.6',
     supabase: '2.113.0',
   },
@@ -84,6 +94,31 @@ const expected = {
 }
 
 describe('critical backup contract', () => {
+  it('keeps application DEFAULT ACL entries and excludes only platform-owned entries', () => {
+    const toc = [
+      '; PostgreSQL database dump',
+      '101; 0 0 TABLE public app_users postgres',
+      '201; 826 9001 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES postgres',
+      '202; 826 9002 DEFAULT ACL public DEFAULT PRIVILEGES FOR FUNCTIONS supabase_admin',
+      '',
+    ].join('\n')
+    expect(filterApplicationSchemaArchiveToc(toc)).toEqual({
+      applicationCount: 1,
+      platformCount: 1,
+      toc: [
+        '; PostgreSQL database dump',
+        '101; 0 0 TABLE public app_users postgres',
+        '201; 826 9001 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES postgres',
+        '',
+      ].join('\n'),
+    })
+    expect(() =>
+      filterApplicationSchemaArchiveToc(
+        '203; 826 9003 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES unexpected_owner\n',
+      ),
+    ).toThrow('DEFAULT ACL owner is not classified')
+  })
+
   it('prepares disposable schemas in the required restore order', () => {
     const source = readFileSync(
       new URL('./prepare-seed-free-local-restore-target.mjs', import.meta.url),

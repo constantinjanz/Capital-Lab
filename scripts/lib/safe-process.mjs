@@ -12,6 +12,7 @@ const ALLOWED_EXECUTABLES = new Set([
   'node',
   'pg_dump',
   'pg_dumpall',
+  'pg_restore',
   'pnpm',
   'psql',
   'supabase',

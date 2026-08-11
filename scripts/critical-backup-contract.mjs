@@ -106,6 +106,38 @@ export function roleRestoreRequired(
   return true
 }
 
+const APPLICATION_DEFAULT_ACL_OWNER = 'postgres'
+const PLATFORM_DEFAULT_ACL_OWNER = 'supabase_admin'
+
+export function filterApplicationSchemaArchiveToc(toc) {
+  if (typeof toc !== 'string' || !toc.endsWith('\n')) {
+    throw new Error('PostgreSQL schema archive TOC is invalid')
+  }
+  let applicationCount = 0
+  let platformCount = 0
+  const filtered = toc.split('\n').filter((line) => {
+    if (!line.includes(' DEFAULT ACL ')) return true
+    if (!/^\d+;\s+\d+\s+\d+\s+DEFAULT ACL\s/u.test(line)) {
+      throw new Error('PostgreSQL DEFAULT ACL archive entry is malformed')
+    }
+    const owner = line.trim().split(/\s+/u).at(-1)
+    if (owner === APPLICATION_DEFAULT_ACL_OWNER) {
+      applicationCount += 1
+      return true
+    }
+    if (owner === PLATFORM_DEFAULT_ACL_OWNER) {
+      platformCount += 1
+      return false
+    }
+    throw new Error('PostgreSQL DEFAULT ACL owner is not classified')
+  })
+  return {
+    applicationCount,
+    platformCount,
+    toc: filtered.join('\n'),
+  }
+}
+
 export function redactedPostgresError(stderr) {
   const errorLine = stderr
     .split(/\r?\n/u)
@@ -500,10 +532,10 @@ export function assertBackupManifest(manifest, expected) {
       SHA256.test(manifest.restorePreludeSha256 ?? '') &&
       manifest.restorePreludeSha256 === expected.restorePreludeSha256,
     schema_contract:
-      manifest.schemaVersion === 4 &&
+      manifest.schemaVersion === 5 &&
       manifest.contractKind === expected.contractKind &&
       manifest.schemaContractVersion ===
-        `capital-lab-${expected.contractKind}-backup-v4`,
+        `capital-lab-${expected.contractKind}-backup-v5`,
     schema_fingerprint:
       SHA256.test(manifest.schemaFingerprintSha256 ?? '') &&
       manifest.schemaFingerprintSha256 ===
@@ -519,7 +551,28 @@ export function assertBackupManifest(manifest, expected) {
     source_schema_fingerprint: SHA256.test(
       manifest.source?.schemaFingerprintSha256 ?? '',
     ),
+    default_acl_policy:
+      manifest.defaultAclPolicy?.applicationOwner === 'postgres' &&
+      Number.isSafeInteger(manifest.defaultAclPolicy?.applicationEntryCount) &&
+      manifest.defaultAclPolicy.applicationEntryCount >= 0 &&
+      manifest.defaultAclPolicy?.platformExcludedOwner === 'supabase_admin' &&
+      Number.isSafeInteger(
+        manifest.defaultAclPolicy?.platformExcludedEntryCount,
+      ) &&
+      manifest.defaultAclPolicy.platformExcludedEntryCount >= 0,
     supabase_cli: manifest.toolVersions?.supabase === '2.113.0',
+    pg_dump_version:
+      /^pg_dump \(PostgreSQL\) \d+(?:\.\d+)*(?: [ -~]{1,120})?$/.test(
+        manifest.toolVersions?.pgDump ?? '',
+      ),
+    pg_dumpall_version:
+      /^pg_dumpall \(PostgreSQL\) \d+(?:\.\d+)*(?: [ -~]{1,120})?$/.test(
+        manifest.toolVersions?.pgDumpall ?? '',
+      ),
+    pg_restore_version:
+      /^pg_restore \(PostgreSQL\) \d+(?:\.\d+)*(?: [ -~]{1,120})?$/.test(
+        manifest.toolVersions?.pgRestore ?? '',
+      ),
     psql_version: /^psql \(PostgreSQL\) \d+(?:\.\d+)*(?: [ -~]{1,120})?$/.test(
       manifest.toolVersions?.psql ?? '',
     ),

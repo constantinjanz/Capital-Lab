@@ -46,7 +46,7 @@ still makes the export fail closed. Dirty-path diagnostics contain status and
 path only, with credential-file paths redacted.
 
 - a roles dump;
-- a schema dump;
+- a schema dump generated from a PostgreSQL custom archive and an explicit TOC;
 - a data dump;
 - a separate migration-history schema dump and migration-history data dump;
 - a canonical manifest containing clean Git SHA, migration filenames and
@@ -60,6 +60,16 @@ from the critical-relation contract, sorted, and frozen in the manifest. This
 keeps the current `private,public` application evidence separate from the
 freshly provisioned Auth/Storage platform baseline and makes any later critical
 schema addition an explicit contract and restore change.
+
+The schema TOC preserves application-owned `postgres` default privileges and
+all current object grants. It excludes only `supabase_admin` `DEFAULT ACL`
+entries because those belong to the destination Supabase platform baseline and
+cannot safely be reassigned by an application restore. Any other default-ACL
+owner aborts export. Counts and both exact owner classifications are frozen in
+the version-5 manifest; the full restored table/function grant fingerprint must
+still exactly match the source. The intermediate archive and TOC are mode 0600
+and are removed before a successful export or with the entire incomplete output
+directory after a failure.
 
 Pre- and post-dump evidence must be identical. Any concurrent critical-row or
 schema change aborts the export. No production export is part of an activation
@@ -82,8 +92,9 @@ the allowlisted `auth,storage,extensions,vault` platform baseline plus an
 `auth,storage`-only data dump outside the repository. It restores the baseline
 into a new `template0` database, installs local `supabase_vault` without a
 version pin through `CREATE EXTENSION IF NOT EXISTS`, creates the local empty
-`supabase_realtime` publication expected by an official schema dump, removes
-the target's empty migration-history schema, and securely discards the
+`supabase_realtime` publication expected by an official schema dump, installs
+the baseline `pgcrypto`, `citext`, and `vector` extensions without version pins,
+removes the target's empty migration-history schema, and securely discards the
 temporary baseline artifacts before verification. The helper derives the paths itself,
 accepts no arguments, uses `shell:false`, and refuses a dirty tree. Run it only
 in a disposable local stack because rebuilding the local source database is

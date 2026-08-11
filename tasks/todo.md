@@ -148,6 +148,20 @@ schema restore, and the ordering contract is frozen in unit coverage. Post
 restore did not run after the pre-restore failure; a replacement exact-head run
 remains mandatory.
 
+Exact-head CI run `31488059936` again passed application (87 files / 634
+tests), Windows (4 files / 14 tests), browser (4/4), Supabase start, both
+rollback rehearsals, reset, and all 14 pgTAP files / 1927 assertions. The
+baseline-extension fix carried the 82-relation pre restore through application
+types; the next fail-closed statement was a platform-owned `supabase_admin`
+`ALTER DEFAULT PRIVILEGES` emitted by plain `pg_dump --no-owner`. The exporter
+now creates a custom schema archive, parses its explicit TOC, retains every
+application-owned `postgres` default ACL and current object grant, excludes only
+the classified platform-owned default ACL entries, rejects every unknown owner,
+freezes the counts/owners and PostgreSQL tool versions in a version-5 manifest,
+and removes the restrictive-permission intermediate files. The restored current
+grant fingerprint remains exact. Post restore did not run after the pre failure;
+a replacement exact-head run remains mandatory.
+
 ## PR #21 activation-readiness adversarial hardening (2026-08-09)
 
 Safety status: implementation-only. Production migration/deployment/activation, Hosted extension/Vault/Cron mutation, scheduler HTTP, provider/model calls, Canary execution, broker connectivity, and PR merge/undraft are prohibited.

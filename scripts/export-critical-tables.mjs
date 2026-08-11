@@ -18,6 +18,7 @@ import {
   buildServerIdentitySql,
   canonicalJson,
   criticalRelationSchemas,
+  filterApplicationSchemaArchiveToc,
   fingerprintRolePolicy,
   loadCriticalRelationContract,
   postgresUrlToLibpqEnv,
@@ -229,6 +230,7 @@ async function main() {
     const psqlVersion = await toolVersion('psql')
     const pgDumpVersion = await toolVersion('pg_dump')
     const pgDumpallVersion = await toolVersion('pg_dumpall')
+    const pgRestoreVersion = await toolVersion('pg_restore')
     const evidenceSql = buildCriticalEvidenceSql(contract)
     const evidenceBefore = await evidence(connection.libpqEnv, evidenceSql)
     assertContractKeys(contract, evidenceBefore)
@@ -261,6 +263,8 @@ async function main() {
       historyData: path.join(outputPath, 'migration-history-data.sql'),
       manifest: path.join(outputPath, 'manifest.json'),
     }
+    const schemaArchive = path.join(outputPath, '.application-schema.dump')
+    const schemaToc = path.join(outputPath, '.application-schema.toc')
     const dumpEnv = {
       ...process.env,
       ...connection.libpqEnv,
@@ -275,17 +279,39 @@ async function main() {
     await run(
       'pg_dump',
       [
+        '--format=custom',
         '--schema-only',
-        '--no-owner',
         '--schema',
         'public',
         '--schema',
         'private',
         '--file',
-        paths.schema,
+        schemaArchive,
       ],
       dumpEnv,
     )
+    await chmod(schemaArchive, 0o600)
+    const archiveToc = await run(
+      'pg_restore',
+      ['--list', schemaArchive],
+      dumpEnv,
+    )
+    const filteredToc = filterApplicationSchemaArchiveToc(archiveToc.stdout)
+    await writeFile(schemaToc, filteredToc.toc, { mode: 0o600, flag: 'wx' })
+    await run(
+      'pg_restore',
+      [
+        '--no-owner',
+        '--use-list',
+        schemaToc,
+        '--file',
+        paths.schema,
+        schemaArchive,
+      ],
+      dumpEnv,
+    )
+    await rm(schemaArchive, { force: true })
+    await rm(schemaToc, { force: true })
     await run(
       'pg_dump',
       [
@@ -358,15 +384,21 @@ async function main() {
       contractKind,
       createdAt: new Date().toISOString(),
       dataSchemas,
+      defaultAclPolicy: {
+        applicationEntryCount: filteredToc.applicationCount,
+        applicationOwner: 'postgres',
+        platformExcludedEntryCount: filteredToc.platformCount,
+        platformExcludedOwner: 'supabase_admin',
+      },
       gitCommitSha: commitSha,
       migrations: contract.migrations,
       relationContractSha256,
       relationSetSha256: evidenceBefore.relationSetSha256,
       relations: evidenceBefore.relations,
       restorePreludeSha256,
-      schemaContractVersion: `capital-lab-${contractKind}-backup-v4`,
+      schemaContractVersion: `capital-lab-${contractKind}-backup-v5`,
       schemaFingerprintSha256: evidenceBefore.schemaFingerprintSha256,
-      schemaVersion: 4,
+      schemaVersion: 5,
       source: {
         appliedMigrations: evidenceBefore.appliedMigrations,
         databaseFingerprint: evidenceBefore.databaseFingerprint,
@@ -378,6 +410,7 @@ async function main() {
       toolVersions: {
         pgDump: pgDumpVersion,
         pgDumpall: pgDumpallVersion,
+        pgRestore: pgRestoreVersion,
         psql: psqlVersion,
         supabase: supabaseVersion,
       },
