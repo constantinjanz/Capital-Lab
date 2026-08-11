@@ -2,3 +2,5 @@
 
 - When a OneDrive cleanup runs long enough to look interrupted, keep the user informed, resume from the exact verified state, and split further cleanup into bounded operations instead of restarting completed work.
 - Treat owner attestation that a credential was rotated separately from verification that every intended server-side consumer uses the new credential generation. Record the former as `owner_attested`, keep the latter `pending` until names and scopes are proven without viewing secret values, and never request or expose credential values, prefixes, fragments, or hashes as evidence.
+- Never model a Vercel environment-variable transition by mutating one deployment fixture in place. Each environment snapshot is immutable per deployment; bind distinct reviewed deployment IDs append-only and force every later request/response check to use the phase-specific binding.
+- A handoff checksum claim is only evidence when a deterministic generator derives the complete path set from the real merge base, hashes canonical checkout bytes, and a CI verifier rejects stale, missing, extra, duplicate, or case-drifted entries.

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   assertBackupManifest,
+  assertContractKeys,
   assertRestoredEvidence,
   buildRolePolicySql,
   buildServerIdentitySql,
@@ -20,12 +21,14 @@ const relations = {
     contentSha256: hashA,
     columnCount: '10',
     columnSignatureSha256: hashB,
+    primaryKey: ['id'],
   },
   'private.paid_canary_runs': {
     rowCount: '3',
     contentSha256: hashB,
     columnCount: '9',
     columnSignatureSha256: hashA,
+    primaryKey: ['id'],
   },
 }
 const migrations = [
@@ -44,11 +47,14 @@ const manifest = {
     historyData: { file: 'history-data.sql', sha256: hashB },
   },
   createdAt: '2026-08-10T00:00:00.000Z',
+  contractKind: 'post_activation',
   dataSchemas: ['private'],
-  schemaVersion: 3,
-  schemaContractVersion: 'capital-lab-activation-backup-v3',
+  schemaVersion: 4,
+  schemaContractVersion: 'capital-lab-post_activation-backup-v4',
+  schemaFingerprintSha256: hashA,
   gitCommitSha: 'c'.repeat(40),
   relationContractSha256: hashA,
+  relationSetSha256: hashB,
   restorePreludeSha256: hashB,
   relations,
   migrations,
@@ -56,6 +62,7 @@ const manifest = {
     appliedMigrations: [{ version: '20260809150417', name: 'activation' }],
     databaseFingerprint: hashB,
     rolePolicyFingerprint: hashA,
+    schemaFingerprintSha256: hashA,
     serverFingerprint: hashB,
     serverVersion: '170006',
   },
@@ -65,10 +72,12 @@ const manifest = {
   },
 }
 const expected = {
+  contractKind: 'post_activation',
   dataSchemas: ['private'],
   gitCommitSha: 'c'.repeat(40),
   relationContractSha256: hashA,
   relationNames: Object.keys(relations).sort(),
+  relationSetSha256: hashB,
   restorePreludeSha256: hashB,
   migrations,
 }
@@ -211,6 +220,59 @@ describe('critical backup contract', () => {
         expected,
       ),
     ).toThrow(/data_schemas/)
+    expect(() =>
+      assertBackupManifest(
+        {
+          ...manifest,
+          artifacts: {
+            ...manifest.artifacts,
+            historyData: {
+              ...manifest.artifacts.historyData,
+              file: manifest.artifacts.data.file,
+            },
+          },
+        },
+        expected,
+      ),
+    ).toThrow(/artifact_metadata/)
+  })
+
+  it('rejects a database primary key that differs from the contract', () => {
+    const contract = {
+      relations: [
+        {
+          relation: 'private.no_ai_shadow_dry_runs',
+          primaryKey: ['id'],
+        },
+      ],
+    }
+    expect(() =>
+      assertContractKeys(contract, {
+        catalogRelations: ['private.no_ai_shadow_dry_runs'],
+        relations,
+      }),
+    ).not.toThrow()
+    expect(() =>
+      assertContractKeys(contract, {
+        catalogRelations: ['private.no_ai_shadow_dry_runs'],
+        relations: {
+          ...relations,
+          'private.no_ai_shadow_dry_runs': {
+            ...relations['private.no_ai_shadow_dry_runs'],
+            primaryKey: ['owner_id', 'id'],
+          },
+        },
+      }),
+    ).toThrow('primary key differs')
+    expect(() =>
+      assertContractKeys(contract, {
+        catalogRelations: [
+          'private.no_ai_shadow_dry_runs',
+          'public.unclassified_relation',
+        ],
+        relations,
+      }),
+    ).toThrow('base-relation set differs')
   })
 
   it.each([
@@ -223,21 +285,32 @@ describe('critical backup contract', () => {
     ],
   ])('rejects changed %s', (_label, relation, field) => {
     const actual = structuredClone({
+      contractKind: manifest.contractKind,
+      catalogRelations: Object.keys(relations).sort(),
       relations,
       appliedMigrations: manifest.source.appliedMigrations,
+      relationSetSha256: manifest.relationSetSha256,
+      schemaFingerprintSha256: manifest.schemaFingerprintSha256,
     }) as {
-      relations: Record<string, Record<string, string>>
+      contractKind: string
+      relations: Record<string, Record<string, unknown>>
       appliedMigrations: Array<{ version: string; name: string }>
+      relationSetSha256: string
+      schemaFingerprintSha256: string
     }
-    actual.relations[relation][field] = 'f'.repeat(64)
+    actual.relations[relation]![field] = 'f'.repeat(64)
     expect(() => assertRestoredEvidence(manifest, actual)).toThrow(/differs/)
   })
 
   it('rejects applied migration drift after restore', () => {
     expect(() =>
       assertRestoredEvidence(manifest, {
+        contractKind: manifest.contractKind,
+        catalogRelations: Object.keys(relations).sort(),
         relations,
         appliedMigrations: [{ version: '20260809150417', name: 'tampered' }],
+        relationSetSha256: manifest.relationSetSha256,
+        schemaFingerprintSha256: manifest.schemaFingerprintSha256,
       }),
     ).toThrow(/differs/)
   })

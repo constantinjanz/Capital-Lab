@@ -34,7 +34,7 @@ begin
 end;
 $$;
 
-select jsonb_build_object('schema_version', 2, 'phase', 'vault-verification',
+select jsonb_build_object('schema_version', 3, 'phase', 'vault-verification',
   'persisted_state', state, 'required_name_count', 2,
   'exact_url_matched', true, 'secret_values_returned', false)
 from private.no_ai_shadow_dry_runs where id = :'campaign_id'::uuid;

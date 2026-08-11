@@ -57,7 +57,7 @@ begin
 end;
 $$;
 
-select jsonb_build_object('schema_version', 2,
+select jsonb_build_object('schema_version', 3,
   'phase', 'scheduler-infrastructure-preparation',
   'persisted_state', state, 'extensions_present', 2,
   'extension_version_pins', 0, 'jobs_installed', 0)

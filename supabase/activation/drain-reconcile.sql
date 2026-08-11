@@ -8,7 +8,7 @@ select private.assert_activation_context(
 );
 select private.capture_activation_http_responses() as newly_persisted;
 
-select jsonb_build_object('schema_version', 2, 'phase', 'drain-reconcile',
+select jsonb_build_object('schema_version', 3, 'phase', 'drain-reconcile',
   'persisted_state', campaign.state,
   'submitted_requests', count(event.pg_net_request_id),
   'persisted_responses', count(response.request_id),

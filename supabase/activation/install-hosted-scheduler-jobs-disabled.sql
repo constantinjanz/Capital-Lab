@@ -84,7 +84,7 @@ end;
 $install$;
 
 select private.assert_activation_job_specs(:'campaign_id'::uuid, false);
-select jsonb_build_object('schema_version', 2, 'phase', 'install-jobs-disabled',
+select jsonb_build_object('schema_version', 3, 'phase', 'install-jobs-disabled',
   'persisted_state', state, 'persisted_job_ids', 2, 'active_jobs', 0,
   'full_definitions_verified', true)
 from private.no_ai_shadow_dry_runs where id = :'campaign_id'::uuid;

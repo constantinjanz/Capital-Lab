@@ -1,6 +1,11 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
+
+import {
+  resolvedArguments,
+  resolveNativeExecutable,
+} from './lib/safe-process.mjs'
 
 const root = process.cwd()
 const ignoredDirectories = new Set([
@@ -107,16 +112,26 @@ async function filesUnder(directory) {
   const files = []
 
   for (const entry of entries) {
-    if (entry.isDirectory() && ignoredDirectories.has(entry.name)) continue
+    // Ignore generated dependency/output names regardless of whether Windows
+    // exposes them as directories or junctions. Non-ignored links continue to
+    // the bounded stat/read path and therefore cannot silently escape scope.
+    if (ignoredDirectories.has(entry.name)) continue
     const fullPath = path.join(directory, entry.name)
     if (entry.isDirectory()) files.push(...(await filesUnder(fullPath)))
     else if (
       entry.name.startsWith('.env') ||
       entry.name === '.npmrc' ||
+      entry.name.endsWith('.pem') ||
+      entry.name.endsWith('.key') ||
+      !entry.name.includes('.') ||
       /\.(?:ts|tsx|js|mjs|cjs|json|md|sql|toml|ya?ml|env|txt|sh|bash|zsh|ps1|psm1|bat|cmd|ini|conf|config|properties)$/i.test(
         entry.name,
       )
     ) {
+      const metadata = await stat(fullPath)
+      if (metadata.size > 2 * 1024 * 1024) {
+        throw new Error('Credential candidate exceeds the bounded scanner size')
+      }
       files.push(fullPath)
     }
   }
@@ -142,9 +157,10 @@ function scanContent(rule, filename, content) {
   return content
 }
 
+const git = resolveNativeExecutable('git')
 const history = spawnSync(
-  'git',
-  ['log', '--format=%H', '--max-count=100', '--all'],
+  git.command,
+  resolvedArguments(git, ['log', '--format=%H', '--max-count=100', '--all']),
   { cwd: root, encoding: 'utf8', shell: false, windowsHide: true },
 )
 if (history.status !== 0) {
@@ -153,10 +169,25 @@ if (history.status !== 0) {
   )
 }
 const commits = history.stdout.trim().split(/\r?\n/).filter(Boolean)
+const totalHistory = spawnSync(
+  git.command,
+  resolvedArguments(git, ['rev-list', '--count', '--all']),
+  { cwd: root, encoding: 'utf8', shell: false, windowsHide: true },
+)
+const totalCommitCount = Number.parseInt(totalHistory.stdout.trim(), 10)
+const requiredCommitCount = Math.min(100, totalCommitCount)
+if (
+  totalHistory.status !== 0 ||
+  !Number.isSafeInteger(totalCommitCount) ||
+  totalCommitCount < 1 ||
+  commits.length < requiredCommitCount
+) {
+  throw new Error('Git-history credential coverage is incomplete')
+}
 for (const rule of rules.filter((candidate) => candidate.historyPattern)) {
   const result = spawnSync(
-    'git',
-    [
+    git.command,
+    resolvedArguments(git, [
       'grep',
       '-I',
       '-l',
@@ -166,7 +197,7 @@ for (const rule of rules.filter((candidate) => candidate.historyPattern)) {
       ...commits,
       '--',
       '.',
-    ],
+    ]),
     {
       cwd: root,
       encoding: 'utf8',
@@ -180,13 +211,17 @@ for (const rule of rules.filter((candidate) => candidate.historyPattern)) {
       const separator = matched.indexOf(':')
       const commit = matched.slice(0, separator)
       const filename = matched.slice(separator + 1)
-      const blob = spawnSync('git', ['show', `${commit}:${filename}`], {
-        cwd: root,
-        encoding: 'utf8',
-        shell: false,
-        windowsHide: true,
-        maxBuffer: 4 * 1024 * 1024,
-      })
+      const blob = spawnSync(
+        git.command,
+        resolvedArguments(git, ['show', `${commit}:${filename}`]),
+        {
+          cwd: root,
+          encoding: 'utf8',
+          shell: false,
+          windowsHide: true,
+          maxBuffer: 4 * 1024 * 1024,
+        },
+      )
       if (blob.status !== 0) {
         throw new Error(
           'Bounded Git-history credential scan could not inspect a candidate',
@@ -206,7 +241,16 @@ for (const rule of rules.filter((candidate) => candidate.historyPattern)) {
 
 for (const filename of await filesUnder(root)) {
   if (filename === self) continue
-  const content = await readFile(filename, 'utf8')
+  const bytes = await readFile(filename)
+  if (bytes.includes(0)) {
+    findings.push({
+      path: path.relative(root, filename).replaceAll('\\', '/'),
+      ruleId: 'CRED-014',
+      findingClass: 'unscannable_binary_candidate',
+    })
+    continue
+  }
+  const content = bytes.toString('utf8')
   for (const rule of rules) {
     if (rule.pattern.test(scanContent(rule, filename, content))) {
       findings.push({
@@ -230,5 +274,5 @@ if (findings.length > 0) {
 }
 
 console.log(
-  'Credential scan passed: working tree plus 100 bounded Git-history commits, zero redacted findings.',
+  `Credential scan passed: working tree plus ${commits.length} bounded Git-history commits, zero redacted findings.`,
 )

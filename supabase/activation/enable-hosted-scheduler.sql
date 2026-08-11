@@ -10,7 +10,7 @@ select private.arm_activation_campaign(
   :'correlation_id'::uuid
 );
 
-select jsonb_build_object('schema_version', 2, 'phase', 'arm',
+select jsonb_build_object('schema_version', 3, 'phase', 'arm',
   'persisted_state', state, 'active_jobs', 2,
   'agent_enabled', false, 'paid_models_enabled', false,
   'provider_mode', 'mock-paper-only')

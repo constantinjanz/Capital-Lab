@@ -7,6 +7,16 @@ import {
 } from './run-activation-phase.mjs'
 
 const projectRef = 'qrnuyibntcxwffrxmrvn'
+const projectIdentity = {
+  schemaVersion: 1,
+  vercelTeamId: 'team_yqndKHk6nfWGlte1UVLTJOHG',
+  vercelProjectId: 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR',
+  supabaseProjectRef: projectRef,
+  schedulerPath: '/api/internal/scheduler',
+  allowedProductionHosts: [
+    'capital-lab-constantinjanz-7876s-projects.vercel.app',
+  ],
+}
 const target = {
   project_ref: projectRef,
   connection_mode: 'direct',
@@ -19,13 +29,18 @@ const target = {
 }
 
 const identity = {
-  production_origin: 'https://capital-lab.example',
-  production_host: 'capital-lab.example',
+  production_origin:
+    'https://capital-lab-constantinjanz-7876s-projects.vercel.app',
+  production_host: 'capital-lab-constantinjanz-7876s-projects.vercel.app',
   scheduler_path: '/api/internal/scheduler',
-  scheduler_url: 'https://capital-lab.example/api/internal/scheduler',
+  scheduler_url:
+    'https://capital-lab-constantinjanz-7876s-projects.vercel.app/api/internal/scheduler',
   production_deployment_id: 'dpl_7Gw5ZMBpQA8h9GF832KGp7nwbuh3',
   vercel_commit_sha: 'a'.repeat(40),
   vercel_environment: 'production',
+  vercel_team_id: projectIdentity.vercelTeamId,
+  vercel_project_id: projectIdentity.vercelProjectId,
+  supabase_project_ref: projectRef,
 }
 
 describe('activation runner boundaries', () => {
@@ -36,27 +51,37 @@ describe('activation runner boundaries', () => {
   })
 
   it('accepts only the exact HTTPS Production origin and scheduler path', () => {
-    expect(() => validateSchedulerIdentity(identity)).not.toThrow()
+    expect(() =>
+      validateSchedulerIdentity(identity, projectIdentity),
+    ).not.toThrow()
     for (const mutation of [
       { scheduler_url: 'https://evil.example/api/internal/scheduler' },
       {
-        scheduler_url: 'https://capital-lab.example:443/api/internal/scheduler',
+        scheduler_url:
+          'https://capital-lab-constantinjanz-7876s-projects.vercel.app:443/api/internal/scheduler',
       },
       {
         scheduler_url:
-          'https://user@capital-lab.example/api/internal/scheduler',
+          'https://user@capital-lab-constantinjanz-7876s-projects.vercel.app/api/internal/scheduler',
       },
       {
-        scheduler_url: 'https://capital-lab.example/api/internal/scheduler?x=1',
+        scheduler_url:
+          'https://capital-lab-constantinjanz-7876s-projects.vercel.app/api/internal/scheduler?x=1',
       },
-      { scheduler_url: 'https://capital-lab.example/api/internal/scheduler#x' },
+      {
+        scheduler_url:
+          'https://capital-lab-constantinjanz-7876s-projects.vercel.app/api/internal/scheduler#x',
+      },
       { scheduler_path: '/api/internal/other' },
       { vercel_environment: 'preview' },
       { production_deployment_id: 'not-a-deployment' },
       { vercel_commit_sha: 'caller-asserted' },
     ]) {
       expect(() =>
-        validateSchedulerIdentity({ ...identity, ...mutation }),
+        validateSchedulerIdentity(
+          { ...identity, ...mutation },
+          projectIdentity,
+        ),
       ).toThrow()
     }
   })

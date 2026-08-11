@@ -9,4 +9,6 @@ pnpm-lock.yaml
 supabase/.temp
 # Security contracts are canonical compact JSON; whitespace is checksummed.
 supabase/activation/phase-contract.json
-supabase/backup/critical-relations.v2.json
+supabase/activation/project-identity.v1.json
+supabase/backup/pre-activation.v1.json
+supabase/backup/post-activation.v1.json

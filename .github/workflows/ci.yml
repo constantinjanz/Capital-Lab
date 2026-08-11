@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
       - name: Verify exact clean checkout
         env:
@@ -31,9 +31,12 @@ jobs:
           version: 10.33.2
       - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
-          node-version: 22
+          node-version: 24.x
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: node scripts/activation-phase-contract.mjs --verify
+      - run: node scripts/generate-backup-contracts.mjs --verify
+      - run: node scripts/handoff-checksums.mjs --verify
       - run: node scripts/run-ci-gate.mjs --id format -- pnpm format:check
       - run: node scripts/run-ci-gate.mjs --id lint -- pnpm lint
       - run: node scripts/run-ci-gate.mjs --id typecheck -- pnpm typecheck
@@ -58,7 +61,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
       - name: Verify exact clean checkout
         env:
@@ -66,6 +69,9 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test -z "$(git status --porcelain)"
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: 24.x
       - uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
         with:
           version: 2.113.0
@@ -77,19 +83,35 @@ jobs:
         run: node scripts/run-ci-gate.mjs --id migration-rollback-rehearsal -- node scripts/run-local-rollback-migration-rehearsal.mjs
       - run: node scripts/run-ci-gate.mjs --id database-reset -- supabase db reset
       - run: node scripts/run-ci-gate.mjs --id database-pgtap -- supabase test db
-      - name: Seed-free critical backup and disposable restore
+      - name: Seed-free pre- and post-activation backup and disposable restore
         shell: bash
         run: |
           set -euo pipefail
-          backup_dir="$(mktemp -d)"
+          artifact_root="$(mktemp -d)"
+          hold_root="$(mktemp -d)"
+          restore_pending() {
+            for file in "$hold_root"/*.sql; do
+              if [ -f "$file" ]; then mv "$file" supabase/migrations/; fi
+            done
+          }
+          trap restore_pending EXIT
+          mv supabase/migrations/20260809150000_post_build_hosting_safety.sql "$hold_root"/
+          mv supabase/migrations/20260809150417_activation_readiness_follow_up.sql "$hold_root"/
+          supabase db reset --no-seed
+          restore_pending
           export CAPITAL_LAB_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
-          node scripts/export-critical-tables.mjs "--output-dir=${backup_dir}"
+          node scripts/export-critical-tables.mjs --contract=pre "--output-dir=${artifact_root}/pre"
+          export CAPITAL_LAB_LOCAL_DISPOSABLE_CONFIRM='CREATE DISPOSABLE CAPITAL LAB RESTORE DATABASE capital_lab_restore'
           node scripts/prepare-seed-free-local-restore-target.mjs
-          manifest_path="$(find "$backup_dir" -maxdepth 1 -name '*-manifest.json' -print -quit)"
-          test -n "$manifest_path"
           export CAPITAL_LAB_RESTORE_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:54322/capital_lab_restore'
           export CAPITAL_LAB_RESTORE_CONFIRM_DISPOSABLE='seed-free-disposable-database-confirmed'
-          node scripts/verify-backup-restore.mjs "--manifest=${manifest_path}"
+          pre_hash="$(sha256sum "${artifact_root}/pre/manifest.json" | cut -d' ' -f1)"
+          node scripts/verify-backup-restore.mjs --contract=pre "--manifest=${artifact_root}/pre/manifest.json" "--expected-manifest-sha256=${pre_hash}"
+          supabase db reset --no-seed
+          node scripts/export-critical-tables.mjs --contract=post "--output-dir=${artifact_root}/post"
+          node scripts/prepare-seed-free-local-restore-target.mjs
+          post_hash="$(sha256sum "${artifact_root}/post/manifest.json" | cut -d' ' -f1)"
+          node scripts/verify-backup-restore.mjs --contract=post "--manifest=${artifact_root}/post/manifest.json" "--expected-manifest-sha256=${post_hash}"
       - name: Publish database evidence summary
         if: always()
         run: cat .ci-evidence/*.json >> "$GITHUB_STEP_SUMMARY"
@@ -107,7 +129,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
       - name: Verify exact clean checkout
         env:
@@ -120,7 +142,7 @@ jobs:
           version: 10.33.2
       - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
-          node-version: 22
+          node-version: 24.x
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
@@ -135,3 +157,22 @@ jobs:
           path: .ci-evidence/*.json
           include-hidden-files: true
           if-no-files-found: error
+
+  windows-subprocess:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@d15e628ca66d93ee5f352c71671a7bc6a97af5c9 # v6.0.8
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: 24.x
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Native Windows subprocess and path gates
+        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/run-activation-phase.test.ts scripts/run-emergency-kill.test.ts scripts/migration-rehearsal-contract.test.ts

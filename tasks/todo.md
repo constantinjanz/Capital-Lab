@@ -2,6 +2,44 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## PR #21 third activation-readiness remediation (2026-08-11)
+
+Safety status: repository hardening only. No Hosted migration/history repair,
+extension/Vault/Cron mutation, scheduler request, Production deployment, provider,
+model, Canary, broker, or trading execution is authorized.
+
+### Preflight and migration baseline
+
+- [x] Derive the exact local and Draft-PR head (`e705f67db819be13c99f759e07186c63f114b831`), preserve the 21 unrelated shared-worktree edits, and create a clean detached worktree at that commit.
+- [x] Read the governing repository instructions, current Supabase/Vercel documentation and changelog, and verify read-only that Hosted still has 32 applied migrations while both PR migrations remain unapplied.
+- [ ] Prove a one-to-one repository/Hosted migration-name mapping and schema-equivalence evidence for every same-name/different-version discrepancy; stop rather than guessing on ambiguity.
+
+### Executable remediation
+
+- [x] Add append-only `auth_disabled` and `no_ai_runtime_enabled` deployment bindings, a mandatory `runtime_deployment_verified` gate, exact route/runtime identity checks, and two-deployment end-to-end coverage.
+- [x] Add a checksummed non-secret project identity contract and fixture-driven read-only Vercel deployment/alias proof before any request-capable phase.
+- [x] Make missing- and invalid-Bearer 401 probes durable, mandatory one-shots with exact evidence and no state-machine bypass.
+- [x] Split versioned pre- and post-activation backup contracts, cover every classified application relation, expand schema fingerprints, and bind verification to an externally retained manifest hash. The two seed-free restores remain an exact-head Docker CI gate.
+- [x] Add a deterministic handoff checksum generator/verifier based on status-aware merge-base changes and canonical Git bytes; final manifest generation remains after the implementation commit.
+- [x] Add the standalone dirty-tree-tolerant DB-first break-glass runner, complete relation classification, paid-Canary terminal prerequisite, and retry-safe terminal operation identities.
+- [x] Pin Node 24 consistently, enforce real credential-history depth, and harden all Windows subprocess/destructive local-database paths with fault-injection coverage.
+
+### Verification and publication
+
+- [ ] Run focused unit/SQL contracts, then all mandatory application, browser, Supabase, pgTAP, rollback, pre/post restore, checksum, credential-history, Windows, hostile-endpoint, state-machine, side-effect, Canary, and break-glass gates on one exact clean Node 24 head.
+- [ ] Regenerate final-byte phase/migration/handoff checksums, update the post-build report with honest implementation/handoff SHAs and non-execution evidence, commit only scoped files, push the existing branch, and keep PR #21 Draft and unmerged.
+
+Local pre-commit evidence on Node `v24.14.0`: phase contract 18 files / SHA-256
+`bd1bd6a9192ca4fd3aba734e9c1d991e430609f0e9b6f6153ff9e970d23436d5`;
+backup contracts 82 pre-migration and 105 post-migration relations; Prettier exit
+0; ESLint exit 0 with zero warnings; strict TypeScript exit 0; Vitest 86 files /
+631 tests; PAPER-only scan exit 0; redacted credential scan exit 0 across the
+working tree and 100 commits; Next.js 16.3 production build exit 0; Playwright
+4/4 mock-only flows with fail-on-flaky exit 0; Supabase CLI `2.113.0` verified.
+This workstation has no Docker executable, so Supabase start/reset, pgTAP,
+rollback rehearsal, and the two seed-free export/restore contracts are not
+claimed locally and remain mandatory on the exact committed CI head.
+
 ## PR #21 activation-readiness adversarial hardening (2026-08-09)
 
 Safety status: implementation-only. Production migration/deployment/activation, Hosted extension/Vault/Cron mutation, scheduler HTTP, provider/model calls, Canary execution, broker connectivity, and PR merge/undraft are prohibited.

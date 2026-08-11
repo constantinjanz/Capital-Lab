@@ -4,6 +4,15 @@ import { readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import {
+  resolvedArguments,
+  resolveNativeExecutable,
+} from './lib/safe-process.mjs'
+import {
+  validateDeploymentProof,
+  validateProjectIdentityContract,
+} from './vercel-deployment-proof.mjs'
+
 const PROJECT_REF = 'qrnuyibntcxwffrxmrvn'
 const SHA256 = /^[0-9a-f]{64}$/
 const GIT_SHA = /^[0-9a-f]{40}$/
@@ -13,6 +22,10 @@ const DEPLOYMENT_ID = /^dpl_[A-Za-z0-9]{20,64}$/
 const CONFIG_VERSION = /^[a-z0-9][a-z0-9._-]{0,127}$/
 const PHASE = /^[a-z][a-z0-9-]{1,63}$/
 const PROCESS_TIMEOUT_MS = 180_000
+const DEPLOYMENT_PROOF_ROLES = new Map([
+  ['auth-endpoint-verify', 'auth_disabled'],
+  ['runtime-deployment-verify', 'no_ai_runtime_enabled'],
+])
 
 export function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
@@ -93,7 +106,8 @@ function hasExplicitPort(rawUrl) {
   return hostPort.includes(':')
 }
 
-export function validateSchedulerIdentity(manifest) {
+export function validateSchedulerIdentity(manifest, projectIdentity) {
+  validateProjectIdentityContract(projectIdentity)
   const origin = new URL(manifest.production_origin)
   if (
     hasExplicitPort(manifest.production_origin) ||
@@ -105,6 +119,7 @@ export function validateSchedulerIdentity(manifest) {
     origin.search ||
     origin.hash ||
     origin.hostname !== manifest.production_host ||
+    !projectIdentity.allowedProductionHosts.includes(origin.hostname) ||
     !/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/.test(origin.hostname)
   ) {
     throw new Error('Campaign Production origin is not canonical')
@@ -135,6 +150,14 @@ export function validateSchedulerIdentity(manifest) {
     'Production deployment ID',
   )
   requiredText(manifest.vercel_commit_sha, GIT_SHA, 'Vercel commit SHA')
+  if (
+    manifest.vercel_team_id !== projectIdentity.vercelTeamId ||
+    manifest.vercel_project_id !== projectIdentity.vercelProjectId ||
+    manifest.supabase_project_ref !== projectIdentity.supabaseProjectRef ||
+    manifest.scheduler_path !== projectIdentity.schedulerPath
+  ) {
+    throw new Error('Campaign project identity is not the reviewed contract')
+  }
 }
 
 export function validateDatabaseTarget(databaseUrlValue, target) {
@@ -210,7 +233,8 @@ async function loadCanonicalJson(filename, expectedHash, label) {
 }
 
 function gitOutput(args, cwd) {
-  const result = spawnSync('git', args, {
+  const git = resolveNativeExecutable('git')
+  const result = spawnSync(git.command, resolvedArguments(git, args), {
     cwd,
     encoding: 'utf8',
     shell: false,
@@ -254,6 +278,8 @@ async function main() {
   const phase = option('phase')
   const manifestInput = option('campaign-manifest')
   const expectedManifestHash = option('expected-manifest-sha256')
+  const proofInput = option('deployment-proof')
+  const expectedProofHash = option('expected-deployment-proof-sha256')
   if (
     !phase ||
     !PHASE.test(phase) ||
@@ -265,7 +291,16 @@ async function main() {
       'Required: --phase, --campaign-manifest, and --expected-manifest-sha256',
     )
   }
-  if (process.argv.length !== 5) {
+  const proofRole = DEPLOYMENT_PROOF_ROLES.get(phase)
+  if (
+    (proofRole && (!proofInput || !SHA256.test(expectedProofHash ?? ''))) ||
+    (!proofRole && (proofInput || expectedProofHash))
+  ) {
+    fail(
+      'Deployment proof arguments are required only for a deployment-verification phase',
+    )
+  }
+  if (process.argv.length !== (proofRole ? 7 : 5)) {
     fail('Unknown or duplicate activation arguments are forbidden')
   }
 
@@ -287,6 +322,9 @@ async function main() {
 
   const contractPath = await realpath(
     path.join(gitRoot, 'supabase', 'activation', 'phase-contract.json'),
+  )
+  const projectIdentityPath = await realpath(
+    path.join(gitRoot, 'supabase', 'activation', 'project-identity.v1.json'),
   )
   if (!isWithin(gitRoot, contractPath))
     fail('Phase contract escaped the repository')
@@ -314,6 +352,7 @@ async function main() {
       'phase_contract_sha256',
       'phase_operations',
       'prepared_commit_sha',
+      'project_identity_contract_sha256',
       'production_deployment_id',
       'production_host',
       'production_origin',
@@ -322,8 +361,11 @@ async function main() {
       'scheduler_path',
       'scheduler_url',
       'schema_version',
+      'supabase_project_ref',
       'vercel_commit_sha',
       'vercel_environment',
+      'vercel_project_id',
+      'vercel_team_id',
     ],
     'root',
   )
@@ -340,8 +382,13 @@ async function main() {
     SHA256,
     'relation contract checksum',
   )
+  requiredText(
+    manifest.project_identity_contract_sha256,
+    SHA256,
+    'project identity contract checksum',
+  )
   if (
-    manifest.schema_version !== 2 ||
+    manifest.schema_version !== 3 ||
     manifest.prepared_commit_sha !== actualCommitSha ||
     manifest.vercel_commit_sha !== actualCommitSha
   ) {
@@ -368,7 +415,12 @@ async function main() {
   ) {
     fail('Campaign must remain mock and paper-only')
   }
-  validateSchedulerIdentity(manifest)
+  const projectIdentity = await loadCanonicalJson(
+    projectIdentityPath,
+    manifest.project_identity_contract_sha256,
+    'Project identity contract',
+  )
+  validateSchedulerIdentity(manifest, projectIdentity)
 
   const contract = await loadCanonicalJson(
     contractPath,
@@ -376,7 +428,7 @@ async function main() {
     'Phase contract',
   )
   exactKeys(contract, ['phases', 'schema_version'], 'phase contract')
-  if (contract.schema_version !== 2 || !contract.phases?.[phase]) {
+  if (contract.schema_version !== 3 || !contract.phases?.[phase]) {
     fail('Requested phase is not present in the reviewed phase contract')
   }
   exactKeys(
@@ -448,11 +500,34 @@ async function main() {
   const scriptHash = digest(scriptBytes)
   if (scriptHash !== phaseEntry.sha256) fail('Phase file checksum drifted')
 
+  let deploymentProof
+  if (proofRole) {
+    const proofPath = await realpath(path.resolve(proofInput))
+    if (isWithin(gitRoot, proofPath) || samePath(gitRoot, proofPath)) {
+      fail('Deployment proof must remain outside the repository')
+    }
+    deploymentProof = await loadCanonicalJson(
+      proofPath,
+      expectedProofHash,
+      'Deployment proof',
+    )
+    validateDeploymentProof(
+      projectIdentity,
+      {
+        role: proofRole,
+        deploymentId: deploymentProof.deploymentId,
+        commitSha: actualCommitSha,
+        productionOrigin: manifest.production_origin,
+      },
+      deploymentProof,
+    )
+  }
+
   const databaseUrl = process.env.CAPITAL_LAB_DATABASE_URL
   if (!databaseUrl)
     fail('CAPITAL_LAB_DATABASE_URL is required and never printed')
   const target = validateDatabaseTarget(databaseUrl, manifest.database_target)
-  const psql = process.platform === 'win32' ? 'psql.exe' : 'psql'
+  const psql = resolveNativeExecutable('psql')
   const psqlArguments = [
     '-X',
     '--no-psqlrc',
@@ -488,19 +563,30 @@ async function main() {
     `operation_id=${operation.operation_id}`,
     '--set',
     `correlation_id=${operation.correlation_id}`,
-    '--file',
-    scriptPath,
   ]
-  const result = await spawnBounded(psql, psqlArguments, {
-    cwd: gitRoot,
-    env: {
-      ...process.env,
-      PGDATABASE: databaseUrl,
-      PGCONNECT_TIMEOUT: '10',
-      PGOPTIONS: '-c statement_timeout=150000 -c lock_timeout=10000',
+  if (deploymentProof) {
+    psqlArguments.push(
+      '--set',
+      `deployment_proof_json=${canonicalJson(deploymentProof)}`,
+      '--set',
+      `deployment_proof_sha256=${expectedProofHash}`,
+    )
+  }
+  psqlArguments.push('--file', scriptPath)
+  const result = await spawnBounded(
+    psql.command,
+    resolvedArguments(psql, psqlArguments),
+    {
+      cwd: gitRoot,
+      env: {
+        ...process.env,
+        PGDATABASE: databaseUrl,
+        PGCONNECT_TIMEOUT: '10',
+        PGOPTIONS: '-c statement_timeout=150000 -c lock_timeout=10000',
+      },
+      stdio: 'inherit',
     },
-    stdio: 'inherit',
-  })
+  )
   const unknown =
     result.timedOut ||
     result.error !== null ||
@@ -508,7 +594,7 @@ async function main() {
     result.code === null
   process.stdout.write(
     `${JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 3,
       phase,
       campaignId: manifest.campaign_id,
       operationId: operation.operation_id,

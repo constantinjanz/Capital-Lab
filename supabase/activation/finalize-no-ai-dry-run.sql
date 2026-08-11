@@ -8,7 +8,7 @@ select private.finalize_activation_campaign(
   :'correlation_id'::uuid
 );
 
-select jsonb_build_object('schema_version', 2, 'phase', 'manual-finalize',
+select jsonb_build_object('schema_version', 3, 'phase', 'manual-finalize',
   'terminal_status', terminal_status, 'expected_slots', expected_slots,
   'actual_slots', actual_slots, 'expected_events', expected_events,
   'actual_events', actual_events, 'complete_responses', complete_response_count,

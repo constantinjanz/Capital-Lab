@@ -1,5 +1,18 @@
 # Capital Lab implementation plan
 
+## Third activation-readiness remediation — Draft PR #21
+
+Starting at `e705f67db819be13c99f759e07186c63f114b831`, this repository-only
+hardening pass must make the activation workflow executable with two immutable
+Production deployment identities, mandatory missing/invalid-auth probes, trusted
+read-only Vercel endpoint evidence, versioned pre/post migration backup contracts,
+complete schema-driven side-effect classification, and independent seed-free
+restore proof. The shared working tree's unrelated changes remain outside this
+work. Hosted migration/history repair, extension/Vault/Cron changes, scheduler
+requests, Production deployment, provider/model/Canary/broker access, and trading
+effects are prohibited. The maximum outcome is third independent review; merge,
+migration apply, deployment, and activation remain manual gates.
+
 ## Mission and safety envelope
 
 Capital Lab is a private, single-owner paper-trading research laboratory. It must run locally with deterministic mock data and no paid credentials. The repository must never contain broker execution code, real brokerage credential variables, or a path that can create a real trade. AI, web research, and live market data remain disabled by default.

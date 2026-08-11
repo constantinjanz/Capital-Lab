@@ -58,11 +58,31 @@ The Canary is local CLI only. It is blocked unless agent/autonomous/web are off,
 
 ## Scheduler recovery and shutdown
 
-The only reviewed remote experiment is the dedicated `no_ai_shadow_infrastructure_dry_run`; it is not a research/trading experiment. Follow `docs/post-build/activation-readiness-follow-up.md` and the versioned `activation:phase` runner. Do not copy a shortened SQL fragment into the SQL Editor. Migration, extensions, Vault verification, disabled job installation, auth/no-op, baseline, arming, and shutdown are separate checksummed phases.
+The only reviewed remote experiment is the dedicated `no_ai_shadow_infrastructure_dry_run`; it is not a research/trading experiment. Follow `docs/post-build/activation-readiness-follow-up.md` and the versioned `activation:phase` runner. Do not copy a shortened SQL fragment into the SQL Editor. Migration, extensions, Vault verification, disabled job installation, endpoint proof, mandatory missing/invalid Bearer probes, Auth No-op, Runtime deployment proof, baseline, arming, reconciliation, and shutdown are separate checksummed phases.
+
+The Auth No-op and no-AI Runtime use two different immutable Vercel Production deployments from the same exact commit. First, the `auth_disabled` deployment must be `READY` with `SCHEDULER_ENABLED=false`; bind its read-only Vercel API proof, complete exactly one missing-Bearer and one invalid-Bearer 401 probe, and reconcile the one-shot Auth No-op. Only then create and independently prove the `no_ai_runtime_enabled` deployment with `SCHEDULER_ENABLED=true` and every other dangerous flag false. Never change a mock environment while retaining a deployment ID, and never use the Auth deployment ID for a Runtime request. Both proofs must use the checksummed project identity contract and stay outside the repository.
 
 Every expected request is POST-only, bearer-protected, uncached, Production-only, correlated, and awaited. Two complete regular XNAS sessions contain 52 preregistered 15-minute slots and 104 dispatcher/reconciler events. Every dispatcher must have one Cron trigger, one pg_net request ID, a known 2xx response, one authenticated route request, one claimed terminal no-AI cycle, and exact zero model, budget, order, fill, and ledger counters. Missing or duplicate evidence is failure.
 
-On any unknown result, first set Vercel `SCHEDULER_ENABLED=false` and prove the new exact Production deployment `READY`. Then disable the database control, unschedule only the exact expected jobs, drain at least 300 seconds, and reconcile responses/leases before evaluating baseline deltas. Never create a new operation to bypass an unknown result and never release an unknown AI reservation automatically.
+On any unknown result, run the DB-first emergency kill immediately; Vercel availability, audit writes, Cron alteration, and unscheduling are not prerequisites. Then prove a new shutdown-disabled Production deployment `READY`, retry the separately identified exact-ID Cron-disable operation, drain/reconcile, and unschedule only after terminal evidence. Never create a new operation identity to bypass an unknown result and never release an unknown AI reservation automatically.
+
+### Break-glass DB-first kill
+
+The minimal runner deliberately accepts unrelated dirty files and needs no Campaign manifest, deployment proof, Vercel access, or phase contract. It verifies its own committed runner/helper/SQL bytes against `HEAD`, requires the exact TLS-verified project boundary and campaign-scoped phrase, commits the nine false controls and experiment pause first, then reads them back. It does not alter or unschedule Cron jobs.
+
+```powershell
+$campaignId = '<exact-campaign-uuid>'
+$env:CAPITAL_LAB_DATABASE_URL = '<redacted exact project URL with sslmode=verify-full>'
+try {
+  pnpm activation:emergency-kill -- `
+    --campaign-id=$campaignId `
+    --confirm="EMERGENCY KILL CAPITAL LAB CAMPAIGN $campaignId"
+} finally {
+  Remove-Item Env:\CAPITAL_LAB_DATABASE_URL -ErrorAction SilentlyContinue
+}
+```
+
+Exit `0` means the committed Phase-1 transaction and immediate readback both completed. Exit `3` is an unknown process/signal/timeout outcome: reconcile the same campaign state directly and do not infer failure or run a replacement campaign. The checksummed `emergency-disable-jobs` phase is a later, independently retryable operation over the persisted exact job IDs.
 
 ## Storage and backups
 

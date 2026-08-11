@@ -2,6 +2,13 @@ import { spawn } from 'node:child_process'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import {
+  resolveNativeExecutable,
+  resolvedArguments,
+} from './lib/safe-process.mjs'
+
+const PROCESS_TIMEOUT_MS = 20 * 60 * 1000
+
 const separatorIndex = process.argv.indexOf('--')
 const idIndex = process.argv.indexOf('--id')
 if (
@@ -25,9 +32,19 @@ const args = process.argv.slice(separatorIndex + 2)
 const startedAt = new Date().toISOString()
 let combinedOutput = ''
 
-const child = spawn(command, args, {
+let resolved
+try {
+  resolved = resolveNativeExecutable(command)
+} catch (error) {
+  console.error(
+    error instanceof Error ? error.message : 'Gate executable failed',
+  )
+  process.exit(127)
+}
+const child = spawn(resolved.command, resolvedArguments(resolved, args), {
   env: process.env,
-  shell: process.platform === 'win32',
+  shell: false,
+  windowsHide: true,
 })
 
 child.stdout.on('data', (chunk) => {
@@ -41,10 +58,27 @@ child.stderr.on('data', (chunk) => {
   process.stderr.write(text)
 })
 
-const exitCode = await new Promise((resolve) => {
-  child.on('error', () => resolve(127))
-  child.on('close', (code) => resolve(code ?? 1))
+const outcome = await new Promise((resolve) => {
+  let settled = false
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    child.kill('SIGTERM')
+  }, PROCESS_TIMEOUT_MS)
+  child.on('error', () => {
+    if (settled) return
+    settled = true
+    clearTimeout(timer)
+    resolve({ exitCode: 127, signal: null, timedOut })
+  })
+  child.on('close', (code, signal) => {
+    if (settled) return
+    settled = true
+    clearTimeout(timer)
+    resolve({ exitCode: code ?? 1, signal, timedOut })
+  })
 })
+const exitCode = outcome.timedOut || outcome.signal ? 124 : outcome.exitCode
 
 const normalizedOutput = combinedOutput.replace(
   /\u001b\[[0-?]*[ -/]*[@-~]/g,
@@ -65,6 +99,8 @@ const evidence = {
   startedAt,
   completedAt: new Date().toISOString(),
   exitCode,
+  signal: outcome.signal,
+  timedOut: outcome.timedOut,
   counts: {
     files: Number(vitestFiles?.[1] ?? pgTap?.[1]) || null,
     tests: passedTests === null ? null : passedTests + flakyTests,

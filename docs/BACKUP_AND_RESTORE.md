@@ -1,11 +1,19 @@
 # Backup and restore
 
-Capital Lab treats every activation/canary record and every relation in
-`supabase/backup/critical-relations.v2.json` as disaster-recovery evidence. The
-compact, sorted JSON contract is the single source of truth for the exporter,
-manifest writer, restore verifier, row ordering, full-row hashes, column
-signatures, and evidence rules. Its bytes and relation-set hash are frozen in
-each backup manifest.
+Capital Lab has two compact, sorted, versioned disaster-recovery contracts:
+
+- `supabase/backup/pre-activation.v1.json` describes the exact 32-migration
+  baseline before the two pending Activation migrations. It references no
+  Activation relation or helper introduced by those migrations.
+- `supabase/backup/post-activation.v1.json` describes all 34 migrations and the
+  complete post-migration Activation/Canary evidence schema.
+
+These generated contracts are the only relation source of truth for the
+exporter, manifest writer, restore verifier, row ordering, full-row hashes,
+primary keys, column signatures, and evidence rules. Their bytes and exact
+relation-set hashes are frozen in every matching backup manifest. Generation
+classifies every `public` and `private` base relation and permits no
+non-critical application-table allowlist.
 
 Backups are sensitive artifacts. Keep them outside the repository, CI
 artifacts, Supabase project, and shared logs. The scripts never print a database
@@ -20,8 +28,12 @@ valid source identity.
 
 ```powershell
 $env:CAPITAL_LAB_DATABASE_URL = '<redacted direct URL with sslmode=verify-full>'
-pnpm backup:critical -- --output-dir=D:\Capital-Lab-Backups
-Remove-Item Env:\CAPITAL_LAB_DATABASE_URL
+try {
+  node scripts/export-critical-tables.mjs --contract=pre --output-dir=D:\Capital-Lab-Backups\pre
+  # Use --contract=post only after both migrations exist on that exact source.
+} finally {
+  Remove-Item Env:\CAPITAL_LAB_DATABASE_URL -ErrorAction SilentlyContinue
+}
 ```
 
 The exporter requires pinned Supabase CLI `2.113.0`, a fully clean working tree
@@ -40,7 +52,7 @@ path only, with credential-file paths redacted.
 - a canonical manifest containing clean Git SHA, migration filenames and
   SHA-256 values, schema/contract versions, exact relation-set hash, safe source
   fingerprint metadata, tool versions, dump hashes, full relation counts,
-  complete content hashes, column signatures, a password-free role-attribute
+  complete content hashes, primary-key and column signatures, a password-free role-attribute
   and role-membership policy fingerprint, and evidence-rule results.
 
 The data artifact's schema scope is not an independent allowlist. It is derived
@@ -85,8 +97,10 @@ try {
   node scripts/prepare-seed-free-local-restore-target.mjs
   $env:CAPITAL_LAB_RESTORE_DATABASE_URL = '<loopback-restore-url>'
   $env:CAPITAL_LAB_RESTORE_CONFIRM_DISPOSABLE = 'seed-free-disposable-database-confirmed'
-  pnpm backup:restore:test -- `
-    --manifest=D:\Capital-Lab-Backups\capital-lab-<timestamp>-manifest.json
+  $manifest = 'D:\Capital-Lab-Backups\pre\manifest.json'
+  $expectedHash = '<externally-retained-manifest-sha256>'
+  node scripts/verify-backup-restore.mjs --contract=pre `
+    --manifest=$manifest --expected-manifest-sha256=$expectedHash
 } finally {
   Remove-Item Env:\CAPITAL_LAB_DATABASE_URL -ErrorAction SilentlyContinue
   Remove-Item Env:\CAPITAL_LAB_RESTORE_DATABASE_URL -ErrorAction SilentlyContinue

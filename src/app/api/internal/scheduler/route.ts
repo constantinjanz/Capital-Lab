@@ -17,19 +17,22 @@ export const maxDuration = 300
 const INTERNAL_DEADLINE_MS = 110_000
 const uuid = z.uuid()
 const deploymentId = z.string().regex(/^dpl_[A-Za-z0-9]{20,64}$/)
+const projectId = z.string().regex(/^prj_[A-Za-z0-9]{20,64}$/)
 const commitSha = z.string().regex(/^[0-9a-f]{40}$/)
 const identityFields = {
-  schema_version: z.literal(2),
+  schema_version: z.literal(3),
   campaign_id: uuid,
   correlation_id: uuid,
   request_id: uuid,
   expected_deployment_id: deploymentId,
+  expected_project_id: projectId,
   expected_commit_sha: commitSha,
 }
 const authNoopRequestSchema = z
   .object({
     ...identityFields,
     mode: z.literal('auth_noop'),
+    deployment_role: z.literal('auth_disabled'),
     nonce: uuid,
   })
   .strict()
@@ -37,6 +40,7 @@ const dryRunRequestSchema = z
   .object({
     ...identityFields,
     mode: z.literal('dry_run'),
+    deployment_role: z.literal('no_ai_runtime_enabled'),
     event_id: uuid,
     cycle_id: uuid,
     job: z.enum(['market_dispatcher', 'reconciler']),
@@ -75,10 +79,11 @@ export const ZERO_SCHEDULER_EFFECTS = Object.freeze({
 type DeploymentIdentity = {
   environment: string | undefined
   deploymentId: string | undefined
+  projectId: string | undefined
   commitSha: string | undefined
 }
 
-type SchedulerRouteDependencies = {
+export type SchedulerRouteDependencies = {
   environment(): ServerEnvironment
   deploymentIdentity(): DeploymentIdentity
   now(): Date
@@ -133,12 +138,14 @@ function identityMatches(
   actual: DeploymentIdentity,
   expected: {
     expected_deployment_id: string
+    expected_project_id: string
     expected_commit_sha: string
   },
 ): boolean {
   return (
     actual.environment === 'production' &&
     actual.deploymentId === expected.expected_deployment_id &&
+    actual.projectId === expected.expected_project_id &&
     actual.commitSha === expected.expected_commit_sha
   )
 }
@@ -162,7 +169,18 @@ export async function handleSchedulerPost(
       environment.SCHEDULER_SHARED_SECRET,
     )
   ) {
-    return response({ error: 'unauthorized' }, 401)
+    return response(
+      {
+        schema_version: 3,
+        mode: 'auth_failure',
+        error: 'unauthorized',
+        classification: 'bearer_missing_or_invalid',
+        scheduler_disabled: !environment.SCHEDULER_ENABLED,
+        agent_disabled: !environment.AGENT_ENABLED,
+        counters: ZERO_SCHEDULER_EFFECTS,
+      },
+      401,
+    )
   }
 
   let parsed: z.infer<typeof requestSchema>
@@ -201,14 +219,16 @@ export async function handleSchedulerPost(
       )
     }
     return response({
-      schema_version: 2,
+      schema_version: 3,
       mode: 'auth_noop',
+      deployment_role: parsed.deployment_role,
       campaign_id: parsed.campaign_id,
       correlation_id: parsed.correlation_id,
       nonce: parsed.nonce,
       request_id: parsed.request_id,
       environment: 'production',
       deployment_id: identity.deploymentId,
+      project_id: identity.projectId,
       commit_sha: identity.commitSha,
       status: 'authenticated_noop',
       terminal_reason: 'auth_noop_verified',
@@ -257,8 +277,9 @@ export async function handleSchedulerPost(
       },
     })
     return response({
-      schema_version: 2,
+      schema_version: 3,
       mode: 'dry_run',
+      deployment_role: parsed.deployment_role,
       campaign_id: parsed.campaign_id,
       event_id: parsed.event_id,
       correlation_id: parsed.correlation_id,
@@ -268,6 +289,7 @@ export async function handleSchedulerPost(
       slot_number: parsed.slot_number,
       environment: 'production',
       deployment_id: identity.deploymentId,
+      project_id: identity.projectId,
       commit_sha: identity.commitSha,
       status: result.status,
       terminal_reason: result.reason,
@@ -292,8 +314,9 @@ export async function handleSchedulerPost(
     })
     return response(
       {
-        schema_version: 2,
+        schema_version: 3,
         mode: 'dry_run',
+        deployment_role: parsed.deployment_role,
         campaign_id: parsed.campaign_id,
         event_id: parsed.event_id,
         correlation_id: parsed.correlation_id,
@@ -303,6 +326,7 @@ export async function handleSchedulerPost(
         slot_number: parsed.slot_number,
         environment: 'production',
         deployment_id: identity.deploymentId,
+        project_id: identity.projectId,
         commit_sha: identity.commitSha,
         status: 'unknown',
         terminal_reason: 'scheduler_result_unknown',
@@ -322,6 +346,7 @@ const productionDependencies: SchedulerRouteDependencies = {
   deploymentIdentity: () => ({
     environment: process.env.VERCEL_ENV,
     deploymentId: process.env.VERCEL_DEPLOYMENT_ID,
+    projectId: process.env.VERCEL_PROJECT_ID,
     commitSha: process.env.VERCEL_GIT_COMMIT_SHA,
   }),
   now: () => new Date(),

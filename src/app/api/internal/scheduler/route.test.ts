@@ -1,14 +1,21 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, type Mock } from 'vitest'
 
 import type { ServerEnvironment } from '@/lib/env/server'
 
-import { handleSchedulerPost, ZERO_SCHEDULER_EFFECTS } from './route'
+import {
+  handleSchedulerPost,
+  ZERO_SCHEDULER_EFFECTS,
+  type SchedulerRouteDependencies,
+} from './route'
 
-const expectedDeploymentId = 'dpl_7Gw5ZMBpQA8h9GF832KGp7nwbuh3'
+const authDeploymentId = 'dpl_7Gw5ZMBpQA8h9GF832KGp7nwbuh3'
+const runtimeDeploymentId = 'dpl_8Hx6ANcqBR9i0HG943LHq8oxcvi4'
+const expectedProjectId = 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR'
 const expectedCommitSha = 'a'.repeat(40)
 const identity = {
   environment: 'production',
-  deploymentId: expectedDeploymentId,
+  deploymentId: authDeploymentId,
+  projectId: expectedProjectId,
   commitSha: expectedCommitSha,
 }
 const safeEnvironment = {
@@ -30,19 +37,22 @@ const safeEnvironment = {
 } as ServerEnvironment
 
 const authBody = {
-  schema_version: 2,
+  schema_version: 3,
   mode: 'auth_noop',
+  deployment_role: 'auth_disabled',
   campaign_id: '00000000-0000-4000-8000-000000000001',
   correlation_id: '00000000-0000-4000-8000-000000000002',
   nonce: '00000000-0000-4000-8000-000000000003',
   request_id: '00000000-0000-4000-8000-000000000004',
-  expected_deployment_id: expectedDeploymentId,
+  expected_deployment_id: authDeploymentId,
+  expected_project_id: expectedProjectId,
   expected_commit_sha: expectedCommitSha,
 } as const
 
 const dryRunBody = {
-  schema_version: 2,
+  schema_version: 3,
   mode: 'dry_run',
+  deployment_role: 'no_ai_runtime_enabled',
   campaign_id: '00000000-0000-4000-8000-000000000001',
   event_id: '00000000-0000-4000-8000-000000000005',
   correlation_id: '00000000-0000-4000-8000-000000000006',
@@ -50,7 +60,8 @@ const dryRunBody = {
   cycle_id: '00000000-0000-4000-8000-000000000008',
   job: 'market_dispatcher',
   slot_number: 0,
-  expected_deployment_id: expectedDeploymentId,
+  expected_deployment_id: runtimeDeploymentId,
+  expected_project_id: expectedProjectId,
   expected_commit_sha: expectedCommitSha,
 } as const
 
@@ -68,24 +79,39 @@ function request(
   })
 }
 
-function dependencies(
-  dispatch = vi.fn().mockResolvedValue({
-    status: 'completed',
-    reason: 'no_ai_shadow_cycle_recorded',
-    cyclesClaimed: 1,
-    cyclesReconciled: 0,
-    modelCalls: 0,
-    budgetReservations: 0,
-    paperOrdersCreated: 0,
-    paperFillsCreated: 0,
-    ledgerEntriesCreated: 0,
-  }),
-) {
+type SchedulerDispatch = SchedulerRouteDependencies['dispatch']
+
+function dependencies({
+  runtime = false,
+  dispatch,
+}: {
+  runtime?: boolean
+  dispatch?: Mock<SchedulerDispatch>
+} = {}): SchedulerRouteDependencies & { dispatch: Mock<SchedulerDispatch> } {
+  const resolvedDispatch =
+    dispatch ??
+    vi.fn<SchedulerDispatch>().mockResolvedValue({
+      status: 'completed',
+      reason: 'no_ai_shadow_cycle_recorded',
+      cyclesClaimed: 1,
+      cyclesReconciled: 0,
+      modelCalls: 0,
+      budgetReservations: 0,
+      paperOrdersCreated: 0,
+      paperFillsCreated: 0,
+      ledgerEntriesCreated: 0,
+    })
   return {
-    environment: () => safeEnvironment,
-    deploymentIdentity: () => identity,
+    environment: () => ({
+      ...safeEnvironment,
+      SCHEDULER_ENABLED: runtime,
+    }),
+    deploymentIdentity: () => ({
+      ...identity,
+      deploymentId: runtime ? runtimeDeploymentId : authDeploymentId,
+    }),
     now: () => new Date('2026-08-10T14:15:00.000Z'),
-    dispatch,
+    dispatch: resolvedDispatch,
   }
 }
 
@@ -103,7 +129,15 @@ describe('protected Supabase scheduler route', () => {
       )
 
       expect(result.status).toBe(401)
-      expect(await result.json()).toEqual({ error: 'unauthorized' })
+      expect(await result.json()).toEqual({
+        schema_version: 3,
+        mode: 'auth_failure',
+        error: 'unauthorized',
+        classification: 'bearer_missing_or_invalid',
+        scheduler_disabled: true,
+        agent_disabled: true,
+        counters: ZERO_SCHEDULER_EFFECTS,
+      })
       expect(deps.dispatch).not.toHaveBeenCalled()
       expect(result.headers.get('cache-control')).toContain('no-store')
     },
@@ -115,14 +149,16 @@ describe('protected Supabase scheduler route', () => {
 
     expect(result.status).toBe(200)
     expect(await result.json()).toEqual({
-      schema_version: 2,
+      schema_version: 3,
       mode: 'auth_noop',
+      deployment_role: 'auth_disabled',
       campaign_id: authBody.campaign_id,
       correlation_id: authBody.correlation_id,
       nonce: authBody.nonce,
       request_id: authBody.request_id,
       environment: 'production',
-      deployment_id: expectedDeploymentId,
+      deployment_id: authDeploymentId,
+      project_id: expectedProjectId,
       commit_sha: expectedCommitSha,
       status: 'authenticated_noop',
       terminal_reason: 'auth_noop_verified',
@@ -137,6 +173,7 @@ describe('protected Supabase scheduler route', () => {
     { environment: 'preview' },
     { deploymentId: 'dpl_00000000000000000000' },
     { commitSha: 'b'.repeat(40) },
+    { projectId: 'prj_00000000000000000000' },
   ])(
     'rejects deployment identity drift without a 2xx fallback',
     async (drift) => {
@@ -167,8 +204,7 @@ describe('protected Supabase scheduler route', () => {
   })
 
   it('dispatches one identity-bound disabled-AI production envelope', async () => {
-    const deps = dependencies()
-    deps.environment = () => ({ ...safeEnvironment, SCHEDULER_ENABLED: true })
+    const deps = dependencies({ runtime: true })
     const result = await handleSchedulerPost(request(dryRunBody), deps)
 
     expect(result.status).toBe(200)
@@ -181,18 +217,28 @@ describe('protected Supabase scheduler route', () => {
     )
     expect(await result.json()).toEqual(
       expect.objectContaining({
-        schema_version: 2,
+        schema_version: 3,
         mode: 'dry_run',
+        deployment_role: 'no_ai_runtime_enabled',
         campaign_id: dryRunBody.campaign_id,
         event_id: dryRunBody.event_id,
         request_id: dryRunBody.request_id,
-        deployment_id: expectedDeploymentId,
+        deployment_id: runtimeDeploymentId,
+        project_id: expectedProjectId,
         commit_sha: expectedCommitSha,
         status: 'completed',
         terminal_reason: 'no_ai_shadow_cycle_recorded',
         counters: ZERO_SCHEDULER_EFFECTS,
       }),
     )
+  })
+
+  it('rejects a Runtime request that reuses the Auth deployment identity', async () => {
+    const deps = dependencies()
+    const result = await handleSchedulerPost(request(dryRunBody), deps)
+
+    expect(result.status).toBe(409)
+    expect(deps.dispatch).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -205,12 +251,11 @@ describe('protected Supabase scheduler route', () => {
     'SOL_LIVE_EXECUTION_ENABLED',
     'REAL_BROKER_ENABLED',
   ] as const)('fails closed when %s is enabled', async (flag) => {
-    const deps = dependencies()
-    deps.environment = () => ({
-      ...safeEnvironment,
-      SCHEDULER_ENABLED: true,
-      [flag]: true,
-    })
+    const base = dependencies({ runtime: true })
+    const deps = {
+      ...base,
+      environment: () => ({ ...base.environment(), [flag]: true }),
+    }
     const result = await handleSchedulerPost(request(dryRunBody), deps)
 
     expect(result.status).toBe(409)
@@ -218,8 +263,10 @@ describe('protected Supabase scheduler route', () => {
   })
 
   it('preserves an unknown outcome on the original request identity', async () => {
-    const deps = dependencies(vi.fn().mockRejectedValue(new Error('timeout')))
-    deps.environment = () => ({ ...safeEnvironment, SCHEDULER_ENABLED: true })
+    const deps = dependencies({
+      runtime: true,
+      dispatch: vi.fn().mockRejectedValue(new Error('timeout')),
+    })
     const result = await handleSchedulerPost(request(dryRunBody), deps)
 
     expect(result.status).toBe(503)

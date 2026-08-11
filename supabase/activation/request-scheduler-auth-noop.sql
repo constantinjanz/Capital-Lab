@@ -14,7 +14,7 @@ select private.claim_activation_auth_noop(
 );
 select private.submit_activation_auth_noop(:'campaign_id'::uuid) as pg_net_request_id;
 
-select jsonb_build_object('schema_version', 2, 'phase', 'auth-noop-request',
+select jsonb_build_object('schema_version', 3, 'phase', 'auth-noop-request',
   'campaign_id', campaign_id, 'request_id', request_id,
   'correlation_id', correlation_id, 'status', status,
   'secret_values_returned', false)

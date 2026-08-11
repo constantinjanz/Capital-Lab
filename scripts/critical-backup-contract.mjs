@@ -165,13 +165,21 @@ export function postgresUrlToLibpqEnv(value, { localOnly = false } = {}) {
   }
 }
 
-export async function loadCriticalRelationContract(filename) {
+export async function loadCriticalRelationContract(filename, expectedKind) {
   const bytes = await readFile(filename)
   const contract = JSON.parse(bytes.toString('utf8'))
   if (bytes.toString('utf8') !== `${canonicalJson(contract)}\n`) {
     throw new Error('Critical-relation contract must be canonical JSON')
   }
-  if (contract.schemaVersion !== 2 || !Array.isArray(contract.relations)) {
+  if (
+    contract.schemaVersion !== 3 ||
+    contract.contractKind !== expectedKind ||
+    contract.schemaFingerprintVersion !== 'capital-lab-schema-fingerprint-v1' ||
+    !Array.isArray(contract.relations) ||
+    !Array.isArray(contract.migrations) ||
+    !Array.isArray(contract.nonCriticalAllowlist) ||
+    contract.nonCriticalAllowlist.length !== 0
+  ) {
     throw new Error('Critical-relation contract version is invalid')
   }
   const seen = new Set()
@@ -194,6 +202,20 @@ export async function loadCriticalRelationContract(filename) {
   const names = contract.relations.map((spec) => spec.relation)
   if (JSON.stringify(names) !== JSON.stringify([...names].sort())) {
     throw new Error('Critical-relation contract must be relation-sorted')
+  }
+  if (
+    contract.migrations.some(
+      (migration) =>
+        !/^\d{14}_[a-z0-9_]+\.sql$/u.test(migration.name) ||
+        migration.version !== migration.name.slice(0, 14) ||
+        !SHA256.test(migration.sha256),
+    ) ||
+    JSON.stringify(contract.migrations.map((migration) => migration.name)) !==
+      JSON.stringify(
+        contract.migrations.map((migration) => migration.name).sort(),
+      )
+  ) {
+    throw new Error('Critical-relation migration mapping is invalid')
   }
   return { contract, sha256: sha256(bytes) }
 }
@@ -240,6 +262,17 @@ function relationSql(spec) {
         where attribute.attrelid = '${spec.relation}'::regclass
           and attribute.attnum > 0 and not attribute.attisdropped
       ),
+      'primaryKey', (
+        select coalesce(jsonb_agg(attribute.attname order by key_column.ordinality), '[]'::jsonb)
+        from pg_catalog.pg_constraint as primary_constraint
+        cross join lateral unnest(primary_constraint.conkey)
+          with ordinality as key_column(attnum, ordinality)
+        join pg_catalog.pg_attribute as attribute
+          on attribute.attrelid = primary_constraint.conrelid
+          and attribute.attnum = key_column.attnum
+        where primary_constraint.conrelid = '${spec.relation}'::regclass
+          and primary_constraint.contype = 'p'
+      ),
       'columnSignatureSha256', (
         select encode(extensions.digest(convert_to(coalesce(string_agg(
           jsonb_build_object(
@@ -262,21 +295,150 @@ function relationSql(spec) {
   from ${qualified} as source_row`
 }
 
+function schemaFingerprintSql() {
+  return `select encode(extensions.digest(convert_to(jsonb_build_object(
+    'columns', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', namespace.nspname, 'relation', relation.relname,
+      'position', attribute.attnum, 'name', attribute.attname,
+      'type', pg_catalog.format_type(attribute.atttypid, attribute.atttypmod),
+      'notNull', attribute.attnotnull, 'identity', attribute.attidentity,
+      'generated', attribute.attgenerated,
+      'default', pg_catalog.pg_get_expr(default_value.adbin, default_value.adrelid)
+    ) order by namespace.nspname, relation.relname, attribute.attnum), '[]'::jsonb)
+    from pg_catalog.pg_class as relation
+    join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+    join pg_catalog.pg_attribute as attribute on attribute.attrelid = relation.oid
+    left join pg_catalog.pg_attrdef as default_value
+      on default_value.adrelid = relation.oid and default_value.adnum = attribute.attnum
+    where namespace.nspname in ('public','private') and relation.relkind in ('r','p','v','m')
+      and attribute.attnum > 0 and not attribute.attisdropped),
+    'constraints', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', namespace.nspname, 'relation', relation.relname,
+      'name', constraint_record.conname, 'type', constraint_record.contype,
+      'definition', pg_catalog.pg_get_constraintdef(constraint_record.oid, true)
+    ) order by namespace.nspname, relation.relname, constraint_record.conname), '[]'::jsonb)
+    from pg_catalog.pg_constraint as constraint_record
+    join pg_catalog.pg_class as relation on relation.oid = constraint_record.conrelid
+    join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname in ('public','private')),
+    'indexes', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', schemaname, 'relation', tablename, 'name', indexname,
+      'definition', indexdef
+    ) order by schemaname, tablename, indexname), '[]'::jsonb)
+    from pg_catalog.pg_indexes where schemaname in ('public','private')),
+    'rowSecurity', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', namespace.nspname, 'relation', relation.relname,
+      'enabled', relation.relrowsecurity, 'forced', relation.relforcerowsecurity
+    ) order by namespace.nspname, relation.relname), '[]'::jsonb)
+    from pg_catalog.pg_class as relation
+    join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname in ('public','private') and relation.relkind in ('r','p')),
+    'policies', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', schemaname, 'relation', tablename, 'name', policyname,
+      'permissive', permissive, 'roles', roles, 'command', cmd,
+      'using', qual, 'check', with_check
+    ) order by schemaname, tablename, policyname), '[]'::jsonb)
+    from pg_catalog.pg_policies where schemaname in ('public','private')),
+    'tableGrants', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', table_schema, 'relation', table_name, 'grantee', grantee,
+      'privilege', privilege_type, 'grantable', is_grantable
+    ) order by table_schema, table_name, grantee, privilege_type), '[]'::jsonb)
+    from information_schema.table_privileges where table_schema in ('public','private')),
+    'triggers', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', namespace.nspname, 'relation', relation.relname,
+      'name', trigger_record.tgname,
+      'definition', pg_catalog.pg_get_triggerdef(trigger_record.oid, true)
+    ) order by namespace.nspname, relation.relname, trigger_record.tgname), '[]'::jsonb)
+    from pg_catalog.pg_trigger as trigger_record
+    join pg_catalog.pg_class as relation on relation.oid = trigger_record.tgrelid
+    join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname in ('public','private') and not trigger_record.tgisinternal),
+    'functions', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', namespace.nspname, 'identity', procedure.oid::regprocedure::text,
+      'securityDefiner', procedure.prosecdef, 'volatility', procedure.provolatile,
+      'parallel', procedure.proparallel, 'definition', pg_catalog.pg_get_functiondef(procedure.oid)
+    ) order by namespace.nspname, procedure.oid::regprocedure::text), '[]'::jsonb)
+    from pg_catalog.pg_proc as procedure
+    join pg_catalog.pg_namespace as namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname in ('public','private')),
+    'functionGrants', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', namespace.nspname, 'identity', procedure.oid::regprocedure::text,
+      'grantee', coalesce(grantee.rolname, 'PUBLIC'), 'privilege', privilege.privilege_type,
+      'grantable', privilege.is_grantable
+    ) order by namespace.nspname, procedure.oid::regprocedure::text,
+      coalesce(grantee.rolname, 'PUBLIC'), privilege.privilege_type), '[]'::jsonb)
+    from pg_catalog.pg_proc as procedure
+    join pg_catalog.pg_namespace as namespace on namespace.oid = procedure.pronamespace
+    cross join lateral pg_catalog.aclexplode(coalesce(procedure.proacl,
+      pg_catalog.acldefault('f', procedure.proowner))) as privilege
+    left join pg_catalog.pg_roles as grantee on grantee.oid = privilege.grantee
+    where namespace.nspname in ('public','private')),
+    'views', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', namespace.nspname, 'name', relation.relname,
+      'kind', relation.relkind, 'definition', pg_catalog.pg_get_viewdef(relation.oid, true)
+    ) order by namespace.nspname, relation.relname), '[]'::jsonb)
+    from pg_catalog.pg_class as relation
+    join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname in ('public','private') and relation.relkind in ('v','m'))
+  )::text, 'UTF8'), 'sha256'), 'hex')`
+}
+
 export function buildCriticalEvidenceSql(contract) {
   const union = contract.relations.map(relationSql).join('\nunion all\n')
+  const relationSet = contract.relations.map((spec) => spec.relation).join('\n')
   return `\\set ON_ERROR_STOP on
 select jsonb_build_object(
-  'schemaVersion', 2,
-  'databaseFingerprint', private.activation_database_fingerprint(),
+  'schemaVersion', 4,
+  'contractKind', '${contract.contractKind}',
+  'databaseFingerprint', (
+    select encode(extensions.digest(convert_to(
+      database.oid::text || ':' || database.datname || ':'
+        || current_setting('server_version_num') || ':' || control.system_identifier::text,
+      'UTF8'), 'sha256'), 'hex')
+    from pg_catalog.pg_control_system() as control
+    cross join pg_catalog.pg_database as database
+    where database.datname = current_database()
+  ),
   'serverVersion', current_setting('server_version_num'),
   'appliedMigrations', coalesce((
     select jsonb_agg(jsonb_build_object('version', version, 'name', name) order by version)
     from supabase_migrations.schema_migrations
   ), '[]'::jsonb),
+  'relationSetSha256', encode(extensions.digest(convert_to(
+    '${relationSet}', 'UTF8'), 'sha256'), 'hex'),
+  'schemaFingerprintSha256', (${schemaFingerprintSql()}),
+  'catalogRelations', (
+    select coalesce(jsonb_agg(
+      namespace.nspname || '.' || relation.relname
+      order by namespace.nspname, relation.relname
+    ), '[]'::jsonb)
+    from pg_catalog.pg_class as relation
+    join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname in ('public','private')
+      and relation.relkind in ('r','p')
+  ),
   'relations', (select jsonb_object_agg(relation_name, evidence order by relation_name)
     from (${union}) as relation_evidence)
 ) as evidence;
 `
+}
+
+export function assertContractKeys(contract, evidence) {
+  const expectedRelations = contract.relations.map((spec) => spec.relation)
+  if (
+    canonicalJson(evidence?.catalogRelations) !==
+    canonicalJson(expectedRelations)
+  ) {
+    throw new Error('Database base-relation set differs from backup contract')
+  }
+  for (const spec of contract.relations) {
+    if (
+      canonicalJson(evidence?.relations?.[spec.relation]?.primaryKey) !==
+      canonicalJson(spec.primaryKey)
+    ) {
+      throw new Error('Database primary key differs from backup contract')
+    }
+  }
 }
 
 export function assertBackupManifest(manifest, expected) {
@@ -286,15 +448,21 @@ export function assertBackupManifest(manifest, expected) {
     return (
       /^\d+$/.test(evidence?.rowCount) &&
       /^\d+$/.test(evidence?.columnCount) &&
+      Array.isArray(evidence?.primaryKey) &&
+      evidence.primaryKey.length > 0 &&
+      evidence.primaryKey.every((key) => IDENTIFIER.test(key)) &&
       SHA256.test(evidence?.contentSha256) &&
       SHA256.test(evidence?.columnSignatureSha256)
     )
   })
-  const artifactsValid = BACKUP_ARTIFACT_KEYS.every(
-    (key) =>
-      /^[a-zA-Z0-9._-]+\.sql$/.test(manifest.artifacts?.[key]?.file ?? '') &&
-      SHA256.test(manifest.artifacts?.[key]?.sha256 ?? ''),
-  )
+  const artifactsValid =
+    BACKUP_ARTIFACT_KEYS.every(
+      (key) =>
+        /^[a-zA-Z0-9._-]+\.sql$/.test(manifest.artifacts?.[key]?.file ?? '') &&
+        SHA256.test(manifest.artifacts?.[key]?.sha256 ?? ''),
+    ) &&
+    new Set(BACKUP_ARTIFACT_KEYS.map((key) => manifest.artifacts?.[key]?.file))
+      .size === BACKUP_ARTIFACT_KEYS.length
   const appliedMigrationsValid =
     Array.isArray(manifest.source?.appliedMigrations) &&
     manifest.source.appliedMigrations.length === expected.migrations.length &&
@@ -321,14 +489,23 @@ export function assertBackupManifest(manifest, expected) {
     relation_contract:
       SHA256.test(manifest.relationContractSha256 ?? '') &&
       manifest.relationContractSha256 === expected.relationContractSha256,
+    relation_set_hash:
+      SHA256.test(manifest.relationSetSha256 ?? '') &&
+      manifest.relationSetSha256 === expected.relationSetSha256,
     relation_set:
       canonicalJson(relationNames) === canonicalJson(expected.relationNames),
     restore_prelude:
       SHA256.test(manifest.restorePreludeSha256 ?? '') &&
       manifest.restorePreludeSha256 === expected.restorePreludeSha256,
     schema_contract:
-      manifest.schemaVersion === 3 &&
-      manifest.schemaContractVersion === 'capital-lab-activation-backup-v3',
+      manifest.schemaVersion === 4 &&
+      manifest.contractKind === expected.contractKind &&
+      manifest.schemaContractVersion ===
+        `capital-lab-${expected.contractKind}-backup-v4`,
+    schema_fingerprint:
+      SHA256.test(manifest.schemaFingerprintSha256 ?? '') &&
+      manifest.schemaFingerprintSha256 ===
+        manifest.source?.schemaFingerprintSha256,
     source_fingerprint: SHA256.test(manifest.source?.databaseFingerprint ?? ''),
     source_role_policy: SHA256.test(
       manifest.source?.rolePolicyFingerprint ?? '',
@@ -337,6 +514,9 @@ export function assertBackupManifest(manifest, expected) {
       manifest.source?.serverFingerprint ?? '',
     ),
     source_server_version: /^\d+$/.test(manifest.source?.serverVersion ?? ''),
+    source_schema_fingerprint: SHA256.test(
+      manifest.source?.schemaFingerprintSha256 ?? '',
+    ),
     supabase_cli: manifest.toolVersions?.supabase === '2.113.0',
     psql_version: /^psql \(PostgreSQL\) \d+(?:\.\d+)*(?: [ -~]{1,120})?$/.test(
       manifest.toolVersions?.psql ?? '',
@@ -352,10 +532,16 @@ export function assertBackupManifest(manifest, expected) {
 
 export function assertRestoredEvidence(manifest, actualEvidence) {
   if (
+    canonicalJson(actualEvidence.catalogRelations) !==
+      canonicalJson(Object.keys(manifest.relations).sort()) ||
     canonicalJson(actualEvidence.relations) !==
       canonicalJson(manifest.relations) ||
     canonicalJson(actualEvidence.appliedMigrations) !==
-      canonicalJson(manifest.source.appliedMigrations)
+      canonicalJson(manifest.source.appliedMigrations) ||
+    actualEvidence.schemaFingerprintSha256 !==
+      manifest.schemaFingerprintSha256 ||
+    actualEvidence.relationSetSha256 !== manifest.relationSetSha256 ||
+    actualEvidence.contractKind !== manifest.contractKind
   ) {
     throw new Error(
       'Restored full-row, column, migration, or relation evidence differs',

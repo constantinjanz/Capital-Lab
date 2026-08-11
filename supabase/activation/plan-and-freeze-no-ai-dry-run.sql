@@ -7,7 +7,7 @@ select private.freeze_activation_baseline(
   :'expected_database_fingerprint', :'correlation_id'::uuid
 );
 
-select jsonb_build_object('schema_version', 2, 'phase', 'baseline-freeze',
+select jsonb_build_object('schema_version', 3, 'phase', 'baseline-freeze',
   'persisted_state', state, 'decision_at', decision_at,
   'expected_slots', expected_slot_count, 'expected_events', expected_event_count,
   'planned_start_at', planned_start_at, 'planned_end_at', planned_end_at,

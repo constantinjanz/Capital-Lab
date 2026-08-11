@@ -1,13 +1,10 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
-  mkdir,
   mkdtemp,
   readFile,
   realpath,
-  rename,
   rm,
-  rmdir,
   stat,
   writeFile,
 } from 'node:fs/promises'
@@ -19,6 +16,11 @@ import {
   redactedPostgresError,
 } from './critical-backup-contract.mjs'
 import { extractRollbackMigrationBody } from './migration-rehearsal-contract.mjs'
+import {
+  resolvedArguments,
+  resolveNativeExecutable,
+} from './lib/safe-process.mjs'
+import { withHeldFiles } from './lib/held-files.mjs'
 
 const PROCESS_TIMEOUT_MS = 600_000
 const MIGRATIONS = Object.freeze([
@@ -32,12 +34,17 @@ function fail(message) {
 }
 
 function git(args, cwd) {
-  const result = spawnSync('git', args, {
-    cwd,
-    encoding: 'utf8',
-    shell: false,
-    windowsHide: true,
-  })
+  const executable = resolveNativeExecutable('git')
+  const result = spawnSync(
+    executable.command,
+    resolvedArguments(executable, args),
+    {
+      cwd,
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: true,
+    },
+  )
   if (result.status !== 0) fail('Git evidence could not be derived')
   return result.stdout.trim()
 }
@@ -56,24 +63,33 @@ async function exists(filename) {
   }
 }
 
-async function run(command, args, phase, env = process.env) {
+async function run(executableName, args, phase, env = process.env) {
   return new Promise((resolve, reject) => {
     let settled = false
+    let timedOut = false
     let stdout = ''
     let stderr = ''
-    const child = spawn(command, args, {
-      env,
-      shell: false,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
+    const executable = resolveNativeExecutable(executableName)
+    const child = spawn(
+      executable.command,
+      resolvedArguments(executable, args),
+      {
+        env,
+        shell: false,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    )
     child.stdout.on('data', (chunk) => {
       stdout += chunk.toString()
     })
     child.stderr.on('data', (chunk) => {
       stderr += chunk.toString()
     })
-    const timer = setTimeout(() => child.kill('SIGTERM'), PROCESS_TIMEOUT_MS)
+    const timer = setTimeout(() => {
+      timedOut = true
+      child.kill('SIGTERM')
+    }, PROCESS_TIMEOUT_MS)
     child.once('error', (error) => {
       if (settled) return
       settled = true
@@ -84,7 +100,7 @@ async function run(command, args, phase, env = process.env) {
       if (settled) return
       settled = true
       clearTimeout(timer)
-      if (code !== 0 || signal) {
+      if (code !== 0 || signal || timedOut) {
         reject(
           new Error(
             `Local rollback rehearsal failed: ${phase}; redacted database error: ${redactedPostgresError(stderr)}`,
@@ -135,22 +151,16 @@ async function main() {
     }),
   )
 
-  const moved = []
-  await mkdir(holdDirectory)
-  try {
-    for (const migration of migrations) {
-      const held = path.join(holdDirectory, migration.name)
-      await rename(migration.filename, held)
-      moved.push({ ...migration, held })
-    }
-    const supabase = process.platform === 'win32' ? 'supabase.exe' : 'supabase'
-    await run(supabase, ['db', 'reset', '--no-seed'], 'baseline_reset')
-  } finally {
-    for (const migration of moved.reverse()) {
-      await rename(migration.held, migration.filename)
-    }
-    await rmdir(holdDirectory)
-  }
+  await withHeldFiles(
+    migrations.map((migration) => ({
+      name: migration.name,
+      source: migration.filename,
+    })),
+    holdDirectory,
+    async () => {
+      await run('supabase', ['db', 'reset', '--no-seed'], 'baseline_reset')
+    },
+  )
 
   for (const migration of migrations) {
     const restored = await readFile(migration.filename)
@@ -188,7 +198,6 @@ select case
 end;
 `
   await writeFile(rehearsalFile, rehearsalSql, { mode: 0o600 })
-  const psql = process.platform === 'win32' ? 'psql.exe' : 'psql'
   const psqlEnv = {
     ...process.env,
     ...connection.libpqEnv,
@@ -197,7 +206,7 @@ end;
   }
   try {
     const output = await run(
-      psql,
+      'psql',
       [
         '-X',
         '--no-psqlrc',

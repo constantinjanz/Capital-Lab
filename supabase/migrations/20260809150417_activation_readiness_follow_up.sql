@@ -38,7 +38,7 @@ create table private.no_ai_shadow_dry_runs (
       and second_session_date > first_session_date
       and planned_end_at > planned_start_at)
   ),
-  check (archived_at is null or state in ('passed', 'failed', 'aborted'))
+  check (archived_at is null or state in ('passed', 'failed', 'inconclusive', 'aborted'))
 );
 
 create trigger no_ai_shadow_dry_runs_set_updated_at
@@ -1152,7 +1152,9 @@ alter table private.no_ai_shadow_dry_runs
   drop constraint no_ai_shadow_dry_runs_state_check,
   add constraint no_ai_shadow_dry_runs_state_check check (state in (
     'prepared', 'infra_installed', 'vault_verified',
-    'jobs_installed_disabled', 'auth_noop_claimed', 'auth_noop_verified',
+    'jobs_installed_disabled', 'auth_endpoint_verified',
+    'auth_failure_probes_claimed', 'auth_failures_verified',
+    'auth_noop_claimed', 'auth_noop_verified', 'runtime_deployment_verified',
     'baseline_frozen', 'armed', 'running', 'auto_stopped', 'reconciled',
     'passed', 'failed', 'inconclusive', 'aborted'
   )),
@@ -1277,6 +1279,9 @@ create table private.activation_auth_noop_requests (
   correlation_id uuid not null unique,
   nonce uuid not null unique,
   expected_deployment_id text not null,
+  expected_project_id text not null default 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR',
+  expected_deployment_role text not null default 'auth_disabled'
+    check (expected_deployment_role = 'auth_disabled'),
   expected_commit_sha text not null check (expected_commit_sha ~ '^[0-9a-f]{40}$'),
   pg_net_request_id bigint unique,
   status text not null check (status in (
@@ -1310,6 +1315,8 @@ create table private.activation_http_responses (
   response_cycle_id uuid,
   response_environment text,
   response_deployment_id text,
+  response_project_id text,
+  response_deployment_role text,
   response_commit_sha text,
   response_status text,
   response_terminal_reason text,
@@ -1333,6 +1340,10 @@ create table private.activation_auth_failure_requests (
   owner_id uuid not null,
   probe_kind text not null check (probe_kind in ('missing', 'invalid')),
   correlation_id uuid not null unique,
+  expected_deployment_id text not null default 'dpl_pending_auth_binding',
+  expected_project_id text not null default 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR',
+  expected_commit_sha text not null default repeat('0', 40)
+    check (expected_commit_sha ~ '^[0-9a-f]{40}$'),
   pg_net_request_id bigint unique,
   status text not null check (status in (
     'prepared', 'submitted', 'verified', 'invalid', 'transport_missing', 'unknown'
@@ -1346,10 +1357,48 @@ create table private.activation_auth_failure_requests (
     references private.no_ai_shadow_dry_runs(id, owner_id) on delete restrict
 );
 
+create table private.activation_deployment_bindings (
+  campaign_id uuid not null,
+  owner_id uuid not null,
+  deployment_role text not null check (deployment_role in (
+    'auth_disabled', 'no_ai_runtime_enabled', 'shutdown_disabled'
+  )),
+  deployment_id text not null check (deployment_id ~ '^dpl_[A-Za-z0-9]{20,64}$'),
+  vercel_team_id text not null check (vercel_team_id ~ '^team_[A-Za-z0-9]{20,64}$'),
+  vercel_project_id text not null check (vercel_project_id ~ '^prj_[A-Za-z0-9]{20,64}$'),
+  supabase_project_ref text not null check (supabase_project_ref = 'qrnuyibntcxwffrxmrvn'),
+  commit_sha text not null check (commit_sha ~ '^[0-9a-f]{40}$'),
+  environment text not null check (environment = 'production'),
+  target text not null check (target = 'production'),
+  ready_state text not null check (ready_state = 'READY'),
+  production_origin text not null,
+  production_host text not null,
+  scheduler_path text not null check (scheduler_path = '/api/internal/scheduler'),
+  scheduler_url text not null,
+  scheduler_enabled boolean not null,
+  evidence_hash text not null check (evidence_hash ~ '^[0-9a-f]{64}$'),
+  proof_sha256 text not null check (proof_sha256 ~ '^[0-9a-f]{64}$'),
+  proof jsonb not null check (jsonb_typeof(proof) = 'object'),
+  operation_id uuid not null,
+  correlation_id uuid not null,
+  verified_at timestamptz not null,
+  recorded_at timestamptz not null default statement_timestamp(),
+  primary key (campaign_id, deployment_role),
+  unique (campaign_id, deployment_id),
+  unique (campaign_id, operation_id),
+  foreign key (campaign_id, owner_id)
+    references private.no_ai_shadow_dry_runs(id, owner_id) on delete restrict,
+  check (scheduler_url = production_origin || scheduler_path),
+  check (
+    (deployment_role = 'no_ai_runtime_enabled' and scheduler_enabled)
+    or (deployment_role in ('auth_disabled', 'shutdown_disabled') and not scheduler_enabled)
+  )
+);
+
 create table private.activation_forbidden_relation_specs (
-  contract_version text not null check (contract_version = 'activation-side-effects-v2'),
+  contract_version text not null check (contract_version = 'activation-side-effects-v3'),
   relation_name text primary key,
-  owner_column text not null check (owner_column = 'owner_id'),
+  owner_column text check (owner_column is null or owner_column = 'owner_id'),
   immutable_id_column text,
   time_watermark_column text,
   evidence_rule text not null check (evidence_rule in ('full_row_state', 'full_row_state_and_totals'))
@@ -1359,28 +1408,28 @@ insert into private.activation_forbidden_relation_specs (
   contract_version, relation_name, owner_column,
   immutable_id_column, time_watermark_column, evidence_rule
 ) values
-  ('activation-side-effects-v2', 'public.orders', 'owner_id', 'id', 'updated_at', 'full_row_state_and_totals'),
-  ('activation-side-effects-v2', 'public.order_status_events', 'owner_id', 'id', 'created_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'public.fills', 'owner_id', 'id', 'created_at', 'full_row_state_and_totals'),
-  ('activation-side-effects-v2', 'public.fill_market_data_refs', 'owner_id', 'id', 'created_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'public.positions', 'owner_id', 'id', 'updated_at', 'full_row_state_and_totals'),
-  ('activation-side-effects-v2', 'public.position_lots', 'owner_id', 'id', 'created_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'private.cash_ledger_entries', 'owner_id', 'id', 'created_at', 'full_row_state_and_totals'),
-  ('activation-side-effects-v2', 'public.agent_runs', 'owner_id', 'id', 'created_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'public.agent_decisions', 'owner_id', 'id', 'created_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'public.model_routing_events', 'owner_id', 'id', 'created_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'public.agent_tool_calls', 'owner_id', 'id', 'created_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'public.ai_budget_policies', 'owner_id', 'id', 'created_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'private.ai_budget_periods', 'owner_id', 'id', 'updated_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'private.ai_budget_reservations', 'owner_id', 'id', 'updated_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'private.ai_usage_events', 'owner_id', 'id', 'created_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'public.budget_alerts', 'owner_id', 'id', 'created_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'public.budget_threshold_alerts', 'owner_id', 'id', 'emitted_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'public.model_comparisons', 'owner_id', 'id', 'created_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'private.paid_canary_runs', 'owner_id', 'id', 'created_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'private.raw_source_events', 'owner_id', 'id', 'ingested_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'private.ingestion_runs', 'owner_id', 'id', 'created_at', 'full_row_state'),
-  ('activation-side-effects-v2', 'public.news_events', 'owner_id', 'id', 'created_at', 'full_row_state');
+  ('activation-side-effects-v3', 'public.orders', 'owner_id', 'id', 'updated_at', 'full_row_state_and_totals'),
+  ('activation-side-effects-v3', 'public.order_status_events', 'owner_id', 'id', 'created_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'public.fills', 'owner_id', 'id', 'created_at', 'full_row_state_and_totals'),
+  ('activation-side-effects-v3', 'public.fill_market_data_refs', 'owner_id', 'id', 'created_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'public.positions', 'owner_id', 'id', 'updated_at', 'full_row_state_and_totals'),
+  ('activation-side-effects-v3', 'public.position_lots', 'owner_id', 'id', 'created_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'private.cash_ledger_entries', 'owner_id', 'id', 'created_at', 'full_row_state_and_totals'),
+  ('activation-side-effects-v3', 'public.agent_runs', 'owner_id', 'id', 'created_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'public.agent_decisions', 'owner_id', 'id', 'created_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'public.model_routing_events', 'owner_id', 'id', 'created_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'public.agent_tool_calls', 'owner_id', 'id', 'created_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'public.ai_budget_policies', 'owner_id', 'id', 'created_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'private.ai_budget_periods', 'owner_id', 'id', 'updated_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'private.ai_budget_reservations', 'owner_id', 'id', 'updated_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'private.ai_usage_events', 'owner_id', 'id', 'created_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'public.budget_alerts', 'owner_id', 'id', 'created_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'public.budget_threshold_alerts', 'owner_id', 'id', 'emitted_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'public.model_comparisons', 'owner_id', 'id', 'created_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'private.paid_canary_runs', 'owner_id', 'id', 'created_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'private.raw_source_events', 'owner_id', 'id', 'ingested_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'private.ingestion_runs', 'owner_id', 'id', 'created_at', 'full_row_state'),
+  ('activation-side-effects-v3', 'public.news_events', 'owner_id', 'id', 'created_at', 'full_row_state');
 
 create table private.activation_relation_snapshots (
   id uuid primary key default gen_random_uuid(),
@@ -1449,6 +1498,34 @@ create table private.activation_terminal_evidence (
   jobs_inactive boolean not null,
   evidence jsonb not null check (jsonb_typeof(evidence) = 'object'),
   finalized_at timestamptz not null default statement_timestamp(),
+  foreign key (campaign_id, owner_id)
+    references private.no_ai_shadow_dry_runs(id, owner_id) on delete restrict
+);
+
+create table private.activation_relation_classifications (
+  contract_version text not null check (contract_version = 'activation-table-classification-v1'),
+  relation_name text primary key,
+  classification text not null check (classification in (
+    'activation_evidence', 'scheduler_envelope', 'forbidden', 'platform_exclusion'
+  )),
+  rationale text not null check (length(rationale) between 8 and 240),
+  recorded_at timestamptz not null default statement_timestamp()
+);
+
+create table private.activation_terminal_operations (
+  campaign_id uuid not null,
+  owner_id uuid not null,
+  operation_kind text not null check (operation_kind in (
+    'manual_finalize', 'terminal_unschedule', 'emergency_phase_two'
+  )),
+  operation_id uuid not null,
+  correlation_id uuid not null,
+  status text not null check (status in ('claimed', 'completed', 'unknown', 'failed')),
+  evidence jsonb not null default '{}'::jsonb check (jsonb_typeof(evidence) = 'object'),
+  claimed_at timestamptz not null default statement_timestamp(),
+  completed_at timestamptz,
+  primary key (campaign_id, operation_kind),
+  unique (campaign_id, operation_id),
   foreign key (campaign_id, owner_id)
     references private.no_ai_shadow_dry_runs(id, owner_id) on delete restrict
 );
@@ -1543,9 +1620,11 @@ begin
   foreach relation_name in array array[
     'activation_job_spec_versions', 'activation_auth_noop_requests',
     'activation_auth_failure_requests',
-    'activation_http_responses', 'activation_forbidden_relation_specs',
+    'activation_http_responses', 'activation_deployment_bindings',
+    'activation_forbidden_relation_specs', 'activation_relation_classifications',
     'activation_relation_snapshots', 'activation_control_snapshots',
-    'activation_mutation_evidence', 'activation_terminal_evidence'
+    'activation_mutation_evidence', 'activation_terminal_evidence',
+    'activation_terminal_operations'
   ] loop
     execute format('alter table private.%I enable row level security', relation_name);
     execute format('alter table private.%I force row level security', relation_name);
@@ -1556,7 +1635,8 @@ begin
   end loop;
   foreach relation_name in array array[
     'activation_job_spec_versions', 'activation_http_responses',
-    'activation_forbidden_relation_specs', 'activation_relation_snapshots',
+    'activation_deployment_bindings', 'activation_relation_classifications',
+    'activation_relation_snapshots',
     'activation_control_snapshots', 'activation_mutation_evidence',
     'activation_terminal_evidence', 'no_ai_shadow_dry_run_transitions',
     'no_ai_shadow_dry_run_alarms'
@@ -1693,6 +1773,7 @@ as $$
 declare
   target_owner uuid;
   existing private.no_ai_shadow_dry_runs%rowtype;
+  existing_transition private.no_ai_shadow_dry_run_transitions%rowtype;
   database_fingerprint text := private.activation_database_fingerprint();
 begin
   if p_campaign_id is null or p_operation_id is null or p_correlation_id is null
@@ -1710,6 +1791,11 @@ begin
     or p_manifest ->> 'phase_contract_sha256' <> p_phase_contract_sha256
     or p_manifest ->> 'relation_contract_sha256' <> p_relation_contract_sha256
     or p_relation_contract_sha256 <> private.activation_relation_contract_hash()
+    or p_manifest ->> 'project_identity_contract_sha256'
+      <> 'd6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634'
+    or p_manifest ->> 'vercel_team_id' <> 'team_yqndKHk6nfWGlte1UVLTJOHG'
+    or p_manifest ->> 'vercel_project_id' <> 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR'
+    or p_manifest ->> 'supabase_project_ref' <> 'qrnuyibntcxwffrxmrvn'
     or p_manifest #>> '{database_target,database_fingerprint}' <> database_fingerprint
     or p_manifest ->> 'scheduler_path' <> '/api/internal/scheduler'
     or p_manifest ->> 'scheduler_url'
@@ -1717,6 +1803,8 @@ begin
     or p_manifest ->> 'production_origin'
       <> 'https://' || (p_manifest ->> 'production_host')
     or p_manifest ->> 'production_host' !~ '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$'
+    or p_manifest ->> 'production_host'
+      <> 'capital-lab-constantinjanz-7876s-projects.vercel.app'
     or p_manifest ->> 'production_deployment_id' !~ '^dpl_[A-Za-z0-9]{20,64}$'
     or p_manifest #>> '{providers,market_data}' <> 'mock'
     or p_manifest #>> '{providers,news}' <> 'mock'
@@ -1780,6 +1868,17 @@ begin
       'database_fingerprint', database_fingerprint
     )
   ) on conflict (dry_run_id, to_state) do nothing;
+
+  select * into strict existing_transition
+  from private.no_ai_shadow_dry_run_transitions
+  where dry_run_id = existing.id and to_state = 'prepared';
+  if existing_transition.correlation_id <> p_correlation_id
+    or existing_transition.evidence ->> 'operation_id' <> p_operation_id::text
+    or existing_transition.evidence ->> 'manifest_sha256' <> p_manifest_sha256
+    or existing_transition.evidence ->> 'database_fingerprint' <> database_fingerprint
+  then
+    raise exception using errcode = '55000', message = 'prepare retry operation identity drifted';
+  end if;
 
   return jsonb_build_object(
     'campaign_id', existing.id,
@@ -2513,7 +2612,11 @@ declare
 begin
   select * into campaign
   from private.no_ai_shadow_dry_runs
-  where state in ('auth_noop_claimed', 'auth_noop_verified', 'baseline_frozen', 'armed', 'running')
+  where state in (
+    'auth_endpoint_verified', 'auth_failure_probes_claimed',
+    'auth_failures_verified', 'auth_noop_claimed', 'auth_noop_verified',
+    'runtime_deployment_verified', 'baseline_frozen', 'armed', 'running'
+  )
   order by prepared_at desc limit 1 for update;
   if campaign.id is not null then
     insert into private.activation_mutation_evidence (
@@ -2711,8 +2814,11 @@ declare
 begin
   select * into strict campaign from private.no_ai_shadow_dry_runs
   where id = p_campaign_id for update;
-  if campaign.state <> 'jobs_installed_disabled' then
-    raise exception using errcode = '55000', message = 'auth failure probes require disabled installed jobs';
+  if campaign.state <> 'auth_failure_probes_claimed'
+    or (select count(*) from private.activation_auth_failure_requests
+      where campaign_id = campaign.id) <> 2
+  then
+    raise exception using errcode = '55000', message = 'auth failure probes require the durable reviewed claim';
   end if;
   perform private.assert_activation_controls(campaign.id, false);
   perform private.assert_activation_job_specs(campaign.id, false);
@@ -2727,15 +2833,6 @@ begin
   end if;
   foreach requested_probe_kind in array array['missing', 'invalid']
   loop
-    insert into private.activation_auth_failure_requests (
-      request_id, campaign_id, owner_id, probe_kind, correlation_id,
-      status, operation_id
-    ) values (
-      private.activation_deterministic_uuid(campaign.id, 'auth-failure-request:' || requested_probe_kind),
-      campaign.id, campaign.owner_id, requested_probe_kind,
-      private.activation_deterministic_uuid(campaign.id, 'auth-failure-correlation:' || requested_probe_kind),
-      'prepared', p_operation_id
-    ) on conflict (campaign_id, probe_kind) do nothing;
     select request.* into strict probe from private.activation_auth_failure_requests as request
     where request.campaign_id = campaign.id
       and request.probe_kind = requested_probe_kind for update;
@@ -2784,6 +2881,15 @@ declare
 begin
   select * into strict campaign from private.no_ai_shadow_dry_runs
   where id = p_campaign_id for update;
+  if campaign.state = 'auth_failures_verified' then
+    return;
+  end if;
+  if campaign.state <> 'auth_failure_probes_claimed'
+    or (select count(*) from private.activation_auth_failure_requests
+      where campaign_id = campaign.id) <> 2
+  then
+    raise exception using errcode = '55000', message = 'auth failure verification requires exactly two claimed probes';
+  end if;
   for probe in select * from private.activation_auth_failure_requests
     where campaign_id = campaign.id order by probe_kind
   loop
@@ -2808,19 +2914,37 @@ begin
       parsed := null;
     end;
     valid := transport.status_code = 401 and not coalesce(transport.timed_out, true)
-      and transport.error_msg is null and parsed = '{"error":"unauthorized"}'::jsonb;
+      and transport.error_msg is null
+      and jsonb_typeof(parsed) = 'object'
+      and (select array_agg(key order by key) from jsonb_object_keys(parsed) as key) = array[
+        'agent_disabled', 'classification', 'counters', 'error', 'mode',
+        'scheduler_disabled', 'schema_version'
+      ]::text[]
+      and parsed -> 'schema_version' = '3'::jsonb
+      and parsed ->> 'mode' = 'auth_failure'
+      and parsed ->> 'error' = 'unauthorized'
+      and parsed ->> 'classification' = 'bearer_missing_or_invalid'
+      and parsed -> 'scheduler_disabled' = 'true'::jsonb
+      and parsed -> 'agent_disabled' = 'true'::jsonb
+      and private.activation_zero_counters_valid(parsed -> 'counters');
     insert into private.activation_http_responses (
       request_id, campaign_id, owner_id, mode, pg_net_request_id,
       http_status, timed_out, error_class, schema_valid, correlation_id,
       response_campaign_id, response_request_id, response_environment,
-      response_status
+      response_status, scheduler_disabled, agent_disabled, counters
     ) values (
       probe.request_id, campaign.id, campaign.owner_id, 'auth_failure',
       probe.pg_net_request_id, transport.status_code,
       coalesce(transport.timed_out, true),
       case when transport.error_msg is null then null else 'transport_error' end,
-      valid, null, null, null,
-      null, 'unauthorized'
+      valid, probe.correlation_id, null, null,
+      null, 'unauthorized',
+      case when jsonb_typeof(parsed -> 'scheduler_disabled') = 'boolean'
+        then (parsed ->> 'scheduler_disabled')::boolean else null end,
+      case when jsonb_typeof(parsed -> 'agent_disabled') = 'boolean'
+        then (parsed ->> 'agent_disabled')::boolean else null end,
+      case when jsonb_typeof(parsed -> 'counters') = 'object'
+        then parsed -> 'counters' else null end
     );
     update private.activation_auth_failure_requests
     set status = case when valid then 'verified' else 'invalid' end,
@@ -2840,6 +2964,15 @@ begin
   ) then
     raise exception using errcode = '55000', message = 'auth failure probes caused a forbidden side effect';
   end if;
+  perform private.assert_activation_controls(campaign.id, false);
+  perform private.assert_activation_job_specs(campaign.id, false);
+  perform private.transition_no_ai_shadow_dry_run(
+    campaign.id, 'auth_failure_probes_claimed', 'auth_failures_verified', 'system',
+    campaign.prepared_commit_sha, campaign.config_version,
+    private.activation_deterministic_uuid(campaign.id, 'auth-failures-verified'),
+    jsonb_build_object('verified_probe_count', 2, 'exact_http_status', 401,
+      'forbidden_effect_count', 0)
+  );
 end;
 $$;
 
@@ -2854,6 +2987,7 @@ as $$
 declare
   campaign private.no_ai_shadow_dry_runs%rowtype;
   request_row private.activation_auth_noop_requests%rowtype;
+  binding private.activation_deployment_bindings%rowtype;
   configured_url text;
   shared_secret text;
   transport_id bigint;
@@ -2862,6 +2996,8 @@ begin
   where id = p_campaign_id for update;
   select * into strict request_row from private.activation_auth_noop_requests
   where campaign_id = campaign.id for update;
+  select * into strict binding from private.activation_deployment_bindings
+  where campaign_id = campaign.id and deployment_role = 'auth_disabled';
   if request_row.pg_net_request_id is not null then
     return request_row.pg_net_request_id;
   end if;
@@ -2888,13 +3024,15 @@ begin
       timeout_milliseconds := $4
     )
   $query$ into transport_id using configured_url, shared_secret, jsonb_build_object(
-    'schema_version', 2,
+    'schema_version', 3,
     'mode', 'auth_noop',
+    'deployment_role', binding.deployment_role,
     'campaign_id', campaign.id,
     'correlation_id', request_row.correlation_id,
     'request_id', request_row.request_id,
     'nonce', request_row.nonce,
-    'expected_deployment_id', campaign.production_deployment_id,
+    'expected_deployment_id', binding.deployment_id,
+    'expected_project_id', binding.vercel_project_id,
     'expected_commit_sha', campaign.prepared_commit_sha
   ), campaign.max_request_seconds * 1000;
   update private.activation_auth_noop_requests
@@ -3151,6 +3289,19 @@ begin
   perform private.capture_activation_http_responses();
   select * into strict request_row from private.activation_auth_noop_requests
   where campaign_id = campaign.id for update;
+  if campaign.state = 'auth_noop_verified' and request_row.status = 'verified'
+    and exists (
+      select 1 from private.activation_http_responses
+      where request_id = request_row.request_id and mode = 'auth_noop'
+        and schema_valid and http_status = 200 and not timed_out
+        and error_class is null
+    )
+  then
+    return;
+  end if;
+  if campaign.state <> 'auth_noop_claimed' then
+    raise exception using errcode = '55000', message = 'auth no-op verification is unavailable from the persisted state';
+  end if;
   if request_row.status <> 'transport_terminal'
     or not exists (
       select 1 from private.activation_http_responses
@@ -3206,7 +3357,20 @@ begin
     p_campaign_id, p_commit_sha, p_config_version, p_manifest_sha256,
     p_phase_contract_sha256, p_database_fingerprint
   );
-  if campaign.state not in ('auth_noop_verified', 'baseline_frozen') then
+  if campaign.state not in ('runtime_deployment_verified', 'baseline_frozen')
+    or not exists (
+      select 1 from private.activation_deployment_bindings as auth_binding
+      join private.activation_deployment_bindings as runtime_binding
+        on runtime_binding.campaign_id = auth_binding.campaign_id
+        and runtime_binding.deployment_role = 'no_ai_runtime_enabled'
+      where auth_binding.campaign_id = campaign.id
+        and auth_binding.deployment_role = 'auth_disabled'
+        and auth_binding.deployment_id <> runtime_binding.deployment_id
+        and auth_binding.commit_sha = runtime_binding.commit_sha
+        and auth_binding.vercel_project_id = runtime_binding.vercel_project_id
+        and not auth_binding.scheduler_enabled and runtime_binding.scheduler_enabled
+    )
+  then
     raise exception using errcode = '55000', message = 'baseline freeze is unavailable from the persisted state';
   end if;
   perform private.assert_activation_controls(campaign.id, false);
@@ -3217,7 +3381,7 @@ begin
   ) then
     raise exception using errcode = '55000', message = 'an active experiment blocks the no-AI dry run';
   end if;
-  if campaign.state = 'auth_noop_verified' then
+  if campaign.state = 'runtime_deployment_verified' then
     select session.* into strict first_session
     from public.market_sessions as session
     join public.exchanges as exchange on exchange.id = session.exchange_id
@@ -3318,9 +3482,9 @@ begin
     (select count(*) from private.cash_ledger_entries where owner_id = campaign.owner_id),
     campaign.prepared_commit_sha, campaign.config_version
   on conflict (dry_run_id) do nothing;
-  if campaign.state = 'auth_noop_verified' then
+  if campaign.state = 'runtime_deployment_verified' then
     perform private.transition_no_ai_shadow_dry_run(
-      campaign.id, 'auth_noop_verified', 'baseline_frozen', 'owner',
+      campaign.id, 'runtime_deployment_verified', 'baseline_frozen', 'owner',
       campaign.prepared_commit_sha, campaign.config_version, p_correlation_id,
       jsonb_build_object('expected_slots', 52, 'expected_events', 104,
         'decision_time_source', 'database_server', 'forbidden_relation_count',
@@ -3354,9 +3518,35 @@ begin
     p_campaign_id, p_commit_sha, p_config_version, p_manifest_sha256,
     p_phase_contract_sha256, p_database_fingerprint
   );
+  if campaign.state = 'armed' then
+    if not exists (
+      select 1 from private.no_ai_shadow_dry_run_transitions as transition
+      where transition.dry_run_id = campaign.id and transition.to_state = 'armed'
+        and transition.correlation_id = p_correlation_id
+        and transition.evidence ->> 'operation_id' = p_operation_id::text
+    ) then
+      raise exception using errcode = '55000', message = 'arm retry operation identity drifted';
+    end if;
+    perform private.assert_activation_controls(campaign.id, true);
+    perform private.assert_activation_job_specs(campaign.id, true);
+    return;
+  end if;
   if campaign.state <> 'baseline_frozen'
     or campaign.planned_start_at < statement_timestamp() + interval '900 seconds'
     or campaign.expected_slot_count <> 52 or campaign.expected_event_count <> 104
+    or not exists (
+      select 1 from private.activation_deployment_bindings as runtime_binding
+      where runtime_binding.campaign_id = campaign.id
+        and runtime_binding.deployment_role = 'no_ai_runtime_enabled'
+        and runtime_binding.deployment_id <> campaign.production_deployment_id
+        and runtime_binding.commit_sha = campaign.prepared_commit_sha
+        and runtime_binding.vercel_project_id = 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR'
+        and runtime_binding.vercel_team_id = 'team_yqndKHk6nfWGlte1UVLTJOHG'
+        and runtime_binding.environment = 'production'
+        and runtime_binding.target = 'production'
+        and runtime_binding.ready_state = 'READY'
+        and runtime_binding.scheduler_enabled
+    )
   then
     raise exception using errcode = '55000', message = 'activation lead time, state, or frozen counts are invalid';
   end if;
@@ -3413,6 +3603,7 @@ as $$
 declare
   campaign private.no_ai_shadow_dry_runs%rowtype;
   event_row private.no_ai_shadow_dry_run_events%rowtype;
+  runtime_binding private.activation_deployment_bindings%rowtype;
   server_now timestamptz := statement_timestamp();
   slot_identifier text;
   inserted_count integer := 0;
@@ -3597,11 +3788,42 @@ declare
   forbidden_effects integer;
   terminal_status text;
   controls_disabled boolean;
+  terminal_operation private.activation_terminal_operations%rowtype;
 begin
   campaign := private.assert_activation_context(
     p_campaign_id, p_commit_sha, p_config_version, p_manifest_sha256,
     p_phase_contract_sha256, p_database_fingerprint
   );
+  select * into terminal_operation from private.activation_terminal_operations
+  where campaign_id = campaign.id and operation_kind = 'manual_finalize' for update;
+  if found then
+    if terminal_operation.operation_id <> p_operation_id
+      or terminal_operation.correlation_id <> p_correlation_id
+    then
+      raise exception using errcode = '55000', message = 'manual finalization operation identity drifted';
+    end if;
+    if terminal_operation.status = 'completed' then
+      return (
+        select jsonb_build_object('status', evidence.terminal_status,
+          'expected_slots', evidence.expected_slots, 'actual_slots', evidence.actual_slots,
+          'expected_events', evidence.expected_events, 'actual_events', evidence.actual_events,
+          'complete_responses', evidence.complete_response_count,
+          'missing_responses', evidence.missing_response_count,
+          'invalid_responses', evidence.invalid_response_count,
+          'forbidden_effects', evidence.forbidden_effect_count,
+          'jobs_inactive', evidence.jobs_inactive, 'reused', true)
+        from private.activation_terminal_evidence as evidence
+        where evidence.campaign_id = campaign.id
+      );
+    end if;
+  else
+    insert into private.activation_terminal_operations (
+      campaign_id, owner_id, operation_kind, operation_id, correlation_id, status
+    ) values (
+      campaign.id, campaign.owner_id, 'manual_finalize', p_operation_id,
+      p_correlation_id, 'claimed'
+    ) returning * into terminal_operation;
+  end if;
   if campaign.state <> 'auto_stopped' or campaign.stopped_at is null
     or statement_timestamp() < campaign.stopped_at + interval '300 seconds'
     or statement_timestamp() < campaign.finalize_not_before_at
@@ -3610,6 +3832,27 @@ begin
   end if;
   perform private.capture_activation_http_responses();
   perform private.assert_activation_controls(campaign.id, false);
+  perform set_config('capital_lab.internal_event_write', 'on', true);
+  update private.no_ai_shadow_dry_run_events as event
+  set response_error_class = case
+        when event.pg_net_request_id is null then 'request_not_submitted'
+        else 'transport_evidence_missing'
+      end,
+      response_persisted_at = statement_timestamp(),
+      completed_at = statement_timestamp()
+  where event.dry_run_id = campaign.id
+    and not exists (
+      select 1 from private.activation_http_responses as response
+      where response.request_id = event.request_id
+    );
+  perform set_config('capital_lab.internal_event_write', 'off', true);
+  if exists (
+    select 1 from private.no_ai_shadow_dry_run_events as event
+    where event.dry_run_id = campaign.id
+      and event.completed_at is null
+  ) then
+    raise exception using errcode = '55000', message = 'known request outcomes are not terminally reconciled';
+  end if;
   perform private.set_activation_jobs_active(
     campaign.id, false, p_operation_id, p_correlation_id
   );
@@ -3663,7 +3906,9 @@ begin
     jsonb_build_object('operation_id', p_operation_id,
       'response_source', 'persisted_activation_http_responses',
       'server_time_enforced', true, 'minimum_stopped_seconds', 300,
-      'relation_state_equal', forbidden_effects = 0)
+      'relation_state_equal', forbidden_effects = 0,
+      'all_request_outcomes_terminal', true,
+      'missing_transport_outcomes_classified', missing_responses)
   );
   perform private.transition_no_ai_shadow_dry_run(
     campaign.id, 'auto_stopped', 'reconciled', 'system',
@@ -3681,6 +3926,12 @@ begin
       else 'transport_evidence_missing' end,
       'terminal_evidence_persisted', true)
   );
+  update private.activation_terminal_operations
+  set status = 'completed', completed_at = statement_timestamp(),
+      evidence = jsonb_build_object('terminal_status', terminal_status,
+        'terminal_evidence_persisted', true)
+  where campaign_id = campaign.id and operation_kind = 'manual_finalize'
+    and operation_id = p_operation_id;
   return jsonb_build_object('status', terminal_status, 'expected_slots', 52,
     'actual_slots', actual_slots, 'expected_events', 104,
     'actual_events', actual_events, 'complete_responses', complete_responses,
@@ -3701,6 +3952,7 @@ as $$
 declare
   campaign private.no_ai_shadow_dry_runs%rowtype;
   event_row private.no_ai_shadow_dry_run_events%rowtype;
+  runtime_binding private.activation_deployment_bindings%rowtype;
   sequence_number bigint;
   configured_url text;
   shared_secret text;
@@ -3785,6 +4037,16 @@ begin
   if event_row.id is null then
     return null;
   end if;
+  select * into strict runtime_binding from private.activation_deployment_bindings
+  where campaign_id = campaign.id and deployment_role = 'no_ai_runtime_enabled';
+  if runtime_binding.commit_sha <> campaign.prepared_commit_sha
+    or runtime_binding.production_origin <> campaign.production_origin
+    or runtime_binding.scheduler_url <> campaign.scheduler_url
+    or not runtime_binding.scheduler_enabled
+  then
+    perform private.emergency_kill_activation_controls(campaign.id);
+    return null;
+  end if;
   perform private.verify_activation_vault_scope(campaign.id);
   execute $query$
     select max(case when name = 'capital_lab_scheduler_url' then decrypted_secret end),
@@ -3804,12 +4066,14 @@ begin
       timeout_milliseconds := $4
     )
   $query$ into transport_id using configured_url, shared_secret, jsonb_build_object(
-    'schema_version', 2, 'mode', 'dry_run',
+    'schema_version', 3, 'mode', 'dry_run',
+    'deployment_role', runtime_binding.deployment_role,
     'campaign_id', campaign.id, 'event_id', event_row.id,
     'correlation_id', event_row.correlation_id,
     'request_id', event_row.request_id, 'cycle_id', event_row.cycle_id,
     'job', event_row.event_type, 'slot_number', event_row.slot_number,
-    'expected_deployment_id', campaign.production_deployment_id,
+    'expected_deployment_id', runtime_binding.deployment_id,
+    'expected_project_id', runtime_binding.vercel_project_id,
     'expected_commit_sha', campaign.prepared_commit_sha
   ), campaign.max_request_seconds * 1000;
   perform set_config('capital_lab.internal_event_write', 'on', true);
@@ -3944,6 +4208,1259 @@ begin
 end;
 $$;
 
+-- Activation contract v3: bind two immutable Production deployments, make the
+-- negative-authentication probes mandatory, and classify every application
+-- base relation before any request can be armed.
+delete from private.activation_forbidden_relation_specs;
+
+insert into private.activation_relation_classifications (
+  contract_version, relation_name, classification, rationale
+)
+select
+  'activation-table-classification-v1',
+  namespace.nspname || '.' || relation.relname,
+  case
+    when namespace.nspname = 'private'
+      and relation.relname in ('scheduler_slots', 'scheduler_runs', 'scheduler_reconciliation_events')
+      then 'scheduler_envelope'
+    when (
+      namespace.nspname = 'private'
+      and (
+        relation.relname like 'activation\_%' escape '\'
+        or relation.relname like 'no\_ai\_shadow\_%' escape '\'
+        or relation.relname in ('audit_log', 'application_settings')
+      )
+    ) or (
+      namespace.nspname = 'public'
+      and relation.relname in ('experiment_controls', 'storage_monitor_snapshots')
+    ) then 'activation_evidence'
+    else 'forbidden'
+  end,
+  case
+    when namespace.nspname = 'private'
+      and relation.relname in ('scheduler_slots', 'scheduler_runs', 'scheduler_reconciliation_events')
+      then 'Only the exact scheduler request envelope may mutate during the no-AI run.'
+    when (
+      namespace.nspname = 'private'
+      and (
+        relation.relname like 'activation\_%' escape '\'
+        or relation.relname like 'no\_ai\_shadow\_%' escape '\'
+        or relation.relname in ('audit_log', 'application_settings')
+      )
+    ) or (
+      namespace.nspname = 'public'
+      and relation.relname in ('experiment_controls', 'storage_monitor_snapshots')
+    ) then 'Activation evidence or control state is an expected campaign mutation.'
+    else 'Application state is forbidden from changing during the no-AI campaign.'
+  end
+from pg_catalog.pg_class as relation
+join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+where namespace.nspname in ('public', 'private')
+  and relation.relkind in ('r', 'p')
+order by namespace.nspname, relation.relname;
+
+insert into private.activation_forbidden_relation_specs (
+  contract_version, relation_name, owner_column,
+  immutable_id_column, time_watermark_column, evidence_rule
+)
+select
+  'activation-side-effects-v3', classification.relation_name,
+  case when exists (
+    select 1 from information_schema.columns as column_contract
+    where column_contract.table_schema = split_part(classification.relation_name, '.', 1)
+      and column_contract.table_name = split_part(classification.relation_name, '.', 2)
+      and column_contract.column_name = 'owner_id'
+  ) then 'owner_id' end,
+  case when exists (
+    select 1 from information_schema.columns as column_contract
+    where column_contract.table_schema = split_part(classification.relation_name, '.', 1)
+      and column_contract.table_name = split_part(classification.relation_name, '.', 2)
+      and column_contract.column_name = 'id'
+  ) then 'id' end,
+  (
+    select column_contract.column_name
+    from information_schema.columns as column_contract
+    where column_contract.table_schema = split_part(classification.relation_name, '.', 1)
+      and column_contract.table_name = split_part(classification.relation_name, '.', 2)
+      and column_contract.column_name in (
+        'updated_at', 'created_at', 'observed_at', 'available_at',
+        'recorded_at', 'occurred_at', 'ingested_at', 'emitted_at'
+      )
+    order by array_position(array[
+      'updated_at', 'created_at', 'observed_at', 'available_at',
+      'recorded_at', 'occurred_at', 'ingested_at', 'emitted_at'
+    ]::text[], column_contract.column_name)
+    limit 1
+  ),
+  case when classification.relation_name in (
+    'private.cash_ledger_entries', 'public.orders', 'public.fills', 'public.positions'
+  ) then 'full_row_state_and_totals' else 'full_row_state' end
+from private.activation_relation_classifications as classification
+where classification.classification = 'forbidden'
+order by classification.relation_name;
+
+create function private.assert_activation_relation_classification_complete()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  catalog_count integer;
+  classified_count integer;
+begin
+  select count(*) into catalog_count
+  from pg_catalog.pg_class as relation
+  join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+  where namespace.nspname in ('public', 'private') and relation.relkind in ('r', 'p');
+  select count(*) into classified_count
+  from private.activation_relation_classifications;
+  if catalog_count <> classified_count
+    or exists (
+      select namespace.nspname || '.' || relation.relname
+      from pg_catalog.pg_class as relation
+      join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+      where namespace.nspname in ('public', 'private') and relation.relkind in ('r', 'p')
+      except
+      select relation_name from private.activation_relation_classifications
+    )
+    or exists (
+      select relation_name from private.activation_relation_classifications
+      except
+      select namespace.nspname || '.' || relation.relname
+      from pg_catalog.pg_class as relation
+      join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+      where namespace.nspname in ('public', 'private') and relation.relkind in ('r', 'p')
+    )
+    or exists (
+      select relation_name from private.activation_relation_classifications
+      where classification = 'forbidden'
+      except
+      select relation_name from private.activation_forbidden_relation_specs
+    )
+    or exists (
+      select relation_name from private.activation_forbidden_relation_specs
+      except
+      select relation_name from private.activation_relation_classifications
+      where classification = 'forbidden'
+    )
+  then
+    raise exception using errcode = '55000', message = 'Activation relation classification is incomplete or drifted';
+  end if;
+end;
+$$;
+
+create or replace function private.capture_activation_relation_snapshot(
+  p_campaign_id uuid,
+  p_snapshot_kind text,
+  p_snapshot_sequence bigint
+)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  campaign private.no_ai_shadow_dry_runs%rowtype;
+  spec private.activation_forbidden_relation_specs%rowtype;
+  schema_name text;
+  table_name text;
+  owner_predicate text;
+  row_expression text;
+  computed_count bigint;
+  computed_hash text;
+  computed_max_id text;
+  computed_max_time timestamptz;
+  computed_totals jsonb := '{}'::jsonb;
+  persisted private.activation_relation_snapshots%rowtype;
+  captured integer := 0;
+begin
+  if p_snapshot_kind not in (
+    'pre_auth_noop', 'post_auth_failure', 'post_auth_noop',
+    'pre_dry_run', 'tick', 'terminal'
+  ) or p_snapshot_sequence < 0 then
+    raise exception using errcode = '22023', message = 'activation snapshot identity is invalid';
+  end if;
+  perform private.assert_activation_relation_classification_complete();
+  select * into strict campaign from private.no_ai_shadow_dry_runs where id = p_campaign_id;
+  for spec in select * from private.activation_forbidden_relation_specs order by relation_name
+  loop
+    schema_name := split_part(spec.relation_name, '.', 1);
+    table_name := split_part(spec.relation_name, '.', 2);
+    owner_predicate := case when spec.owner_column is null then 'true'
+      else format('source_row.%I = $1', spec.owner_column) end;
+    row_expression := case when spec.relation_name = 'private.application_settings'
+      then 'case when source_row.is_secret then to_jsonb(source_row) - ''value'' else to_jsonb(source_row) end'
+      else 'to_jsonb(source_row)' end;
+    execute format($query$
+      select count(*), encode(extensions.digest(convert_to(
+        coalesce(string_agg(row_data::text, E'\n' order by row_data::text), ''),
+        'UTF8'
+      ), 'sha256'), 'hex')
+      from (
+        select %s as row_data from %I.%I as source_row where %s
+      ) as canonical_rows
+    $query$, row_expression, schema_name, table_name, owner_predicate)
+    into computed_count, computed_hash using campaign.owner_id;
+    computed_max_id := null;
+    if spec.immutable_id_column is not null then
+      execute format('select max(%I::text) from %I.%I as source_row where %s',
+        spec.immutable_id_column, schema_name, table_name, owner_predicate)
+      into computed_max_id using campaign.owner_id;
+    end if;
+    computed_max_time := null;
+    if spec.time_watermark_column is not null then
+      execute format('select max(%I) from %I.%I as source_row where %s',
+        spec.time_watermark_column, schema_name, table_name, owner_predicate)
+      into computed_max_time using campaign.owner_id;
+    end if;
+    computed_totals := '{}'::jsonb;
+    if spec.relation_name = 'private.cash_ledger_entries' then
+      select coalesce(jsonb_object_agg(totals.currency, totals.amount order by totals.currency), '{}'::jsonb)
+      into computed_totals from (
+        select currency, sum(amount)::text as amount from private.cash_ledger_entries
+        where owner_id = campaign.owner_id group by currency
+      ) as totals;
+    elsif spec.relation_name = 'public.orders' then
+      select jsonb_build_object('quantity', coalesce(sum(quantity), 0)::text,
+        'filled_quantity', coalesce(sum(filled_quantity), 0)::text)
+      into computed_totals from public.orders where owner_id = campaign.owner_id;
+    elsif spec.relation_name = 'public.fills' then
+      select jsonb_build_object('quantity', coalesce(sum(quantity), 0)::text,
+        'notional', coalesce(sum(notional), 0)::text,
+        'commission', coalesce(sum(commission), 0)::text,
+        'regulatory_fee', coalesce(sum(regulatory_fee), 0)::text)
+      into computed_totals from public.fills where owner_id = campaign.owner_id;
+    elsif spec.relation_name = 'public.positions' then
+      select jsonb_build_object('quantity', coalesce(sum(quantity), 0)::text,
+        'realized_pnl_base', coalesce(sum(realized_pnl_base), 0)::text)
+      into computed_totals from public.positions where owner_id = campaign.owner_id;
+    end if;
+    insert into private.activation_relation_snapshots (
+      campaign_id, owner_id, snapshot_kind, snapshot_sequence, relation_name,
+      row_count, content_hash, max_immutable_id, max_time_watermark, numeric_totals
+    ) values (
+      campaign.id, campaign.owner_id, p_snapshot_kind, p_snapshot_sequence,
+      spec.relation_name, computed_count, computed_hash, computed_max_id,
+      computed_max_time, computed_totals
+    ) on conflict (campaign_id, snapshot_kind, snapshot_sequence, relation_name) do nothing;
+    select * into strict persisted from private.activation_relation_snapshots
+    where campaign_id = campaign.id and snapshot_kind = p_snapshot_kind
+      and snapshot_sequence = p_snapshot_sequence and relation_name = spec.relation_name;
+    if row(persisted.row_count, persisted.content_hash, persisted.max_immutable_id,
+      persisted.max_time_watermark, persisted.numeric_totals)
+      is distinct from row(computed_count, computed_hash, computed_max_id,
+        computed_max_time, computed_totals)
+    then
+      raise exception using errcode = '55000', message = 'persisted activation baseline differs on retry';
+    end if;
+    captured := captured + 1;
+  end loop;
+  return captured;
+end;
+$$;
+
+create or replace function private.transition_no_ai_shadow_dry_run(
+  p_dry_run_id uuid,
+  p_expected_state text,
+  p_target_state text,
+  p_actor text,
+  p_commit_sha text,
+  p_config_version text,
+  p_correlation_id uuid,
+  p_evidence jsonb default '{}'::jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_row private.no_ai_shadow_dry_runs%rowtype;
+  actor_allowed boolean;
+begin
+  if p_correlation_id is null or jsonb_typeof(p_evidence) <> 'object' then
+    raise exception using errcode = '22023', message = 'activation transition evidence is invalid';
+  end if;
+  select * into strict current_row from private.no_ai_shadow_dry_runs
+  where id = p_dry_run_id for update;
+  if current_row.state <> p_expected_state
+    or current_row.prepared_commit_sha <> p_commit_sha
+    or current_row.vercel_commit_sha <> p_commit_sha
+    or current_row.config_version <> p_config_version
+  then
+    raise exception using errcode = '55000', message = 'activation state, commit, or config drifted';
+  end if;
+  actor_allowed := case
+    when p_target_state in ('failed', 'inconclusive', 'aborted')
+      then p_actor in ('owner', 'system')
+    when p_expected_state = 'prepared' and p_target_state = 'infra_installed'
+      then p_actor = 'admin_script'
+    when p_expected_state = 'infra_installed' and p_target_state = 'vault_verified'
+      then p_actor = 'owner'
+    when p_expected_state = 'vault_verified' and p_target_state = 'jobs_installed_disabled'
+      then p_actor = 'admin_script'
+    when p_expected_state = 'jobs_installed_disabled' and p_target_state = 'auth_endpoint_verified'
+      then p_actor = 'owner'
+    when p_expected_state = 'auth_endpoint_verified' and p_target_state = 'auth_failure_probes_claimed'
+      then p_actor = 'owner'
+    when p_expected_state = 'auth_failure_probes_claimed' and p_target_state = 'auth_failures_verified'
+      then p_actor = 'system'
+    when p_expected_state = 'auth_failures_verified' and p_target_state = 'auth_noop_claimed'
+      then p_actor = 'owner'
+    when p_expected_state = 'auth_noop_claimed' and p_target_state = 'auth_noop_verified'
+      then p_actor = 'system'
+    when p_expected_state = 'auth_noop_verified' and p_target_state = 'runtime_deployment_verified'
+      then p_actor = 'owner'
+    when p_expected_state = 'runtime_deployment_verified' and p_target_state = 'baseline_frozen'
+      then p_actor = 'owner'
+    when p_expected_state = 'baseline_frozen' and p_target_state = 'armed'
+      then p_actor = 'owner'
+    when p_expected_state = 'armed' and p_target_state = 'running'
+      then p_actor = 'scheduler'
+    when p_expected_state = 'running' and p_target_state = 'auto_stopped'
+      then p_actor = 'system'
+    when p_expected_state = 'auto_stopped' and p_target_state = 'reconciled'
+      then p_actor = 'system'
+    when p_expected_state = 'reconciled' and p_target_state = 'passed'
+      then p_actor = 'system'
+    else false
+  end;
+  if not actor_allowed then
+    raise exception using errcode = '55000', message = 'actor is forbidden for activation transition';
+  end if;
+  update private.no_ai_shadow_dry_runs
+  set state = p_target_state,
+      scheduler_control_enabled = case when p_target_state in (
+        'auto_stopped', 'reconciled', 'passed', 'failed', 'inconclusive', 'aborted'
+      ) then false else scheduler_control_enabled end,
+      started_at = case when p_target_state = 'running' then statement_timestamp() else started_at end,
+      stopped_at = case when p_target_state in ('auto_stopped', 'failed', 'inconclusive', 'aborted')
+        then coalesce(stopped_at, statement_timestamp()) else stopped_at end,
+      finalize_not_before_at = case when p_target_state = 'auto_stopped'
+        then statement_timestamp() + interval '300 seconds' else finalize_not_before_at end,
+      archived_at = case when p_target_state in ('passed', 'failed', 'inconclusive', 'aborted')
+        then statement_timestamp() else archived_at end,
+      failure_code = case when p_target_state in ('failed', 'inconclusive', 'aborted')
+        then p_evidence ->> 'reason_code' else failure_code end
+  where id = current_row.id;
+  insert into private.no_ai_shadow_dry_run_transitions (
+    dry_run_id, owner_id, from_state, to_state, actor, commit_sha,
+    config_version, correlation_id, evidence
+  ) values (
+    current_row.id, current_row.owner_id, current_row.state, p_target_state,
+    p_actor, p_commit_sha, p_config_version, p_correlation_id, p_evidence
+  );
+end;
+$$;
+
+create function private.activation_vercel_proof_file_hash(p_proof jsonb)
+returns text
+language sql
+immutable
+security invoker
+set search_path = ''
+as $$
+  select encode(extensions.digest(convert_to(
+    '{'
+      || '"commitSha":' || pg_catalog.to_json(p_proof ->> 'commitSha')::text || ','
+      || '"deploymentId":' || pg_catalog.to_json(p_proof ->> 'deploymentId')::text || ','
+      || '"environment":' || pg_catalog.to_json(p_proof ->> 'environment')::text || ','
+      || '"evidenceHash":' || pg_catalog.to_json(p_proof ->> 'evidenceHash')::text || ','
+      || '"productionHost":' || pg_catalog.to_json(p_proof ->> 'productionHost')::text || ','
+      || '"productionOrigin":' || pg_catalog.to_json(p_proof ->> 'productionOrigin')::text || ','
+      || '"readyState":' || pg_catalog.to_json(p_proof ->> 'readyState')::text || ','
+      || '"role":' || pg_catalog.to_json(p_proof ->> 'role')::text || ','
+      || '"schedulerEnabled":' || (p_proof -> 'schedulerEnabled')::text || ','
+      || '"schedulerPath":' || pg_catalog.to_json(p_proof ->> 'schedulerPath')::text || ','
+      || '"schedulerUrl":' || pg_catalog.to_json(p_proof ->> 'schedulerUrl')::text || ','
+      || '"schemaVersion":' || (p_proof -> 'schemaVersion')::text || ','
+      || '"supabaseProjectRef":' || pg_catalog.to_json(p_proof ->> 'supabaseProjectRef')::text || ','
+      || '"target":' || pg_catalog.to_json(p_proof ->> 'target')::text || ','
+      || '"vercelProjectId":' || pg_catalog.to_json(p_proof ->> 'vercelProjectId')::text || ','
+      || '"vercelTeamId":' || pg_catalog.to_json(p_proof ->> 'vercelTeamId')::text || ','
+      || '"verifiedAt":' || pg_catalog.to_json(p_proof ->> 'verifiedAt')::text
+      || E'}\n',
+    'UTF8'
+  ), 'sha256'), 'hex');
+$$;
+
+create function private.record_activation_deployment_binding(
+  p_campaign_id uuid,
+  p_deployment_role text,
+  p_proof jsonb,
+  p_proof_sha256 text,
+  p_operation_id uuid,
+  p_correlation_id uuid,
+  p_commit_sha text,
+  p_config_version text,
+  p_manifest_sha256 text,
+  p_phase_contract_sha256 text,
+  p_database_fingerprint text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  campaign private.no_ai_shadow_dry_runs%rowtype;
+  existing private.activation_deployment_bindings%rowtype;
+  expected_state text;
+  target_state text;
+  expected_scheduler_enabled boolean;
+  parsed_verified_at timestamptz;
+begin
+  campaign := private.assert_activation_context(
+    p_campaign_id, p_commit_sha, p_config_version, p_manifest_sha256,
+    p_phase_contract_sha256, p_database_fingerprint
+  );
+  if p_deployment_role = 'auth_disabled' then
+    expected_state := 'jobs_installed_disabled';
+    target_state := 'auth_endpoint_verified';
+    expected_scheduler_enabled := false;
+  elsif p_deployment_role = 'no_ai_runtime_enabled' then
+    expected_state := 'auth_noop_verified';
+    target_state := 'runtime_deployment_verified';
+    expected_scheduler_enabled := true;
+  else
+    raise exception using errcode = '22023', message = 'deployment role is unavailable in this phase';
+  end if;
+  if campaign.state not in (expected_state, target_state)
+    or p_operation_id is null or p_correlation_id is null
+    or p_proof_sha256 !~ '^[0-9a-f]{64}$'
+    or jsonb_typeof(p_proof) <> 'object'
+    or (select array_agg(key order by key) from jsonb_object_keys(p_proof) as key) <> array[
+      'commitSha', 'deploymentId', 'environment', 'evidenceHash', 'productionHost',
+      'productionOrigin', 'readyState', 'role', 'schedulerEnabled', 'schedulerPath',
+      'schedulerUrl', 'schemaVersion', 'supabaseProjectRef', 'target',
+      'vercelProjectId', 'vercelTeamId', 'verifiedAt'
+    ]::text[]
+  then
+    raise exception using errcode = '22023', message = 'deployment proof is invalid';
+  end if;
+  begin
+    parsed_verified_at := (p_proof ->> 'verifiedAt')::timestamptz;
+  exception when others then
+    raise exception using errcode = '22023', message = 'deployment proof timestamp is invalid';
+  end;
+  if campaign.state = target_state then
+    select * into strict existing from private.activation_deployment_bindings
+    where campaign_id = campaign.id and deployment_role = p_deployment_role;
+    if row(existing.deployment_id, existing.proof_sha256, existing.proof,
+      existing.operation_id, existing.correlation_id)
+      is distinct from row(p_proof ->> 'deploymentId', p_proof_sha256, p_proof,
+        p_operation_id, p_correlation_id)
+    then
+      raise exception using errcode = '55000', message = 'deployment binding retry must use the exact durable proof and operation';
+    end if;
+    return jsonb_build_object('state', target_state,
+      'deployment_role', p_deployment_role, 'deployment_id', existing.deployment_id,
+      'reused', true);
+  end if;
+  if p_proof_sha256 <> private.activation_vercel_proof_file_hash(p_proof)
+    or p_proof ->> 'schemaVersion' <> '1'
+    or p_proof ->> 'role' <> p_deployment_role
+    or p_proof ->> 'vercelTeamId' <> 'team_yqndKHk6nfWGlte1UVLTJOHG'
+    or p_proof ->> 'vercelProjectId' <> 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR'
+    or p_proof ->> 'supabaseProjectRef' <> 'qrnuyibntcxwffrxmrvn'
+    or p_proof ->> 'commitSha' <> campaign.prepared_commit_sha
+    or p_proof ->> 'environment' <> 'production'
+    or p_proof ->> 'target' <> 'production'
+    or p_proof ->> 'readyState' <> 'READY'
+    or p_proof ->> 'productionOrigin' <> campaign.production_origin
+    or p_proof ->> 'productionHost' <> campaign.production_host
+    or p_proof ->> 'schedulerPath' <> campaign.scheduler_path
+    or p_proof ->> 'schedulerUrl' <> campaign.scheduler_url
+    or (p_proof ->> 'schedulerEnabled')::boolean is distinct from expected_scheduler_enabled
+    or p_proof ->> 'deploymentId' !~ '^dpl_[A-Za-z0-9]{20,64}$'
+    or p_proof ->> 'evidenceHash' !~ '^[0-9a-f]{64}$'
+    or p_proof ->> 'evidenceHash' <> encode(extensions.digest(convert_to(concat_ws(E'\x1f',
+      'capital-lab-vercel-deployment-proof-v1', p_proof ->> 'schemaVersion',
+      p_proof ->> 'role', p_proof ->> 'vercelTeamId', p_proof ->> 'vercelProjectId',
+      p_proof ->> 'supabaseProjectRef', p_proof ->> 'deploymentId',
+      p_proof ->> 'commitSha', p_proof ->> 'environment', p_proof ->> 'target',
+      p_proof ->> 'readyState', p_proof ->> 'productionOrigin',
+      p_proof ->> 'productionHost', p_proof ->> 'schedulerPath',
+      p_proof ->> 'schedulerUrl', p_proof ->> 'schedulerEnabled'
+    ), 'UTF8'), 'sha256'), 'hex')
+    or parsed_verified_at not between statement_timestamp() - interval '15 minutes'
+      and statement_timestamp() + interval '60 seconds'
+    or (p_deployment_role = 'auth_disabled'
+      and p_proof ->> 'deploymentId' <> campaign.production_deployment_id)
+    or (p_deployment_role = 'no_ai_runtime_enabled' and exists (
+      select 1 from private.activation_deployment_bindings
+      where campaign_id = campaign.id and deployment_role = 'auth_disabled'
+        and deployment_id = p_proof ->> 'deploymentId'
+    ))
+  then
+    raise exception using errcode = '55000', message = 'Vercel deployment proof drifted from the reviewed identity';
+  end if;
+  insert into private.activation_deployment_bindings (
+    campaign_id, owner_id, deployment_role, deployment_id, vercel_team_id,
+    vercel_project_id, supabase_project_ref, commit_sha, environment, target,
+    ready_state, production_origin, production_host, scheduler_path, scheduler_url,
+    scheduler_enabled, evidence_hash, proof_sha256, proof, operation_id,
+    correlation_id, verified_at
+  ) values (
+    campaign.id, campaign.owner_id, p_deployment_role, p_proof ->> 'deploymentId',
+    p_proof ->> 'vercelTeamId', p_proof ->> 'vercelProjectId',
+    p_proof ->> 'supabaseProjectRef', p_proof ->> 'commitSha',
+    p_proof ->> 'environment', p_proof ->> 'target', p_proof ->> 'readyState',
+    p_proof ->> 'productionOrigin', p_proof ->> 'productionHost',
+    p_proof ->> 'schedulerPath', p_proof ->> 'schedulerUrl',
+    (p_proof ->> 'schedulerEnabled')::boolean, p_proof ->> 'evidenceHash',
+    p_proof_sha256, p_proof, p_operation_id, p_correlation_id, parsed_verified_at
+  ) on conflict (campaign_id, deployment_role) do nothing;
+  select * into strict existing from private.activation_deployment_bindings
+  where campaign_id = campaign.id and deployment_role = p_deployment_role;
+  if row(existing.deployment_id, existing.vercel_team_id, existing.vercel_project_id,
+    existing.supabase_project_ref, existing.commit_sha, existing.environment,
+    existing.target, existing.ready_state, existing.production_origin,
+    existing.production_host, existing.scheduler_path, existing.scheduler_url,
+    existing.scheduler_enabled, existing.evidence_hash, existing.proof_sha256,
+    existing.proof, existing.operation_id, existing.correlation_id, existing.verified_at)
+    is distinct from row(p_proof ->> 'deploymentId', p_proof ->> 'vercelTeamId',
+      p_proof ->> 'vercelProjectId', p_proof ->> 'supabaseProjectRef',
+      p_proof ->> 'commitSha', p_proof ->> 'environment', p_proof ->> 'target',
+      p_proof ->> 'readyState', p_proof ->> 'productionOrigin',
+      p_proof ->> 'productionHost', p_proof ->> 'schedulerPath',
+      p_proof ->> 'schedulerUrl', (p_proof ->> 'schedulerEnabled')::boolean,
+      p_proof ->> 'evidenceHash', p_proof_sha256, p_proof, p_operation_id,
+      p_correlation_id, parsed_verified_at)
+  then
+    raise exception using errcode = '55000', message = 'deployment binding is immutable; reconcile the original operation';
+  end if;
+  if campaign.state = expected_state then
+    perform private.transition_no_ai_shadow_dry_run(
+      campaign.id, expected_state, target_state, 'owner', campaign.prepared_commit_sha,
+      campaign.config_version, p_correlation_id,
+      jsonb_build_object('deployment_role', p_deployment_role,
+        'deployment_id', existing.deployment_id, 'proof_sha256', p_proof_sha256)
+    );
+  end if;
+  return jsonb_build_object('state', target_state, 'deployment_role', p_deployment_role,
+    'deployment_id', existing.deployment_id, 'reused', campaign.state = target_state);
+end;
+$$;
+
+create function private.claim_activation_auth_failure_probes(
+  p_campaign_id uuid,
+  p_operation_id uuid,
+  p_correlation_id uuid,
+  p_commit_sha text,
+  p_config_version text,
+  p_manifest_sha256 text,
+  p_phase_contract_sha256 text,
+  p_database_fingerprint text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  campaign private.no_ai_shadow_dry_runs%rowtype;
+  auth_binding private.activation_deployment_bindings%rowtype;
+  probe_kind text;
+  existing private.activation_auth_failure_requests%rowtype;
+begin
+  campaign := private.assert_activation_context(
+    p_campaign_id, p_commit_sha, p_config_version, p_manifest_sha256,
+    p_phase_contract_sha256, p_database_fingerprint
+  );
+  if campaign.state not in ('auth_endpoint_verified', 'auth_failure_probes_claimed')
+    or p_operation_id is null or p_correlation_id is null
+  then
+    raise exception using errcode = '55000', message = 'auth failure probes are unavailable from the persisted state';
+  end if;
+  select * into strict auth_binding from private.activation_deployment_bindings
+  where campaign_id = campaign.id and deployment_role = 'auth_disabled';
+  perform private.assert_activation_controls(campaign.id, false);
+  perform private.assert_activation_job_specs(campaign.id, false);
+  perform private.capture_activation_relation_snapshot(campaign.id, 'pre_auth_noop', 0);
+  foreach probe_kind in array array['missing', 'invalid'] loop
+    insert into private.activation_auth_failure_requests (
+      request_id, campaign_id, owner_id, probe_kind, correlation_id,
+      expected_deployment_id, expected_project_id, expected_commit_sha,
+      status, operation_id
+    ) values (
+      private.activation_deterministic_uuid(campaign.id, 'auth-failure-request:' || probe_kind),
+      campaign.id, campaign.owner_id, probe_kind,
+      private.activation_deterministic_uuid(campaign.id, 'auth-failure-correlation:' || probe_kind),
+      auth_binding.deployment_id, auth_binding.vercel_project_id,
+      auth_binding.commit_sha, 'prepared', p_operation_id
+    ) on conflict (campaign_id, probe_kind) do nothing;
+    select * into strict existing from private.activation_auth_failure_requests
+    where campaign_id = campaign.id and activation_auth_failure_requests.probe_kind = probe_kind;
+    if row(existing.operation_id, existing.expected_deployment_id,
+      existing.expected_project_id, existing.expected_commit_sha)
+      is distinct from row(p_operation_id, auth_binding.deployment_id,
+        auth_binding.vercel_project_id, auth_binding.commit_sha)
+    then
+      raise exception using errcode = '55000', message = 'auth failure probe identity is immutable';
+    end if;
+  end loop;
+  if (select count(*) from private.activation_auth_failure_requests
+      where campaign_id = campaign.id) <> 2 then
+    raise exception using errcode = '55000', message = 'exactly two auth failure probes are required';
+  end if;
+  if campaign.state = 'auth_endpoint_verified' then
+    perform private.transition_no_ai_shadow_dry_run(
+      campaign.id, 'auth_endpoint_verified', 'auth_failure_probes_claimed', 'owner',
+      campaign.prepared_commit_sha, campaign.config_version, p_correlation_id,
+      jsonb_build_object('operation_id', p_operation_id, 'probe_count', 2)
+    );
+  end if;
+  return jsonb_build_object('state', 'auth_failure_probes_claimed', 'probe_count', 2);
+end;
+$$;
+
+create or replace function private.claim_activation_auth_noop(
+  p_campaign_id uuid,
+  p_request_id uuid,
+  p_nonce uuid,
+  p_operation_id uuid,
+  p_correlation_id uuid,
+  p_commit_sha text,
+  p_config_version text,
+  p_manifest_sha256 text,
+  p_phase_contract_sha256 text,
+  p_database_fingerprint text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  campaign private.no_ai_shadow_dry_runs%rowtype;
+  binding private.activation_deployment_bindings%rowtype;
+  claimed private.activation_auth_noop_requests%rowtype;
+begin
+  campaign := private.assert_activation_context(
+    p_campaign_id, p_commit_sha, p_config_version, p_manifest_sha256,
+    p_phase_contract_sha256, p_database_fingerprint
+  );
+  if campaign.state not in ('auth_failures_verified', 'auth_noop_claimed')
+    or (select count(*) from private.activation_auth_failure_requests
+      where campaign_id = campaign.id and status = 'verified') <> 2
+  then
+    raise exception using errcode = '55000', message = 'auth no-op requires both exact 401 probes';
+  end if;
+  select * into strict binding from private.activation_deployment_bindings
+  where campaign_id = campaign.id and deployment_role = 'auth_disabled';
+  perform private.assert_activation_controls(campaign.id, false);
+  perform private.assert_activation_job_specs(campaign.id, false);
+  insert into private.activation_auth_noop_requests (
+    request_id, campaign_id, owner_id, correlation_id, nonce,
+    expected_deployment_id, expected_project_id, expected_deployment_role,
+    expected_commit_sha, status, operation_id
+  ) values (
+    p_request_id, campaign.id, campaign.owner_id, p_correlation_id, p_nonce,
+    binding.deployment_id, binding.vercel_project_id, binding.deployment_role,
+    binding.commit_sha, 'prepared', p_operation_id
+  ) on conflict (campaign_id) do nothing;
+  select * into strict claimed from private.activation_auth_noop_requests
+  where campaign_id = campaign.id for update;
+  if row(claimed.request_id, claimed.correlation_id, claimed.nonce,
+    claimed.operation_id, claimed.expected_deployment_id, claimed.expected_project_id,
+    claimed.expected_deployment_role, claimed.expected_commit_sha)
+    is distinct from row(p_request_id, p_correlation_id, p_nonce, p_operation_id,
+      binding.deployment_id, binding.vercel_project_id, binding.deployment_role,
+      binding.commit_sha)
+  then
+    raise exception using errcode = '55000', message = 'auth no-op identity is immutable; reconcile the original request';
+  end if;
+  if campaign.state = 'auth_failures_verified' then
+    perform private.transition_no_ai_shadow_dry_run(
+      campaign.id, 'auth_failures_verified', 'auth_noop_claimed', 'owner',
+      campaign.prepared_commit_sha, campaign.config_version, p_correlation_id,
+      jsonb_build_object('request_id', p_request_id, 'nonce_recorded', true,
+        'deployment_role', binding.deployment_role)
+    );
+  end if;
+  return jsonb_build_object('request_id', claimed.request_id,
+    'correlation_id', claimed.correlation_id, 'status', claimed.status,
+    'deployment_id', claimed.expected_deployment_id);
+end;
+$$;
+
+create or replace function private.claim_paid_canary(
+  p_owner_id uuid,
+  p_operation_id uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  campaign constant text := 'openai_postbuild_canary_v1';
+  terminal_campaign private.no_ai_shadow_dry_runs%rowtype;
+  terminal_campaign_count integer;
+  persisted_job_count integer;
+  live_job_count integer;
+  capital_lab_job_count integer;
+begin
+  if p_operation_id is null or not exists (
+    select 1 from public.app_users as app_user
+    where app_user.user_id = p_owner_id and app_user.role = 'owner' and app_user.is_active
+  ) then
+    raise exception using errcode = '42501', message = 'paid Canary owner is unavailable';
+  end if;
+  select count(*) into terminal_campaign_count
+  from private.no_ai_shadow_dry_runs as run
+  join private.activation_terminal_evidence as evidence on evidence.campaign_id = run.id
+  where run.owner_id = p_owner_id and run.state = 'passed'
+    and evidence.terminal_status = 'passed'
+    and evidence.expected_slots = 52 and evidence.actual_slots = 52
+    and evidence.expected_events = 104 and evidence.actual_events = 104
+    and evidence.complete_response_count = 104
+    and evidence.missing_response_count = 0 and evidence.invalid_response_count = 0
+    and evidence.forbidden_effect_count = 0
+    and evidence.scheduler_controls_disabled
+    and evidence.dangerous_controls_disabled and evidence.jobs_inactive;
+  if terminal_campaign_count <> 1 then
+    raise exception using errcode = '55000', message = 'exactly one passed Activation campaign is required before paid Canary';
+  end if;
+  select run.* into terminal_campaign
+  from private.no_ai_shadow_dry_runs as run
+  join private.activation_terminal_evidence as evidence on evidence.campaign_id = run.id
+  where run.owner_id = p_owner_id and run.state = 'passed'
+    and evidence.terminal_status = 'passed'
+    and evidence.expected_slots = 52 and evidence.actual_slots = 52
+    and evidence.expected_events = 104 and evidence.actual_events = 104
+    and evidence.complete_response_count = 104
+    and evidence.missing_response_count = 0 and evidence.invalid_response_count = 0
+    and evidence.forbidden_effect_count = 0
+    and evidence.scheduler_controls_disabled
+    and evidence.dangerous_controls_disabled and evidence.jobs_inactive;
+  perform private.assert_activation_controls(terminal_campaign.id, false);
+  select count(*) into persisted_job_count
+  from (
+    select distinct on (job_role) jobid
+    from private.activation_job_spec_versions
+    where campaign_id = terminal_campaign.id
+    order by job_role, spec_version desc
+  ) as current_specs;
+  if persisted_job_count <> 2 or to_regclass('cron.job') is null then
+    raise exception using errcode = '55000', message = 'exact persisted Cron job identities are unavailable';
+  end if;
+  execute $query$
+    select count(*) from cron.job as job
+    where job.jobid in (
+      select distinct on (job_role) jobid
+      from private.activation_job_spec_versions
+      where campaign_id = $1
+      order by job_role, spec_version desc
+    )
+  $query$ into live_job_count using terminal_campaign.id;
+  execute $query$
+    select count(*) from cron.job where jobname like 'capital-lab-%'
+  $query$ into capital_lab_job_count;
+  if live_job_count = 2 then
+    perform private.assert_activation_job_specs(terminal_campaign.id, false);
+  elsif live_job_count <> 0 or capital_lab_job_count <> 0 then
+    raise exception using errcode = '55000', message = 'terminal Cron identities are partially present or drifted';
+  end if;
+  if exists (
+    select 1 from private.no_ai_shadow_dry_run_events as event
+    left join private.activation_http_responses as response on response.request_id = event.request_id
+    where event.dry_run_id = terminal_campaign.id
+      and (event.pg_net_request_id is null or response.request_id is null or not response.schema_valid)
+  ) then
+    raise exception using errcode = '55000', message = 'unresolved scheduler outcome blocks paid Canary';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(campaign, 0));
+  if exists (select 1 from private.paid_canary_runs where campaign_key = campaign) then
+    return false;
+  end if;
+  insert into private.paid_canary_runs (
+    owner_id, operation_id, campaign_key, model, status, metadata
+  ) select p_owner_id, p_operation_id, campaign, model_name, 'claimed',
+      jsonb_build_object('activation_campaign_id', terminal_campaign.id,
+        'activation_terminal_passed', true)
+  from unnest(array['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.6-sol']) as model_name;
+  return true;
+end;
+$$;
+
+create function private.capture_activation_http_responses_v3()
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  pending record;
+  transport record;
+  body jsonb;
+  valid boolean;
+  stored_count integer := 0;
+  parsed_campaign_id uuid;
+  parsed_event_id uuid;
+  parsed_request_id uuid;
+  parsed_cycle_id uuid;
+  parsed_correlation_id uuid;
+  parsed_nonce uuid;
+  parsed_slot integer;
+begin
+  if to_regclass('net._http_response') is null then
+    return 0;
+  end if;
+  perform set_config('capital_lab.internal_event_write', 'on', true);
+  for pending in
+    select request.request_id, request.campaign_id, request.owner_id,
+      null::uuid as event_id, 'auth_noop'::text as mode,
+      request.pg_net_request_id, request.correlation_id, request.nonce,
+      null::uuid as cycle_id, null::text as job, null::integer as slot_number,
+      binding.deployment_id, binding.vercel_project_id, binding.deployment_role,
+      binding.commit_sha
+    from private.activation_auth_noop_requests as request
+    join private.activation_deployment_bindings as binding
+      on binding.campaign_id = request.campaign_id
+      and binding.deployment_role = 'auth_disabled'
+    left join private.activation_http_responses as stored on stored.request_id = request.request_id
+    where request.pg_net_request_id is not null and stored.request_id is null
+    union all
+    select event.request_id, event.dry_run_id, event.owner_id,
+      event.id, 'dry_run', event.pg_net_request_id, event.correlation_id,
+      null::uuid, event.cycle_id, event.event_type, event.slot_number,
+      binding.deployment_id, binding.vercel_project_id, binding.deployment_role,
+      binding.commit_sha
+    from private.no_ai_shadow_dry_run_events as event
+    join private.activation_deployment_bindings as binding
+      on binding.campaign_id = event.dry_run_id
+      and binding.deployment_role = 'no_ai_runtime_enabled'
+    left join private.activation_http_responses as stored on stored.request_id = event.request_id
+    where event.pg_net_request_id is not null and stored.request_id is null
+  loop
+    execute $query$
+      select true as present, status_code, timed_out, error_msg, content
+      from net._http_response where id = $1
+    $query$ into transport using pending.pg_net_request_id;
+    if transport.present is distinct from true then
+      continue;
+    end if;
+    body := null;
+    begin
+      body := transport.content::jsonb;
+    exception when others then
+      body := null;
+    end;
+    parsed_campaign_id := private.activation_safe_uuid(body ->> 'campaign_id');
+    parsed_event_id := private.activation_safe_uuid(body ->> 'event_id');
+    parsed_request_id := private.activation_safe_uuid(body ->> 'request_id');
+    parsed_cycle_id := private.activation_safe_uuid(body ->> 'cycle_id');
+    parsed_correlation_id := private.activation_safe_uuid(body ->> 'correlation_id');
+    parsed_nonce := private.activation_safe_uuid(body ->> 'nonce');
+    parsed_slot := private.activation_safe_nonnegative_integer(body ->> 'slot_number');
+    valid := coalesce(transport.status_code = 200, false)
+      and not coalesce(transport.timed_out, true)
+      and transport.error_msg is null
+      and jsonb_typeof(body) = 'object'
+      and body -> 'schema_version' = '3'::jsonb
+      and body ->> 'mode' = pending.mode
+      and body ->> 'deployment_role' = pending.deployment_role
+      and parsed_campaign_id = pending.campaign_id
+      and parsed_request_id = pending.request_id
+      and parsed_correlation_id = pending.correlation_id
+      and body ->> 'environment' = 'production'
+      and body ->> 'deployment_id' = pending.deployment_id
+      and body ->> 'project_id' = pending.vercel_project_id
+      and body ->> 'commit_sha' = pending.commit_sha
+      and body -> 'agent_disabled' = 'true'::jsonb
+      and private.activation_zero_counters_valid(body -> 'counters');
+    if pending.mode = 'auth_noop' then
+      valid := valid
+        and (select array_agg(key order by key) from jsonb_object_keys(body) as key) = array[
+          'agent_disabled', 'campaign_id', 'commit_sha', 'correlation_id',
+          'counters', 'deployment_id', 'deployment_role', 'environment', 'mode',
+          'nonce', 'project_id', 'request_id', 'scheduler_disabled',
+          'schema_version', 'status', 'terminal_reason'
+        ]::text[]
+        and pending.deployment_role = 'auth_disabled'
+        and parsed_nonce = pending.nonce
+        and body ->> 'status' = 'authenticated_noop'
+        and body ->> 'terminal_reason' = 'auth_noop_verified'
+        and body -> 'scheduler_disabled' = 'true'::jsonb;
+    else
+      valid := valid
+        and (select array_agg(key order by key) from jsonb_object_keys(body) as key) = array[
+          'agent_disabled', 'campaign_id', 'commit_sha', 'correlation_id',
+          'counters', 'cycle_id', 'cycles_claimed', 'cycles_reconciled',
+          'deployment_id', 'deployment_role', 'environment', 'event_id', 'job',
+          'mode', 'project_id', 'request_id', 'scheduler_disabled',
+          'schema_version', 'slot_number', 'status', 'terminal_reason'
+        ]::text[]
+        and pending.deployment_role = 'no_ai_runtime_enabled'
+        and parsed_event_id = pending.event_id
+        and parsed_cycle_id = pending.cycle_id
+        and body ->> 'job' = pending.job
+        and parsed_slot = pending.slot_number
+        and body -> 'scheduler_disabled' = 'false'::jsonb
+        and body ->> 'status' = 'completed'
+        and body ->> 'terminal_reason' = case when pending.job = 'market_dispatcher'
+          then 'no_ai_shadow_cycle_recorded' else 'dry_run_evidence_reconciled' end
+        and private.activation_safe_nonnegative_integer(body ->> 'cycles_claimed')
+          = case when pending.job = 'market_dispatcher' then 1 else 0 end
+        and private.activation_safe_nonnegative_integer(body ->> 'cycles_reconciled') is not null;
+    end if;
+    insert into private.activation_http_responses (
+      request_id, campaign_id, owner_id, event_id, mode, pg_net_request_id,
+      http_status, timed_out, error_class, schema_valid, correlation_id,
+      nonce, response_campaign_id, response_event_id, response_request_id,
+      response_cycle_id, response_environment, response_deployment_id,
+      response_project_id, response_deployment_role, response_commit_sha,
+      response_status, response_terminal_reason, response_job,
+      response_slot_number, scheduler_disabled, agent_disabled,
+      cycles_claimed, cycles_reconciled, counters
+    ) values (
+      pending.request_id, pending.campaign_id, pending.owner_id, pending.event_id,
+      pending.mode, pending.pg_net_request_id, transport.status_code,
+      coalesce(transport.timed_out, true),
+      case
+        when transport.error_msg is not null then 'transport_error'
+        when transport.status_code between 300 and 399 then 'redirect_rejected'
+        when transport.status_code <> 200 then 'unexpected_http_status'
+        when not valid then 'invalid_response_schema'
+        else null
+      end,
+      valid, parsed_correlation_id, parsed_nonce, parsed_campaign_id,
+      parsed_event_id, parsed_request_id, parsed_cycle_id,
+      body ->> 'environment', body ->> 'deployment_id', body ->> 'project_id',
+      body ->> 'deployment_role', body ->> 'commit_sha', body ->> 'status',
+      body ->> 'terminal_reason', body ->> 'job', parsed_slot,
+      case when jsonb_typeof(body -> 'scheduler_disabled') = 'boolean'
+        then (body ->> 'scheduler_disabled')::boolean else null end,
+      case when jsonb_typeof(body -> 'agent_disabled') = 'boolean'
+        then (body ->> 'agent_disabled')::boolean else null end,
+      private.activation_safe_nonnegative_integer(body ->> 'cycles_claimed'),
+      private.activation_safe_nonnegative_integer(body ->> 'cycles_reconciled'),
+      case when jsonb_typeof(body -> 'counters') = 'object'
+        then body -> 'counters' else null end
+    );
+    if pending.mode = 'auth_noop' then
+      update private.activation_auth_noop_requests
+      set status = case when valid then 'transport_terminal' else 'invalid' end,
+          terminal_at = statement_timestamp()
+      where request_id = pending.request_id;
+    else
+      update private.no_ai_shadow_dry_run_events
+      set http_status = transport.status_code,
+          timed_out = coalesce(transport.timed_out, true),
+          response_error_class = case
+            when transport.error_msg is not null then 'transport_error'
+            when transport.status_code between 300 and 399 then 'redirect_rejected'
+            when transport.status_code <> 200 then 'unexpected_http_status'
+            when not valid then 'invalid_response_schema'
+            else null
+          end,
+          response_persisted_at = statement_timestamp(),
+          response_status = body ->> 'status',
+          response_terminal_reason = body ->> 'terminal_reason',
+          model_call_count = coalesce(private.activation_safe_nonnegative_integer(body #>> '{counters,model_calls}'), 0),
+          budget_reservation_count = coalesce(private.activation_safe_nonnegative_integer(body #>> '{counters,budget_reservations}'), 0),
+          order_count = coalesce(private.activation_safe_nonnegative_integer(body #>> '{counters,orders}'), 0),
+          fill_count = coalesce(private.activation_safe_nonnegative_integer(body #>> '{counters,fills}'), 0),
+          ledger_entry_count = coalesce(private.activation_safe_nonnegative_integer(body #>> '{counters,ledger_entries}'), 0),
+          completed_at = statement_timestamp()
+      where id = pending.event_id;
+    end if;
+    stored_count := stored_count + 1;
+  end loop;
+  perform set_config('capital_lab.internal_event_write', 'off', true);
+  return stored_count;
+end;
+$$;
+
+create or replace function private.capture_activation_http_responses()
+returns integer
+language sql
+security definer
+set search_path = ''
+as $$
+  select private.capture_activation_http_responses_v3();
+$$;
+
+create function private.capture_activation_auth_failure_responses(
+  p_campaign_id uuid
+)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  campaign private.no_ai_shadow_dry_runs%rowtype;
+  probe private.activation_auth_failure_requests%rowtype;
+  transport record;
+  parsed jsonb;
+  valid boolean;
+  captured integer := 0;
+begin
+  select * into strict campaign from private.no_ai_shadow_dry_runs
+  where id = p_campaign_id;
+  for probe in
+    select * from private.activation_auth_failure_requests
+    where campaign_id = campaign.id and status in ('submitted', 'unknown')
+    order by probe_kind for update
+  loop
+    if probe.pg_net_request_id is null then
+      raise exception using errcode = '55000', message = 'claimed auth failure probe has no transport identity';
+    end if;
+    if exists (
+      select 1 from private.activation_http_responses
+      where request_id = probe.request_id
+    ) then
+      continue;
+    end if;
+    execute $query$
+      select true as present, status_code, timed_out, error_msg, content
+      from net._http_response where id = $1
+    $query$ into transport using probe.pg_net_request_id;
+    if transport.present is distinct from true then
+      if probe.submitted_at is not null and statement_timestamp() >=
+        probe.submitted_at
+          + make_interval(secs => campaign.max_request_seconds + campaign.drain_safety_seconds)
+      then
+        update private.activation_auth_failure_requests
+        set status = 'transport_missing', terminal_at = statement_timestamp()
+        where request_id = probe.request_id;
+        captured := captured + 1;
+      end if;
+      continue;
+    end if;
+    parsed := null;
+    begin
+      parsed := transport.content::jsonb;
+    exception when others then
+      parsed := null;
+    end;
+    valid := coalesce(transport.status_code = 401, false)
+      and not coalesce(transport.timed_out, true)
+      and transport.error_msg is null
+      and jsonb_typeof(parsed) = 'object'
+      and (select array_agg(key order by key) from jsonb_object_keys(parsed) as key) = array[
+        'agent_disabled', 'classification', 'counters', 'error', 'mode',
+        'scheduler_disabled', 'schema_version'
+      ]::text[]
+      and parsed -> 'schema_version' = '3'::jsonb
+      and parsed ->> 'mode' = 'auth_failure'
+      and parsed ->> 'error' = 'unauthorized'
+      and parsed ->> 'classification' = 'bearer_missing_or_invalid'
+      and parsed -> 'scheduler_disabled' = 'true'::jsonb
+      and parsed -> 'agent_disabled' = 'true'::jsonb
+      and private.activation_zero_counters_valid(parsed -> 'counters');
+    insert into private.activation_http_responses (
+      request_id, campaign_id, owner_id, mode, pg_net_request_id,
+      http_status, timed_out, error_class, schema_valid, correlation_id,
+      response_status, scheduler_disabled, agent_disabled, counters
+    ) values (
+      probe.request_id, campaign.id, campaign.owner_id, 'auth_failure',
+      probe.pg_net_request_id, transport.status_code,
+      coalesce(transport.timed_out, true),
+      case
+        when transport.error_msg is not null then 'transport_error'
+        when transport.status_code between 300 and 399 then 'redirect_rejected'
+        when transport.status_code is distinct from 401 then 'unexpected_http_status'
+        when not valid then 'invalid_response_schema'
+        else null
+      end,
+      valid, probe.correlation_id, parsed ->> 'error',
+      case when jsonb_typeof(parsed -> 'scheduler_disabled') = 'boolean'
+        then (parsed ->> 'scheduler_disabled')::boolean else null end,
+      case when jsonb_typeof(parsed -> 'agent_disabled') = 'boolean'
+        then (parsed ->> 'agent_disabled')::boolean else null end,
+      case when jsonb_typeof(parsed -> 'counters') = 'object'
+        then parsed -> 'counters' else null end
+    );
+    update private.activation_auth_failure_requests
+    set status = case when valid then 'verified' else 'invalid' end,
+        terminal_at = statement_timestamp()
+    where request_id = probe.request_id;
+    captured := captured + 1;
+  end loop;
+  return captured;
+end;
+$$;
+
+create or replace function private.verify_activation_auth_failure_probes(
+  p_campaign_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  campaign private.no_ai_shadow_dry_runs%rowtype;
+begin
+  select * into strict campaign from private.no_ai_shadow_dry_runs
+  where id = p_campaign_id for update;
+  if campaign.state = 'auth_failures_verified' then
+    return;
+  end if;
+  if campaign.state <> 'auth_failure_probes_claimed'
+    or (select count(*) from private.activation_auth_failure_requests
+      where campaign_id = campaign.id) <> 2
+  then
+    raise exception using errcode = '55000', message = 'auth failure verification requires exactly two claimed probes';
+  end if;
+  perform private.capture_activation_auth_failure_responses(campaign.id);
+  if (select count(*) from private.activation_auth_failure_requests
+      where campaign_id = campaign.id and status = 'verified') <> 2
+    or (select count(*) from private.activation_http_responses
+      where campaign_id = campaign.id and mode = 'auth_failure'
+        and http_status = 401 and not timed_out and error_class is null
+        and schema_valid) <> 2
+  then
+    raise exception using errcode = '55000', message = 'both exact auth failure responses are not durably verified';
+  end if;
+  perform private.capture_activation_relation_snapshot(campaign.id, 'post_auth_failure', 0);
+  if not private.activation_snapshots_match(
+    campaign.id, 'pre_auth_noop', 0, 'post_auth_failure', 0
+  ) then
+    raise exception using errcode = '55000', message = 'auth failure probes caused a forbidden side effect';
+  end if;
+  perform private.assert_activation_controls(campaign.id, false);
+  perform private.assert_activation_job_specs(campaign.id, false);
+  perform private.transition_no_ai_shadow_dry_run(
+    campaign.id, 'auth_failure_probes_claimed', 'auth_failures_verified', 'system',
+    campaign.prepared_commit_sha, campaign.config_version,
+    private.activation_deterministic_uuid(campaign.id, 'auth-failures-verified'),
+    jsonb_build_object('verified_probe_count', 2, 'exact_http_status', 401,
+      'forbidden_effect_count', 0, 'durable_response_evidence', true)
+  );
+end;
+$$;
+
+create function private.protect_activation_terminal_operation()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if tg_op = 'DELETE'
+    or row(new.campaign_id, new.owner_id, new.operation_kind, new.operation_id,
+      new.correlation_id, new.claimed_at)
+      is distinct from row(old.campaign_id, old.owner_id, old.operation_kind,
+        old.operation_id, old.correlation_id, old.claimed_at)
+    or old.status in ('completed', 'failed')
+    or (old.status = 'claimed' and new.status not in ('claimed', 'completed', 'unknown', 'failed'))
+    or (old.status = 'unknown' and new.status not in ('unknown', 'completed', 'failed'))
+  then
+    raise exception using errcode = '55000', message = 'terminal operation identity or evidence is immutable';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger activation_terminal_operations_protect_mutation
+before update or delete on private.activation_terminal_operations
+for each row execute function private.protect_activation_terminal_operation();
+create trigger activation_terminal_operations_reject_truncate
+before truncate on private.activation_terminal_operations
+for each statement execute function private.reject_mutation();
+create trigger activation_forbidden_relation_specs_reject_mutation
+before update or delete or truncate on private.activation_forbidden_relation_specs
+for each statement execute function private.reject_mutation();
+
+create or replace function private.disable_activation_jobs_after_emergency(
+  p_campaign_id uuid,
+  p_operation_id uuid,
+  p_correlation_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  campaign private.no_ai_shadow_dry_runs%rowtype;
+  operation private.activation_terminal_operations%rowtype;
+begin
+  select * into strict campaign from private.no_ai_shadow_dry_runs
+  where id = p_campaign_id for update;
+  perform private.assert_activation_controls(campaign.id, false);
+  insert into private.activation_terminal_operations (
+    campaign_id, owner_id, operation_kind, operation_id, correlation_id, status
+  ) values (
+    campaign.id, campaign.owner_id, 'emergency_phase_two', p_operation_id,
+    p_correlation_id, 'claimed'
+  ) on conflict (campaign_id, operation_kind) do nothing;
+  select * into strict operation from private.activation_terminal_operations
+  where campaign_id = campaign.id and operation_kind = 'emergency_phase_two' for update;
+  if operation.operation_id <> p_operation_id
+    or operation.correlation_id <> p_correlation_id
+  then
+    raise exception using errcode = '55000', message = 'emergency phase-two operation identity drifted';
+  end if;
+  if operation.status = 'completed' then
+    return;
+  end if;
+  perform private.set_activation_jobs_active(
+    campaign.id, false, p_operation_id, p_correlation_id
+  );
+  perform private.assert_activation_job_specs(campaign.id, false);
+  update private.activation_terminal_operations
+  set status = 'completed', completed_at = statement_timestamp(),
+      evidence = jsonb_build_object('phase_one_controls_committed', true,
+        'jobs_exactly_verified_inactive', true)
+  where campaign_id = campaign.id and operation_kind = 'emergency_phase_two'
+    and operation_id = p_operation_id;
+end;
+$$;
+
+create function private.unschedule_terminal_activation_jobs(
+  p_campaign_id uuid,
+  p_operation_id uuid,
+  p_correlation_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  campaign private.no_ai_shadow_dry_runs%rowtype;
+  operation private.activation_terminal_operations%rowtype;
+begin
+  select * into strict campaign from private.no_ai_shadow_dry_runs
+  where id = p_campaign_id for update;
+  if not exists (
+    select 1 from private.activation_terminal_evidence
+    where campaign_id = campaign.id
+  ) then
+    raise exception using errcode = '55000', message = 'terminal evidence must exist before unschedule';
+  end if;
+  insert into private.activation_terminal_operations (
+    campaign_id, owner_id, operation_kind, operation_id, correlation_id, status
+  ) values (
+    campaign.id, campaign.owner_id, 'terminal_unschedule', p_operation_id,
+    p_correlation_id, 'claimed'
+  ) on conflict (campaign_id, operation_kind) do nothing;
+  select * into strict operation from private.activation_terminal_operations
+  where campaign_id = campaign.id and operation_kind = 'terminal_unschedule' for update;
+  if operation.operation_id <> p_operation_id
+    or operation.correlation_id <> p_correlation_id
+  then
+    raise exception using errcode = '55000', message = 'terminal unschedule operation identity drifted';
+  end if;
+  if operation.status = 'completed' then
+    return;
+  end if;
+  perform private.unschedule_activation_jobs(campaign.id);
+  update private.activation_terminal_operations
+  set status = 'completed', completed_at = statement_timestamp(),
+      evidence = jsonb_build_object('persisted_job_ids_unscheduled', 2)
+  where campaign_id = campaign.id and operation_kind = 'terminal_unschedule'
+    and operation_id = p_operation_id;
+end;
+$$;
+
 create or replace function public.claim_paid_canary(
   p_owner_id uuid,
   p_operation_id uuid
@@ -4006,10 +5523,12 @@ begin
     'no_ai_shadow_dry_run_events', 'no_ai_shadow_dry_run_baselines',
     'no_ai_shadow_dry_run_alarms', 'activation_job_spec_versions',
     'activation_auth_noop_requests', 'activation_auth_failure_requests',
-    'activation_http_responses',
-    'activation_forbidden_relation_specs', 'activation_relation_snapshots',
+    'activation_http_responses', 'activation_deployment_bindings',
+    'activation_forbidden_relation_specs', 'activation_relation_classifications',
+    'activation_relation_snapshots',
     'activation_control_snapshots', 'activation_mutation_evidence',
-    'activation_terminal_evidence', 'paid_canary_runs'
+    'activation_terminal_evidence', 'activation_terminal_operations',
+    'paid_canary_runs'
   ] loop
     execute format(
       'revoke all privileges on table private.%I from public, anon, authenticated, service_role',
@@ -4039,9 +5558,11 @@ begin
         'activation_deterministic_uuid',
         'activation_job_spec_hash',
         'activation_relation_contract_hash',
+        'assert_activation_relation_classification_complete',
         'activation_safe_nonnegative_integer',
         'activation_safe_uuid',
         'activation_snapshots_match',
+        'activation_vercel_proof_file_hash',
         'activation_zero_counters_valid',
         'arm_activation_campaign',
         'arm_no_ai_shadow_dry_run',
@@ -4050,10 +5571,13 @@ begin
         'assert_activation_job_specs',
         'assert_unmanaged_activation_jobs_safe',
         'capture_activation_control_snapshot',
+        'capture_activation_auth_failure_responses',
         'capture_activation_http_responses',
+        'capture_activation_http_responses_v3',
         'capture_activation_relation_snapshot',
         'capture_storage_monitor_snapshot',
         'claim_activation_auth_noop',
+        'claim_activation_auth_failure_probes',
         'claim_paid_canary',
         'disable_activation_jobs_after_emergency',
         'dispatch_no_ai_shadow_dry_run_event',
@@ -4070,6 +5594,7 @@ begin
         'protect_activation_manifest_identity',
         'reconcile_no_ai_shadow_dry_run',
         'record_activation_forbidden_mutation',
+        'record_activation_deployment_binding',
         'register_activation_job_spec',
         'run_hosted_scheduler_request',
         'run_hosted_scheduler_request_v2',

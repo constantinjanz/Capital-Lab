@@ -81,9 +81,10 @@ describe('activation phase separation', () => {
       phases: Record<string, { file: string; sha256: string }>
     }
     expect(bytes.toString('utf8')).toBe(`${canonicalJson(contract)}\n`)
-    expect(contract.schema_version).toBe(2)
+    expect(contract.schema_version).toBe(3)
     expect(Object.keys(contract.phases).sort()).toEqual([
       'arm',
+      'auth-endpoint-verify',
       'auth-failure-reconcile',
       'auth-failure-request',
       'auth-noop-reconcile',
@@ -96,6 +97,7 @@ describe('activation phase separation', () => {
       'manual-finalize',
       'orderly-stop',
       'prepare',
+      'runtime-deployment-verify',
       'scheduler-infrastructure-preparation',
       'unschedule-terminal-jobs',
       'vault-verification',

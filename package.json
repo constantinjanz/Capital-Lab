@@ -20,15 +20,23 @@
     "openai:canary": "node scripts/run-openai-paid-canary-child.mjs",
     "pricing:verify": "node --import tsx scripts/verify-model-pricing.ts",
     "backup:critical": "node scripts/export-critical-tables.mjs",
+    "backup:contracts:generate": "node scripts/generate-backup-contracts.mjs --write",
+    "backup:contracts:verify": "node scripts/generate-backup-contracts.mjs --verify",
     "backup:restore:test": "node scripts/verify-backup-restore.mjs",
     "migration:rehearse:local": "node scripts/run-local-rollback-migration-rehearsal.mjs",
     "activation:phase": "node scripts/run-activation-phase.mjs",
+    "activation:emergency-kill": "node scripts/run-emergency-kill.mjs",
+    "activation:vercel-proof": "node scripts/vercel-deployment-proof.mjs",
+    "activation:contract:generate": "node scripts/activation-phase-contract.mjs --write",
+    "activation:contract:verify": "node scripts/activation-phase-contract.mjs --verify",
+    "checksums:generate": "node scripts/handoff-checksums.mjs --write",
+    "checksums:verify": "node scripts/handoff-checksums.mjs --verify",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:safety && pnpm test:credentials && pnpm build"
   },
   "engines": {
-    "node": ">=22"
+    "node": "24.x"
   },
   "dependencies": {
     "@date-fns/tz": "1.5.0",
