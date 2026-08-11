@@ -4644,20 +4644,6 @@ begin
   exception when others then
     raise exception using errcode = '22023', message = 'deployment proof timestamp is invalid';
   end;
-  if campaign.state = target_state then
-    select * into strict existing from private.activation_deployment_bindings
-    where campaign_id = campaign.id and deployment_role = p_deployment_role;
-    if row(existing.deployment_id, existing.proof_sha256, existing.proof,
-      existing.operation_id, existing.correlation_id)
-      is distinct from row(p_proof ->> 'deploymentId', p_proof_sha256, p_proof,
-        p_operation_id, p_correlation_id)
-    then
-      raise exception using errcode = '55000', message = 'deployment binding retry must use the exact durable proof and operation';
-    end if;
-    return jsonb_build_object('state', target_state,
-      'deployment_role', p_deployment_role, 'deployment_id', existing.deployment_id,
-      'reused', true);
-  end if;
   if p_proof_sha256 <> private.activation_vercel_proof_file_hash(p_proof)
     or p_proof ->> 'schemaVersion' <> '1'
     or p_proof ->> 'role' <> p_deployment_role
@@ -4695,6 +4681,20 @@ begin
     ))
   then
     raise exception using errcode = '55000', message = 'Vercel deployment proof drifted from the reviewed identity';
+  end if;
+  if campaign.state = target_state then
+    select * into strict existing from private.activation_deployment_bindings
+    where campaign_id = campaign.id and deployment_role = p_deployment_role;
+    if row(existing.deployment_id, existing.proof_sha256, existing.proof,
+      existing.operation_id, existing.correlation_id)
+      is distinct from row(p_proof ->> 'deploymentId', p_proof_sha256, p_proof,
+        p_operation_id, p_correlation_id)
+    then
+      raise exception using errcode = '55000', message = 'deployment binding retry must use the exact durable proof and operation';
+    end if;
+    return jsonb_build_object('state', target_state,
+      'deployment_role', p_deployment_role, 'deployment_id', existing.deployment_id,
+      'reused', true);
   end if;
   insert into private.activation_deployment_bindings (
     campaign_id, owner_id, deployment_role, deployment_id, vercel_team_id,
@@ -4762,7 +4762,7 @@ as $$
 declare
   campaign private.no_ai_shadow_dry_runs%rowtype;
   auth_binding private.activation_deployment_bindings%rowtype;
-  probe_kind text;
+  requested_probe_kind text;
   existing private.activation_auth_failure_requests%rowtype;
 begin
   campaign := private.assert_activation_context(
@@ -4779,20 +4779,21 @@ begin
   perform private.assert_activation_controls(campaign.id, false);
   perform private.assert_activation_job_specs(campaign.id, false);
   perform private.capture_activation_relation_snapshot(campaign.id, 'pre_auth_noop', 0);
-  foreach probe_kind in array array['missing', 'invalid'] loop
+  foreach requested_probe_kind in array array['missing', 'invalid'] loop
     insert into private.activation_auth_failure_requests (
       request_id, campaign_id, owner_id, probe_kind, correlation_id,
       expected_deployment_id, expected_project_id, expected_commit_sha,
       status, operation_id
     ) values (
-      private.activation_deterministic_uuid(campaign.id, 'auth-failure-request:' || probe_kind),
-      campaign.id, campaign.owner_id, probe_kind,
-      private.activation_deterministic_uuid(campaign.id, 'auth-failure-correlation:' || probe_kind),
+      private.activation_deterministic_uuid(campaign.id, 'auth-failure-request:' || requested_probe_kind),
+      campaign.id, campaign.owner_id, requested_probe_kind,
+      private.activation_deterministic_uuid(campaign.id, 'auth-failure-correlation:' || requested_probe_kind),
       auth_binding.deployment_id, auth_binding.vercel_project_id,
       auth_binding.commit_sha, 'prepared', p_operation_id
     ) on conflict (campaign_id, probe_kind) do nothing;
     select * into strict existing from private.activation_auth_failure_requests
-    where campaign_id = campaign.id and activation_auth_failure_requests.probe_kind = probe_kind;
+    where campaign_id = campaign.id
+      and activation_auth_failure_requests.probe_kind = requested_probe_kind;
     if row(existing.operation_id, existing.expected_deployment_id,
       existing.expected_project_id, existing.expected_commit_sha)
       is distinct from row(p_operation_id, auth_binding.deployment_id,
@@ -5592,6 +5593,7 @@ begin
         'prepare_no_ai_shadow_dry_run_v2',
         'protect_activation_event_mutation',
         'protect_activation_manifest_identity',
+        'protect_activation_terminal_operation',
         'reconcile_no_ai_shadow_dry_run',
         'record_activation_forbidden_mutation',
         'record_activation_deployment_binding',
