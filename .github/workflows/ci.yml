@@ -74,6 +74,15 @@ jobs:
           node-version: 24.x
       - name: Install PostgreSQL 17 client tools
         run: |
+          key_file="$RUNNER_TEMP/postgresql-pgdg.asc"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc --output "$key_file"
+          key_fingerprint="$(gpg --batch --show-keys --with-colons "$key_file" | awk -F: '$1 == "fpr" { print $10; exit }')"
+          test "$key_fingerprint" = "B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8"
+          sudo gpg --batch --dearmor --yes \
+            --output /usr/share/keyrings/postgresql-pgdg.gpg "$key_file"
+          echo "deb [signed-by=/usr/share/keyrings/postgresql-pgdg.gpg] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/postgresql-pgdg.list >/dev/null
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes postgresql-client-17
           test "$(psql --version | awk '{print $3}' | cut -d. -f1)" = "17"

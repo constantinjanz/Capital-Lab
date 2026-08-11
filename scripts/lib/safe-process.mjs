@@ -17,11 +17,11 @@ const ALLOWED_EXECUTABLES = new Set([
   'supabase',
 ])
 
-function executableFile(filename) {
+function executableFile(filename, platform = process.platform) {
   try {
     const stats = statSync(filename)
     if (!stats.isFile()) return false
-    if (process.platform !== 'win32') {
+    if (platform !== 'win32') {
       accessSync(filename, constants.X_OK)
     }
     return true
@@ -40,7 +40,8 @@ function pathEntries(pathValue, platform) {
 function locate(filename, options) {
   for (const directory of pathEntries(options.pathValue, options.platform)) {
     const candidate = path.join(directory, filename)
-    if (!existsSync(candidate) || !executableFile(candidate)) continue
+    if (!existsSync(candidate) || !executableFile(candidate, options.platform))
+      continue
     return realpathSync.native(candidate)
   }
   return null

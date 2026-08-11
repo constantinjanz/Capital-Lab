@@ -50,6 +50,17 @@ cross-platform tests; external evidence remains raw-byte exact. CI now installs
 and verifies PostgreSQL 17 client tools before any rehearsal. A fresh exact-head
 run remains mandatory; neither failure authorized or caused Hosted mutation.
 
+Exact-head CI run `31480224272` proved the canonical phase, backup, and handoff
+contracts on Linux and again passed Windows subprocess plus 4/4 browser jobs.
+The application suite then found that the simulated Windows resolver test still
+consulted the Linux execute bit even though the real Windows job passed; the
+resolver now consistently uses the explicitly selected platform, and the
+focused Linux test passes. The database job stopped before Supabase because
+Ubuntu Noble does not ship PostgreSQL 17 in its default repository. CI now adds
+the official PGDG HTTPS repository only after validating its full signing-key
+fingerprint, installs client 17, and asserts the major version. A fresh exact-head
+run is mandatory; no failing result is counted as evidence of completion.
+
 ## PR #21 activation-readiness adversarial hardening (2026-08-09)
 
 Safety status: implementation-only. Production migration/deployment/activation, Hosted extension/Vault/Cron mutation, scheduler HTTP, provider/model calls, Canary execution, broker connectivity, and PR merge/undraft are prohibited.
