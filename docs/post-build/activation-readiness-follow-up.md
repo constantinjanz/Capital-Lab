@@ -10,7 +10,7 @@ Draft PR: `#21` (must remain Draft and unmerged)
 
 Verified starting SHA: `e705f67db819be13c99f759e07186c63f114b831`
 
-Implementation SHA: `3ca3ce33c04d6f8f2a857ae664a09d29bc32ea80`
+Implementation SHA: `a98b30d0fcd68ea96253d60650201b692cd1a2d3`
 
 Final report/handoff SHA: intentionally recorded in the Draft PR and final chat
 handoff after this report is committed. A Git commit cannot contain its own SHA
@@ -89,12 +89,12 @@ No activation phase was executed in this remediation.
 | Artifact                                            | SHA-256                                                            |
 | --------------------------------------------------- | ------------------------------------------------------------------ |
 | `20260809150000_post_build_hosting_safety.sql`      | `ee9a1390a6cf1abfca9a8664d6dfe492bc217741265f2d0d5e8b010af6c0352e` |
-| `20260809150417_activation_readiness_follow_up.sql` | `1af10ee12e620c973cda31b2ecb8f7aaf34b87da8bd704c9afcd99f72ed30b91` |
+| `20260809150417_activation_readiness_follow_up.sql` | `513e6f8e7740ecc5eb5228ce2e2c5480acfe53dd700e4e9adad7790dd12ab994` |
 | `pre-activation.v1.json`                            | `98fad4a3292bf2f0e1d62e8967f04b165f5464e62590d164d80659c26239c706` |
-| `post-activation.v1.json`                           | `917e8e525984b4657efb137a75406c8c26ccbb1d4be2a7a3729e3f9545721039` |
+| `post-activation.v1.json`                           | `336482a386740e0b6ab2b536d17bb64f5a50c692f89f0b3cdf860a51cb51a8be` |
 | `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
 | `phase-contract.json` (18 phases)                   | `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d` |
-| handoff checksum manifest (115 entries)             | `de30a120b406ec2be4f84c07569fc3ca330fade66fc2c97dcdf2a7fce9453bd6` |
+| handoff checksum manifest (115 entries)             | `913f7c7a1b95c52992e4c18fb6194e2549e89e2556d7a0abed6f9a38ec6d1dc9` |
 
 ### Phase SQL
 
@@ -179,6 +179,19 @@ the installed native PG17 executable. CI now requires the exact executable
 prepends only that native tool directory through `GITHUB_PATH`. Reset, pgTAP,
 and both restores were correctly skipped after the rehearsal failure. This run
 is failed evidence and does not support readiness.
+
+CI run `31481331885` passed the complete application, Windows, and 4/4 browser
+jobs. The database job passed the fingerprint-bound PGDG client install, the
+rollback-only rehearsal of both pending migrations, and a fresh seed-free
+Supabase reset. pgTAP then failed closed before either restore and exposed three
+root causes: retry handling preceded the deployment-proof hash check, a local
+PL/pgSQL variable made `probe_kind` ambiguous, and the new terminal-operation
+trigger helper retained PostgreSQL's default `PUBLIC` execute privilege. The
+proof is now cryptographically validated before retry reconciliation, the
+variable is unambiguous, and the helper is covered by the explicit revoke set.
+The post-migration backup contract was regenerated from the new migration
+bytes. No failing assertion was weakened, and this failed run is not readiness
+evidence; a replacement exact-head run remains mandatory.
 
 ## Exact status-aware changed-file set
 
