@@ -220,6 +220,13 @@ async function main() {
       'platform_extensions_schema',
       platformAdminEnv,
     )
+    for (const extension of ['pgcrypto', 'citext', 'vector']) {
+      await sql(
+        `create extension if not exists ${extension} with schema extensions`,
+        `application_${extension}_extension`,
+        platformAdminEnv,
+      )
+    }
     await sql(
       'create schema if not exists vault authorization supabase_admin',
       'platform_vault_schema',

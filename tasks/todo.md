@@ -33,7 +33,7 @@ Local pre-commit evidence on Node `v24.14.0`: phase contract 18 files / SHA-256
 `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d`;
 backup contracts 82 pre-migration and 105 post-migration relations; Prettier exit
 0; ESLint exit 0 with zero warnings; strict TypeScript exit 0; Vitest 87 files /
-633 tests; PAPER-only scan exit 0; redacted credential scan exit 0 across the
+634 tests; PAPER-only scan exit 0; redacted credential scan exit 0 across the
 working tree and 100 commits; Next.js 16.3 production build exit 0; Playwright
 4/4 mock-only flows with fail-on-flaky exit 0; Supabase CLI `2.113.0` verified.
 This workstation has no Docker executable, so Supabase start/reset, pgTAP,
@@ -134,6 +134,19 @@ preparer now drops only that empty schema in the already validated loopback-only
 `capital_lab_restore` database, inside the existing `try/finally`, before any
 platform/app restore. Unit coverage freezes this ordering. Post restore did not
 run after the pre-restore failure; a replacement exact-head run is mandatory.
+
+Exact-head CI run `31487163698` passed application (87 files / 634 tests),
+Windows (4 files / 14 tests), browser (4/4), Supabase start, both rollback
+rehearsals, reset, and all 14 pgTAP files / 1927 assertions. The pre-activation
+export created all 82 relation artifacts and the seed-free target preparation
+completed; application-schema restore then failed closed because the disposable
+`template0` target had not installed the existing baseline `pgcrypto`, `citext`,
+and `vector` extensions before restoring columns typed as `extensions.vector`.
+The target preparer now installs exactly those unversioned historical baseline
+extensions in the already validated loopback-only database before application
+schema restore, and the ordering contract is frozen in unit coverage. Post
+restore did not run after the pre-restore failure; a replacement exact-head run
+remains mandatory.
 
 ## PR #21 activation-readiness adversarial hardening (2026-08-09)
 

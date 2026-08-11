@@ -95,10 +95,15 @@ describe('critical backup contract', () => {
     const extensionIndex = source.indexOf(
       'create extension if not exists supabase_vault with schema vault',
     )
+    const applicationExtensionIndex = source.indexOf(
+      "for (const extension of ['pgcrypto', 'citext', 'vector'])",
+    )
     const publicDropIndex = source.indexOf("'target_public_schema_drop'")
     const platformRestoreIndex = source.indexOf("'platform_schema_restore'")
     expect(schemaIndex).toBeGreaterThan(-1)
     expect(extensionIndex).toBeGreaterThan(schemaIndex)
+    expect(applicationExtensionIndex).toBeGreaterThan(-1)
+    expect(schemaIndex).toBeGreaterThan(applicationExtensionIndex)
     expect(publicDropIndex).toBeGreaterThan(-1)
     expect(platformRestoreIndex).toBeGreaterThan(publicDropIndex)
   })
