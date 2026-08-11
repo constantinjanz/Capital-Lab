@@ -12,7 +12,7 @@ model, Canary, broker, or trading execution is authorized.
 
 - [x] Derive the exact local and Draft-PR head (`e705f67db819be13c99f759e07186c63f114b831`), preserve the 21 unrelated shared-worktree edits, and create a clean detached worktree at that commit.
 - [x] Read the governing repository instructions, current Supabase/Vercel documentation and changelog, and verify read-only that Hosted still has 32 applied migrations while both PR migrations remain unapplied.
-- [ ] Prove a one-to-one repository/Hosted migration-name mapping and schema-equivalence evidence for every same-name/different-version discrepancy; stop rather than guessing on ambiguity.
+- [x] Prove a one-to-one repository/Hosted migration-name mapping and schema-equivalence evidence for every same-name/different-version discrepancy; stop rather than guessing on ambiguity. Read-only Hosted metadata and the pre contract contain the exact same 82 public/private base-relation names with RLS enabled; the 15 filename renames preserve the exact migration bytes.
 
 ### Executable remediation
 
@@ -26,14 +26,14 @@ model, Canary, broker, or trading execution is authorized.
 
 ### Verification and publication
 
-- [ ] Run focused unit/SQL contracts, then all mandatory application, browser, Supabase, pgTAP, rollback, pre/post restore, checksum, credential-history, Windows, hostile-endpoint, state-machine, side-effect, Canary, and break-glass gates on one exact clean Node 24 head.
-- [ ] Regenerate final-byte phase/migration/handoff checksums, update the post-build report with honest implementation/handoff SHAs and non-execution evidence, commit only scoped files, push the existing branch, and keep PR #21 Draft and unmerged.
+- [x] Run focused unit/SQL contracts, then all mandatory application, browser, Supabase, pgTAP, rollback, pre/post restore, checksum, credential-history, Windows, hostile-endpoint, state-machine, side-effect, Canary, and break-glass gates on one exact clean Node 24 head.
+- [x] Regenerate final-byte phase/migration/handoff checksums, update the post-build report with honest implementation/handoff SHAs and non-execution evidence, commit only scoped files, push the existing branch, and keep PR #21 Draft and unmerged.
 
 Local pre-commit evidence on Node `v24.14.0`: phase contract 18 files / SHA-256
 `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d`;
 backup contracts 82 pre-migration and 105 post-migration relations; Prettier exit
 0; ESLint exit 0 with zero warnings; strict TypeScript exit 0; Vitest 87 files /
-634 tests; PAPER-only scan exit 0; redacted credential scan exit 0 across the
+635 tests; PAPER-only scan exit 0; redacted credential scan exit 0 across the
 working tree and 100 commits; Next.js 16.3 production build exit 0; Playwright
 4/4 mock-only flows with fail-on-flaky exit 0; Supabase CLI `2.113.0` verified.
 This workstation has no Docker executable, so Supabase start/reset, pgTAP,
@@ -161,6 +161,20 @@ freezes the counts/owners and PostgreSQL tool versions in a version-5 manifest,
 and removes the restrictive-permission intermediate files. The restored current
 grant fingerprint remains exact. Post restore did not run after the pre failure;
 a replacement exact-head run remains mandatory.
+
+Exact-head CI run `31489442949` is the first complete green remediation run:
+application 87 files / 635 tests, credential scan over the worktree plus 100
+commits with zero redacted findings, Windows 4 files / 14 tests, browser 4/4,
+Supabase CLI 2.113.0 start, both rollback-only migration rehearsals, reset, and
+all 14 pgTAP files / 1927 assertions passed. The seed-free pre contract exported
+and restored 82/82 relations with externally retained manifest SHA-256
+`2994fbd798a0891641572748fe5df2c3c3d5af2b889acf48919f326a672006cb`;
+the post contract exported and restored 105/105 relations with manifest SHA-256
+`0f490a59df1c4f4b2cb19219dc8def5049c48baf5859ad76711aa128e012da8b`.
+Read-only Hosted metadata independently matched the exact 82-relation pre set
+with RLS enabled on every listed relation. No Production data, credential, or
+mutation was used. The final report/manifest-only commit still requires its own
+exact-head green CI before handoff.
 
 ## PR #21 activation-readiness adversarial hardening (2026-08-09)
 
