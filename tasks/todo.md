@@ -70,6 +70,19 @@ version directly, and prepends that exact native directory through
 `GITHUB_PATH` for subsequent `shell:false` resolution. Reset, pgTAP, and restore
 were correctly skipped; a fresh exact-head database run remains mandatory.
 
+Exact-head CI run `31481331885` passed the complete application, Windows, and
+4/4 browser jobs. Its database job passed the fingerprint-bound PGDG install,
+the rollback-only rehearsal, and a fresh seed-free reset before pgTAP failed
+closed. The database output exposed three root causes: deployment-proof retries
+checked the durable identity before recomputing the proof hash, a local
+`probe_kind` variable collided with the evidence column, and the newly added
+terminal-operation trigger helper retained PostgreSQL's default `PUBLIC`
+execute privilege. The proof check is now ordered before retry reconciliation,
+the variable is unambiguous, and the helper is included in the explicit revoke
+set. The post-migration backup contract was regenerated from the resulting
+migration bytes. The two restores remained correctly skipped; the replacement
+exact-head CI run is mandatory.
+
 ## PR #21 activation-readiness adversarial hardening (2026-08-09)
 
 Safety status: implementation-only. Production migration/deployment/activation, Hosted extension/Vault/Cron mutation, scheduler HTTP, provider/model calls, Canary execution, broker connectivity, and PR merge/undraft are prohibited.
