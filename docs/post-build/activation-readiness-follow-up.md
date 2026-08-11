@@ -1,314 +1,291 @@
-# PR #21 activation-readiness hardening report
+# PR #21 third activation-readiness remediation report
 
-Date: 2026-08-10
+Date: 2026-08-11
 
 Repository: `constantinjanz/Capital-Lab`
 
 Branch: `codex/activation-readiness-follow-up`
 
-Draft PR: `#21`
+Draft PR: `#21` (must remain Draft and unmerged)
 
-Derived starting SHA: `f23c8e4a98338e2546497d53ab77238f51c09691`
+Verified starting SHA: `e705f67db819be13c99f759e07186c63f114b831`
 
-End SHA: the exact Draft-PR HEAD identified in the final handoff and CI evidence;
-embedding a commit's own SHA in that commit is self-referential.
+Implementation SHA: `e436ea7565707ac671c906fe54b6e79aa3d3bf46`
+
+Final report/handoff SHA: intentionally recorded in the Draft PR and final chat
+handoff after this report is committed. A Git commit cannot contain its own SHA
+without changing that SHA, so the report does not make a self-referential claim.
+
+Merge base used by the checksum contract:
+`70ed610d5e0e5c08bf523d0d160a7b76f5fe2e51`.
 
 ## Authorization and non-execution
 
-This work changed repository artifacts only. It did not apply a Hosted or
-Production migration, run `supabase db push`, create/promote a Production
-deployment, alter Production environment variables, install/change/delete a
-Hosted extension, Vault value, or Cron job, send a scheduler HTTP request,
-invoke OpenAI, inspect/configure an OpenAI key, call a market/news provider,
-execute a Canary, connect a broker, or create a real order/fill/ledger entry.
-PR #21 remains draft, unmerged, and not marked ready for review.
+This remediation changed repository artifacts and used local/ephemeral test
+fixtures only. It did not apply a Hosted migration, run Hosted `db push`, run
+Hosted migration repair, install or mutate a Hosted extension, read/create/change
+a Hosted Vault secret, create/alter/activate/remove a Hosted Cron job, send a
+scheduler/auth-probe/auth-noop request, change a Vercel Production environment
+variable, create or promote a Production deployment, invoke OpenAI, market-data,
+news, broker, paid Canary, web-search, Sol, or trading execution, or create an
+order, fill, position, ledger entry, or other trading side effect. No secret,
+credential-derived hash, Authorization header, or credential value was persisted
+or printed. PR #21 was not merged or marked ready for review.
 
-Read-only preflight derived the branch, remote, Git HEAD, PR head, and complete
-working tree independently. Twenty-one unrelated modified files observed in the
-shared working tree were
-preserved and excluded from this change. Hosted migration history ended before
-both PR migrations; `20260809150000` and `20260809150417` were absent. The
-linked project had no `pg_cron` or `pg_net`, no activation tables/jobs, no
-planned Vault names, zero Vault rows, and no enabled scheduler/agent controls.
-The platform-provided Vault extension itself was present. Vercel observations
-found only Preview deployments (`target=null`), no live Production project, and
-tracked `vercel.json` disables deployment from `main`; the connector did not
-provide a complete Production environment-variable listing, so scope parity is
-still a manual gate.
+Dangerous controls remain required false: scheduler during the disabled
+deployment and after stop, agent, autonomous paper execution, paid models,
+Canary, web search, Sol challenger/execution, and real broker. The only modeled
+runtime exception is the separately reviewed no-AI Runtime deployment where
+`scheduler_enabled=true` is permitted only after its immutable deployment proof;
+all trading/AI/provider controls remain false and providers remain mock/paper.
+No activation phase was executed in this remediation.
 
-## Official source baseline reviewed before changes
+## Read-only preflight observations and limits
 
-- Supabase Database Migrations and migration-history guidance:
-  <https://supabase.com/docs/guides/deployment/database-migrations>
-- Supabase CLI Backup/Restore, including roles → schema → replica-mode data and
-  separately preserved migration history:
-  <https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore>
-- Supabase Cron and the current pg_cron troubleshooting guidance restricting
-  changes to `cron.schedule`, `cron.alter_job`, and `cron.unschedule`:
-  <https://supabase.com/docs/guides/cron> and
-  <https://supabase.com/docs/guides/troubleshooting/pgcron-debugging-guide-n1KTaz>
-- Supabase pg_net, Vault, RLS, and database-function security guidance:
-  <https://supabase.com/docs/guides/database/extensions/pg_net>,
-  <https://supabase.com/docs/guides/database/vault>,
-  <https://supabase.com/docs/guides/database/postgres/row-level-security>, and
-  <https://supabase.com/docs/guides/database/functions>
-- Current breaking-change feed, including the prohibition on direct
-  `cron.job` inserts/updates and managed-schema restrictions:
-  <https://supabase.com/changelog?types=breaking-change>
+- Git independently derived the starting branch/head and a 21-file unrelated
+  dirty set in the shared checkout. Work occurred in a clean detached worktree;
+  those unrelated files were neither staged, reformatted, reverted, nor committed.
+- The linked Supabase project ref is `qrnuyibntcxwffrxmrvn`. Read-only migration
+  metadata showed 32 applied entries and proved both pending PR migrations
+  `20260809150000` and `20260809150417` absent.
+- Fifteen same-name version discrepancies were mapped one-to-one to the Hosted
+  applied identifiers. Each repository rename is 100% byte-identical in Git.
+  Hosted history was not mutated and migration repair was not used. Exact schema
+  equivalence remains an exact-head pre/post baseline and restore CI assertion.
+- Read-only extension metadata showed `pg_cron` and `pg_net` absent. The
+  platform-managed Vault extension exists. Vault values and entries were not read.
+  No Hosted Cron/job/Vault mutation or scheduler request was made.
+- Read-only Vercel metadata identified team
+  `team_yqndKHk6nfWGlte1UVLTJOHG`, project
+  `prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR`, Node 24.x, `live=false`, and the observed
+  branch deployment as Preview/`target=null`. Production environment variables
+  and Production deployments were not changed or probed by request. A live
+  Production deployment proof is deliberately a later operator gate.
+- GitHub read-only metadata confirmed PR #21 is open, Draft, unmerged, and points
+  to the requested branch. Exact final head, CI run IDs, and Preview ID are added
+  to the Draft-PR handoff after the final push.
 
-## Finding disposition
+## Finding-by-finding disposition
 
-| Finding                                            | Root cause                                                                       | Remediation                                                                                                                                                                                              | Evidence                                                                                      | Residual risk                                                                                      |
-| -------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Cron identity trusted names                        | v1 stop/install paths could adopt same-name jobs                                 | Persist versioned schedule-returned IDs and full name/schedule/command/database/username/active hash; compare before every mutation; use only `cron.schedule`, `cron.alter_job`, `cron.unschedule` by ID | pgTAP covers command, schedule, database, username, wrong ID, collision, extra job, and retry | Hosted install/arm remains manual and unauthorized                                                 |
-| Bearer could target arbitrary HTTPS                | regex URL check and any 2xx were treated as evidence                             | Canonical parsed Production origin/path with no port/userinfo/query/fragment; exact Deployment/commit/environment; strict 401 and auth-noop response schemas; persistent sanitized evidence              | Route tests and pgTAP fixture reconciliation                                                  | No real Hosted request was sent by design                                                          |
-| Emergency stop depended on downstream systems      | Vercel/Cron/audit work shared the stop path                                      | Phase 1 commits all nine settings false, pauses experiment controls, and stops the campaign without Cron/Vercel/audit; later ID-reverified disable/audit/unschedule phases are retryable                 | Idempotent kill plus post-commit Cron-drift and audit-write fault injection                   | Operator still must verify the later phases during a future authorized run                         |
-| Caller asserted commit/target                      | runner accepted supplied hashes and substring project checks                     | Derive Git root/HEAD/clean tree; exact canonical manifest/phase checksums; structural TLS URL/host/user/db/port/mode parsing; server fingerprint on every phase; `shell:false`, `psql -X`, timeouts      | runner unit tests, TypeScript, activation artifact tests                                      | Pooler/direct fingerprints must be separately frozen; no silent switch                             |
-| pg_net evidence could expire                       | reconciler read ephemeral response rows only when work was due                   | Every tick first persists allowlisted response fields, validates complete JSON identity/counters, refreshes full snapshots, and marks missing evidence inconclusive                                      | 104 local pg_net responses are parsed, copied, then expired before durable-evidence finalize  | No real Hosted transport request was sent by design                                                |
-| Finalization could strand offline owner            | manual timing conflicted with final response drain                               | Server-time schedule, last-submit + 120s + 180s drain, 300s post-stop gate, automatic reconciler finalizer, exact 52/104 requirements, terminal evidence before unschedule                               | deterministic pgTAP 52/104 auto-finalize path                                                 | Production time/market-calendar evidence remains a later gate                                      |
-| Backup omitted critical/evidence state             | exporter and verifier had independent partial lists                              | One canonical v2 relation contract drives full-row hashes, column signatures, counts, sorting, exporter manifest, and restore verification; roles/schema/data share one URL/fingerprint                  | unit tamper tests; CI seed-free restore gate                                                  | No Production export/restore was authorized                                                        |
-| Excess privilege and mutable evidence              | broad service grants and row-only guards                                         | No `GRANT ALL`; forced RLS; private transitions not service-executable; narrow public wrappers; actor matrix; composite owner FKs; UPDATE/DELETE/TRUNCATE guards including Canary/audit/evidence         | pgTAP privileges, fixed search paths, composite FK and mutation tests                         | Database owner necessarily retains DDL authority                                                   |
-| Count-only baselines missed compensating mutations | a few counters represented side effects                                          | Full owner-row canonical hashes, column/state watermarks, cash/order/fill/position totals, fresh control/storage snapshots, retry equality                                                               | relation-contract and pgTAP baseline tests                                                    | Hashing cost must be observed before any authorized activation                                     |
-| Credentials/actions/Canary/health were weak        | narrow current-tree scan, moving action tags, parent env flags, ambiguous health | Redacted broader current/history scan, bounded history, immutable Action SHAs with release comments, child-only Canary env, exact disabled/mock health booleans                                          | scanner/unit/health tests and CI                                                              | Local ignored `.env.local` is intentionally not printed and prevents a local credential-gate claim |
+| Finding                     | Root cause                                                                             | Executable remediation                                                                                                                                                                                                      | Test/evidence                                                                                                               | Remaining gate or risk                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| P0-1 two Vercel deployments | One deployment identity incorrectly represented disabled auth and enabled runtime      | Append-only role bindings `auth_disabled` and `no_ai_runtime_enabled`; distinct immutable IDs; required `runtime_deployment_verified` state before freeze/arm; Runtime envelopes use only the Runtime binding               | Route, domain, runner and pgTAP happy/negative paths prohibit equal IDs and role/commit/project/environment drift           | Future real deployments require separately reviewed read-only proofs; none created here |
+| P0-2 trusted endpoint       | URL syntax and operator strings could bless an attacker origin                         | Checksummed project identity contract plus read-only Vercel proof verifier for team/project/READY/production/commit/deployment/alias/path; canonical no-port/userinfo/query/fragment origin; sanitized proof hash           | Hostile arbitrary host, redirect, alias, team/project, Preview, commit/deployment drift and forged-echo fixtures            | Live proof intentionally not executed in this repository-only run                       |
+| P0-3 mandatory 401 probes   | Auth-noop could skip missing/invalid Bearer validation                                 | Mandatory endpoint/probe-claimed/probes-verified/auth-noop/runtime states; exactly one durable missing and one invalid identity; exact 401/schema/no-redirect/zero-effects evidence; original request reconciliation only   | pgTAP happy path runs the probes; Auth-Noop-before-probes and replacement/unknown-outcome paths fail                        | No real request sent by design                                                          |
+| P0-4 pre-migration backup   | Existing exporter referenced post-migration objects and covered a partial relation set | Separate versioned pre (82 relations) and post (105 relations) contracts; catalog-complete classification; migration/history/role/server/schema/content evidence; external manifest hash; safe seed-free target preparation | Unit tamper matrix includes relation/column/history/schema/artifact/hash drift; CI owns both real seed-free export/restores | Docker absent locally; exact-head CI result is mandatory and must not be inferred       |
+| P0-5 handoff checksums      | Stale hashes and omitted changed files were not enforced                               | Deterministic status-aware merge-base generator; A/M hash HEAD bytes, D hashes merge-base bytes; exact casing/uniqueness/set verification; CRLF/LF-sensitive                                                                | Stale, omitted, extra, duplicate, rename/delete, casing and byte-difference tests                                           | Manifest excludes only itself and this report                                           |
+| Break-glass availability    | General runner rejected dirty trees and required Campaign/Vercel artifacts             | Minimal emergency runner allows unrelated dirt, verifies its own HEAD blobs, structurally binds TLS/project/database, requires UUID and exact phrase, runs bounded DB-first kill/readback without Vercel/manifest           | Dirty tree, absent manifest, Vercel unavailable, replay, target/campaign mismatch, timeout/unknown tests                    | Requires a future authorized database operator and valid target credentials             |
+| Side-effect completeness    | A fixed 22-table list omitted mutable application state                                | Every public/private base table is exactly activation evidence, scheduler envelope, forbidden, or explicit platform exclusion; new tables fail CI classification                                                            | Catalog equality plus adversarial market/portfolio/risk/simulator/trade/decision/experiment mutation tests                  | Schema growth must update the reviewed contract                                         |
+| Paid Canary prerequisite    | Paid claim was not tied to passed no-AI terminal evidence                              | Claim requires exactly one immutable passed Campaign, all dangerous controls false, jobs inactive/absent, and no unresolved network outcome                                                                                 | Canary-before-terminal and state-drift negatives                                                                            | Canary remains disabled and was not executed                                            |
+| Retry-safe terminal work    | Unknown commits could repeat or overwrite operations                                   | Operation-ID keyed append-only terminal operations return same evidence on retry and reject different identities                                                                                                            | Duplicate/unknown finalize, unschedule and emergency phase-two tests                                                        | Operator runbook must preserve the original operation ID                                |
+| Runtime/Windows/credentials | Mixed Node versions, shallow CI history, unsafe subprocess assumptions                 | Node 24.x everywhere; 100-commit bounded scanner with binary/size guards; executable resolution, argument arrays, `shell:false`, timeouts/signals, safe junction/case handling, held-file `try/finally`                     | Windows subprocess/metacharacter/path/fault tests and redacted current/history scan                                         | Local database gates need Docker; CI supplies the clean Linux database run              |
+| Database privilege/evidence | Administrative paths and append-only evidence needed stronger denial                   | Fixed empty `search_path`, qualified SQL, owner/campaign checks, composite FKs, minimal wrapper grants, no service-role admin transitions, UPDATE/DELETE/TRUNCATE guards                                                    | pgTAP RLS/grants/SECURITY DEFINER/TRUNCATE/service-role tests                                                               | Database owner retains unavoidable DDL authority                                        |
+| Reconcile/finalize          | Ephemeral pg_net and owner availability could strand or fabricate outcomes             | Capture first on every tick, exact JSON bindings/counters, fresh snapshots, missing evidence becomes inconclusive, drain before job disable, exact 52 slots/104 events, server-time final gates                             | Deterministic full path and late/duplicate/missing/error/correlation/counter/terminal mismatch tests                        | Real transport remains a later authorized gate                                          |
 
-## Complete changed-file list
+## Checksums from final implementation bytes
 
-```text
-.github/workflows/ci.yml
-.gitignore
-.prettierignore
-docs/BACKUP_AND_RESTORE.md
-docs/post-build/activation-readiness-checksums.sha256
-docs/post-build/activation-readiness-follow-up.md
-docs/post-build/hosting-safety-audit.md
-e2e/mock-mode.spec.ts
-package.json
-scripts/activation-artifacts.test.ts
-scripts/check-credential-patterns.mjs
-scripts/critical-backup-contract.mjs
-scripts/critical-backup-contract.test.ts
-scripts/export-critical-tables.mjs
-scripts/migration-rehearsal-contract.mjs
-scripts/migration-rehearsal-contract.test.ts
-scripts/prepare-seed-free-local-restore-target.mjs
-scripts/run-activation-phase.mjs
-scripts/run-activation-phase.test.ts
-scripts/run-local-rollback-migration-rehearsal.mjs
-scripts/run-openai-paid-canary-child.mjs
-scripts/verify-backup-restore.mjs
-src/app/api/health/route.test.ts
-src/app/api/health/route.ts
-src/app/api/internal/scheduler/route.test.ts
-src/app/api/internal/scheduler/route.ts
-src/features/research/research-importer.tsx
-src/lib/supabase/scheduler-runtime-repository.ts
-supabase/activation/disable-hosted-scheduler.sql
-supabase/activation/drain-reconcile.sql
-supabase/activation/emergency-disable-jobs.sql
-supabase/activation/emergency-kill.sql
-supabase/activation/enable-hosted-scheduler.sql
-supabase/activation/finalize-no-ai-dry-run.sql
-supabase/activation/install-hosted-scheduler-jobs-disabled.sql
-supabase/activation/phase-contract.json
-supabase/activation/plan-and-freeze-no-ai-dry-run.sql
-supabase/activation/prepare-no-ai-dry-run.sql
-supabase/activation/prepare-scheduler-infrastructure.sql
-supabase/activation/request-scheduler-auth-failures.sql
-supabase/activation/request-scheduler-auth-noop.sql
-supabase/activation/unschedule-terminal-jobs.sql
-supabase/activation/verify-scheduler-auth-failures.sql
-supabase/activation/verify-scheduler-auth-noop.sql
-supabase/activation/verify-scheduler-vault.sql
-supabase/backup/critical-relations.v2.json
-supabase/backup/critical-restore-evidence.sql
-supabase/backup/seed-free-target-prelude.sql
-supabase/migrations/20260809150417_activation_readiness_follow_up.sql
-supabase/tests/0001_database_contract.sql
-supabase/tests/activation_readiness_follow_up_test.sql
-supabase/tests/post_build_hosting_safety_test.sql
-tasks/todo.md
-```
-
-## Checksums from final candidate bytes
+### Top-level contracts
 
 | Artifact                                            | SHA-256                                                            |
 | --------------------------------------------------- | ------------------------------------------------------------------ |
-| `20260809150417_activation_readiness_follow_up.sql` | `98705c6fd920ed49fd061fb0136032cbda42214be4df269f56a8456312c6c7bb` |
-| `phase-contract.json`                               | `d795b4b100f932479e183316e82710bb5bc25693fee49163f6d1fc019bcb07f8` |
-| `critical-relations.v2.json`                        | `ce65298a8b8e93954ca787b610bcedc988f04ce7645ba971395227aff6ba306d` |
-| `run-activation-phase.mjs`                          | `90d943f61a22e18236912d635438f25490e21838a6a9ff862c654d3251c25b0d` |
-| `check-credential-patterns.mjs`                     | `6541199b6bb8d545a5bc46f13ea0d92c6d9fdb0f3363e3f67ebfe5ba8a018a00` |
-| `critical-backup-contract.mjs`                      | `ed9cf2b51831e8df4f69419661e285b291531617c43b849b66419b5051b4e0c9` |
-| `export-critical-tables.mjs`                        | `5cd88bc7529d35ed933af1034a2a053d041dc845f8a5ff66a69e4e48abdeca53` |
-| `verify-backup-restore.mjs`                         | `0ad78110e103100c9109dafe2054ca91edd9c4cc48fa1d820963988de1e7e65c` |
-| `prepare-seed-free-local-restore-target.mjs`        | `1b1639662579cdb612ab26a1c48395404a1afdc68b2fcee1659446edc9acca15` |
-| `seed-free-target-prelude.sql`                      | `2857a4ec4001d8e8c53fc2eb632b04d2ec92f9068893c1814d951e3f1321342c` |
-| `migration-rehearsal-contract.mjs`                  | `566d1ab92b61c63c93a4dd69ba0a93187e8a7a3316492c62bb426c3e65401eb6` |
-| `run-local-rollback-migration-rehearsal.mjs`        | `6ce6b9675cadd79fbccc4a15f55e49524c434980ca523dabcbe5fcd2e651f256` |
-| `activation-readiness-checksums.sha256`             | `1a117918dae03a9e6a5acbdaf81294cf11c04f49d16b3a2eb020b07c5e40a4db` |
+| `20260809150000_post_build_hosting_safety.sql`      | `3eed555ddd7249e49e21295bfd3cb6e3346d6d3b43b9cef4c85ef9dc2413463a` |
+| `20260809150417_activation_readiness_follow_up.sql` | `eae2977846147a5d668b7c5d600bd5c4e2f96f18ca4fff6e19cf253d753b9651` |
+| `pre-activation.v1.json`                            | `d947784b51612197daf8e01679bcf7114b9364bede15e7f2e0b76b4706fba153` |
+| `post-activation.v1.json`                           | `0df64474a0d545f0bbe44e3db2237ccc991a0cbc2e893430540304e8407423cc` |
+| `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
+| `phase-contract.json` (18 phases)                   | `bd1bd6a9192ca4fd3aba734e9c1d991e430609f0e9b6f6153ff9e970d23436d5` |
+| handoff checksum manifest (113 entries)             | `fd041b546b9fea3fc21860192cc6e75658bdce7f19ef5a11be0f4c1a44d2fd09` |
 
-`activation-readiness-checksums.sha256` freezes every other changed file's
-final bytes, including migrations, SQL phases/tests, scripts/tests, manifests,
-application boundaries, CI, runbooks, and task evidence. It intentionally
-excludes itself and this self-referential report; its own hash is recorded
-above.
+### Phase SQL
 
-The canonical phase contract additionally binds every phase file:
-
-| Phase file                                   | SHA-256                                                            |
-| -------------------------------------------- | ------------------------------------------------------------------ |
-| `enable-hosted-scheduler.sql`                | `6cbbb8eab716ee5e6fbc7702d17982847de0a6d61817b652170c542b08f0506b` |
-| `verify-scheduler-auth-failures.sql`         | `7129e5a10baf51622b917e497039a030570fb1641b17f9e520f818a617f03db5` |
-| `request-scheduler-auth-failures.sql`        | `fd1417acc208e536c20dd29568975fe25a2b4c502461e1e7033111c2d3c44cf4` |
-| `verify-scheduler-auth-noop.sql`             | `c462504bb5a59ab72c849db60ddddd8514e5f3c84024f1101dfec0daf861c2f9` |
-| `request-scheduler-auth-noop.sql`            | `a813eb81d1536c99ec5ccf7cd69ca5b57ec11c3eb4cb624afcc57eef4459fdfd` |
-| `plan-and-freeze-no-ai-dry-run.sql`          | `f467a4cecac6af4eeddcd255bdc28e31c198ecd43b01ee636f18ce920e128dc2` |
-| `drain-reconcile.sql`                        | `b4f799909161cd3cd05d0b5876255c39178446568097bc547e7c2ab33a1d4a80` |
-| `emergency-disable-jobs.sql`                 | `ed20ca43bee72dcb8bd7f20288c0b023404f0142a74a42554741a8e8a0d128a1` |
-| `emergency-kill.sql`                         | `5aa4b1b775322cdc5641c944830774c1e2c92cf764019adfbbef1ecc5037df34` |
-| `install-hosted-scheduler-jobs-disabled.sql` | `27226009f6b4845013732f9c2971a7c28c764e596b83a2ed8538fa3aaeef5588` |
-| `finalize-no-ai-dry-run.sql`                 | `2c62c980c063cbc20c5bd5007452d89c000f544aaab89464ef017344d7f5453a` |
-| `disable-hosted-scheduler.sql`               | `1a88c394e14349084ce2d4274b43643c78bbeec3f2db3a3bacb2bdcd4a7408c4` |
-| `prepare-no-ai-dry-run.sql`                  | `64b6089eac37c7ccb7f55a5c4cd9c1f8d3597116d23a6af338858b0ef3c91925` |
-| `prepare-scheduler-infrastructure.sql`       | `d4610aa204f91eb64538535a6a79f7262e8f099f1d8c71f4d757f9ba5e0f0514` |
-| `unschedule-terminal-jobs.sql`               | `f771bfe937d9729d14ff4860cd65952a993e2c022a84e845bb680d184ed613d7` |
-| `verify-scheduler-vault.sql`                 | `41c5ef2edb010fee881d9535464aaf23bbacd4c76e8f2499270583055e627af1` |
+| Phase                                | SHA-256                                                            |
+| ------------------------------------ | ------------------------------------------------------------------ |
+| prepare                              | `291ad466b037ff98e5227ea2bff11daf7ca002ccc3bde81fc7845147e9bf2d54` |
+| scheduler-infrastructure-preparation | `6575394a2177e40617e2cb64a99b6e3898eaad23bdd46cead3f310e2d9fa30c4` |
+| vault-verification                   | `05e200ca47bab99609039a95901c8efbb52a8dcd083a66ec145b436333782429` |
+| install-jobs-disabled                | `9d2616f588aaa38ce15b2e56861f5a6f54a2da3f536b53adc2103b62eab2b786` |
+| auth-endpoint-verify                 | `e87a224c33235203fe3cf43ebe0a91fa7eba5324bdc315afab8924aa80258e55` |
+| auth-failure-request                 | `0121b6a2024f953e3721eb7ee89c9e523b0cf3ef13b9532c471c4c0e489f4fcd` |
+| auth-failure-reconcile               | `b3db0b6549d8d1398fa56a0e1fa794e064a83c25c0d402c3a432d895d419b6fd` |
+| auth-noop-request                    | `f8d5caf254eb6485f3be4ae43b042501434a0e3264a952dac09af1e89a97c874` |
+| auth-noop-reconcile                  | `fbdf3b662a58b50cb4c19fa62591c2c62b24709cf7f5f687ec6a9ece5a8403e8` |
+| runtime-deployment-verify            | `9a744d361d9812a91636d92b7cf1c4ae362d0175c09597523937f558f774d57f` |
+| baseline-freeze                      | `f04829ac8aad48ecbf0d631862815558425790512a3673c1f499404d97554309` |
+| arm                                  | `5c8f77c39778e287033103d2b1cc5f86cd73c156464753d6269a1d13b5ca3ed5` |
+| drain-reconcile                      | `64847fba0b6341ebec4cb0cf8b56ae78ccef717411210a061e9fa649daf0267c` |
+| manual-finalize                      | `34251b228128af43ef25aba45f08dc1359b32bf0a9496709951c25e09030093d` |
+| orderly-stop                         | `5a9c06b84dac412775f0a36fc029d6e7e2b39dcf5825915059084b0e7dd8e1d1` |
+| unschedule-terminal-jobs             | `6cdd3c088941706f284de3cbf0f6b673b344667ae4e6da5ec79da37332201c3f` |
+| emergency-kill                       | `5d88eee2a81f5ad69c9e5a963fbee710f1be6c07833fe8c76b53cbf3b8a74759` |
+| emergency-disable-jobs               | `32b50017555a6acfb2ee6be71486fc73e038e3a685bafbde64cc9eb87c6ddac3` |
 
 ## Verification ledger
 
-| Command/evidence                                                         |        Exit | Result                                                                                                                 | Status                                                                                                                                |
-| ------------------------------------------------------------------------ | ----------: | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| direct `tsc --noEmit`                                                    |           0 | strict                                                                                                                 | locally verified                                                                                                                      |
-| direct `eslint . --max-warnings=0`                                       |           0 | zero warnings                                                                                                          | locally verified                                                                                                                      |
-| focused security Vitest                                                  |           0 | 5 files / 34 tests                                                                                                     | locally verified                                                                                                                      |
-| complete Vitest                                                          |           0 | 79 files / 589 tests                                                                                                   | locally verified                                                                                                                      |
-| `node scripts/check-paper-only.mjs`                                      |           0 | PAPER-only scan passed                                                                                                 | locally verified                                                                                                                      |
-| `git diff --check`                                                       |           0 | no whitespace errors                                                                                                   | locally verified                                                                                                                      |
-| focused backup/rollback Vitest                                           |           0 | 2 files / 15 tests                                                                                                     | locally verified                                                                                                                      |
-| focused changed-file ESLint plus strict TypeScript                       |           0 | zero warnings / strict                                                                                                 | locally verified after hydration and rollback additions                                                                               |
-| local credentials                                                        | not claimed | ignored `.env.local` contains redacted credential categories                                                           | expected local owner gate; values never emitted                                                                                       |
-| local Supabase/pgTAP                                                     | unavailable | Docker, Supabase CLI, and psql absent                                                                                  | exact clean CI required                                                                                                               |
-| local seed-free export/restore                                           | unavailable | Docker/psql absent                                                                                                     | exact clean CI required                                                                                                               |
-| exact-head application CI, run `31341237570`                             |           0 | format, lint, typecheck, 589 tests, safety, credentials, build                                                         | verified on `1a97c215...`                                                                                                             |
-| exact-head browser CI, run `31341237570`                                 |           0 | Playwright critical flows                                                                                              | verified on `1a97c215...`                                                                                                             |
-| exact-head database CI, run `31341237570`                                |           1 | first migration compile exposed non-idempotent trigger drop                                                            | fixed with `DROP TRIGGER IF EXISTS`; rerun required                                                                                   |
-| exact-head application CI, run `31341396633`                             |           1 | report formatting only                                                                                                 | formatted; rerun required                                                                                                             |
-| exact-head browser CI, run `31341396633`                                 |           0 | Playwright critical flows                                                                                              | verified on `6113a000...`                                                                                                             |
-| exact-head database CI, run `31341396633`                                |           1 | second compile exposed PostgreSQL parameter-name replacement                                                           | retained the installed signature names; rerun required                                                                                |
-| exact-head application CI, run `31341545900`                             |           0 | complete application gate                                                                                              | verified on `7819a6c1...`                                                                                                             |
-| exact-head browser CI, run `31341545900`                                 |           0 | Playwright critical flows                                                                                              | verified on `7819a6c1...`                                                                                                             |
-| exact-head Supabase start/reset, run `31341545900`                       |           0 | full migration compile and deterministic reset                                                                         | verified on `7819a6c1...`                                                                                                             |
-| exact-head pgTAP, run `31341545900`                                      |           1 | 1,332 assertions exposed overbroad private-function revoke and unsupported Cron-owner mutation fixture                 | narrowed to exact activation allowlist and safe API rejection/hash proof; rerun required                                              |
-| exact-head application CI, run `31341809083`                             |           0 | complete application gate                                                                                              | verified on `0e1a6da9...`                                                                                                             |
-| exact-head browser CI, run `31341809083`                                 |           0 | Playwright critical flows                                                                                              | verified on `0e1a6da9...`                                                                                                             |
-| exact-head Supabase start/reset, run `31341809083`                       |           0 | full migration compile and deterministic reset                                                                         | verified on `0e1a6da9...`                                                                                                             |
-| exact-head pgTAP, run `31341809083`                                      |           1 | 1,836 assertions: one exposed-wrapper contract mismatch plus 19 activation cascade failures                            | exact wrapper allowlist/fixed search paths, explicit safe-control fixture, scoped writer gate, and SQLSTATE corrected; rerun required |
-| exact-head application CI, run `31342073726`                             |           0 | complete application gate                                                                                              | verified on `0e5f4fdc...`                                                                                                             |
-| exact-head browser CI, run `31342073726`                                 |           0 | Playwright critical flows                                                                                              | verified on `0e5f4fdc...`                                                                                                             |
-| exact-head Supabase start/reset, run `31342073726`                       |           0 | full migration compile and deterministic reset                                                                         | verified on `0e5f4fdc...`                                                                                                             |
-| exact-head pgTAP, run `31342073726`                                      |           1 | 1,833/1,836 passed; future planned slot's proposed lease ended before `slot_at` in the accelerated local happy path    | lease now expires after the greater of server time and server-planned slot; rerun required                                            |
-| exact-head application CI, run `31342252647`                             |           0 | complete application gate                                                                                              | verified on `2de5a146...`                                                                                                             |
-| exact-head browser CI, run `31342252647`                                 |           0 | Playwright critical flows                                                                                              | verified on `2de5a146...`                                                                                                             |
-| exact-head Supabase start/reset/pgTAP, run `31342252647`                 |           0 | pinned CLI `2.113.0`; 14 files / 1,836 assertions                                                                      | full deterministic database contract verified on `2de5a146...`                                                                        |
-| exact-head seed-free export/restore, run `31342252647`                   |           1 | exporter stopped before dump because post-toolchain Git status was non-clean                                           | path-only redacted diagnosis added without weakening clean-tree rejection; rerun required                                             |
-| exact-head application CI, run `31342485611`                             |           0 | complete application gate                                                                                              | verified on `377704ea...`                                                                                                             |
-| exact-head Supabase start/reset/pgTAP, run `31342485611`                 |           0 | pinned CLI and all 1,836 assertions                                                                                    | database contract remains green                                                                                                       |
-| exact-head seed-free export/restore, run `31342485611`                   |           1 | path-only evidence identified `supabase/.branches/_current_branch` as the sole dirty entry                             | exact generated CLI state root ignored; all other dirt remains blocking                                                               |
-| exact-head browser CI, run `31342485611`                                 |           1 | one unchanged Research-import assertion timed out; 3/4 passed                                                          | no retry/timeout weakening; fresh exact-head run required                                                                             |
-| exact-head application/browser CI, run `31342645890`                     |           0 | complete application and 4/4 Playwright gates                                                                          | verified on `b8d3700e...`                                                                                                             |
-| exact-head Supabase start/reset/pgTAP, run `31342645890`                 |           0 | pinned CLI and all 1,836 assertions                                                                                    | database contract remains green                                                                                                       |
-| exact-head seed-free export/restore, run `31342645890`                   |           1 | clean-tree gate passed; first canonical evidence query failed before dumps                                             | literal-/URL-redacted PostgreSQL error classification added; rerun required                                                           |
-| exact-head application/browser CI, run `31342850522`                     |           0 | complete application and 4/4 Playwright gates                                                                          | verified on `926af4a9...`                                                                                                             |
-| exact-head Supabase start/reset/pgTAP, run `31342850522`                 |           0 | pinned CLI and all 1,836 assertions                                                                                    | database contract remains green                                                                                                       |
-| exact-head seed-free export/restore, run `31342850522`                   |           1 | pre-dump `psql` failure used lowercase error formatting and remained unclassified                                      | case-insensitive redacted classification added; rerun required                                                                        |
-| exact-head application/browser CI, run `31343009696`                     |           0 | complete application and 4/4 Playwright gates                                                                          | verified on `dbc481ee...`                                                                                                             |
-| exact-head Supabase start/reset/pgTAP, run `31343009696`                 |           0 | pinned CLI and all 1,836 assertions                                                                                    | database contract remains green                                                                                                       |
-| exact-head seed-free export/restore, run `31343009696`                   |           1 | libpq ignored a connection URI placed only in `PGDATABASE` and fell back to socket port 5432                           | URL now strictly parsed into explicit non-logged libpq fields for exporter and verifier; rerun required                               |
-| exact-head browser CI, run `31343249634`                                 |           0 | 4/4 Playwright gates                                                                                                   | verified on `69044778...`                                                                                                             |
-| exact-head Supabase start/reset/pgTAP, run `31343249634`                 |           0 | pinned CLI and all 1,836 assertions                                                                                    | database contract remains green                                                                                                       |
-| exact-head export, run `31343249634`                                     |           0 | sensitive roles/schema/data dumps and manifest created outside repository in ephemeral runner storage                  | exporter/source evidence path verified; ephemeral runner discarded artifact                                                           |
-| exact-head restore contract, run `31343249634`                           |           1 | manifest verifier rejected a safe contract-field mismatch before restoring roles/schema/data                           | safe mismatch categories and exact psql distribution-version validation added                                                         |
-| exact-head credential CI, run `31343249634`                              |           1 | synthetic reserved-host URL fixture matched current/history DB-URL rule                                                | only that exact test file plus loopback/reserved host fixtures are internally excluded; real files/history remain blocking            |
-| exact-head application/browser/credential CI, run `31343512116`          |           0 | complete application, 4/4 Playwright, current/history credential gate                                                  | verified on `641c78fe...`                                                                                                             |
-| exact-head Supabase start/reset/pgTAP/export/manifest, run `31343512116` |           0 | pinned CLI, 1,836 assertions, sensitive external export, strict manifest validation                                    | source/export/manifest chain verified                                                                                                 |
-| exact-head seed-free target preflight, run `31343512116`                 |           1 | first target `psql` preflight failed before roles/schema/data restore                                                  | shared literal-/URL-redacted PostgreSQL diagnostic added; rerun required                                                              |
-| exact-head application/browser/credential CI, run `31343752298`          |           0 | complete application, 4/4 Playwright, current/history credential gate                                                  | verified on `94c530ef...`                                                                                                             |
-| exact-head Supabase start/reset/pgTAP/export/manifest, run `31343752298` |           0 | pinned CLI, 1,836 assertions, sensitive external export, strict manifest validation                                    | source/export/manifest chain remains green                                                                                            |
-| exact-head seed-free target preflight, run `31343752298`                 |           1 | `system_identifier` was not aggregated beside the empty-target relation count                                          | server identifier now uses `max()` in the same preflight aggregate; rerun required                                                    |
-| exact-head application/browser/credential CI, run `31343987544`          |           0 | complete application, 4/4 Playwright, current/history credential gate                                                  | verified on `bf29934f...`                                                                                                             |
-| exact-head Supabase start/reset/pgTAP/export/manifest, run `31343987544` |           0 | pinned CLI, 1,836 assertions, sensitive external export, strict manifest validation                                    | source/export/manifest chain remains green                                                                                            |
-| exact-head seed-free role phase, run `31343987544`                       |           1 | replaying cluster-global role settings into a second database on the same server required unavailable superuser rights | same-server restores now fingerprint the password-free global role policy instead of mutating the source cluster; rerun required      |
-| exact-head application/browser/credential CI, run `31344323501`          |           0 | complete application, 4/4 Playwright, current/history credential gate                                                  | verified on `f7c8e963...`                                                                                                             |
-| exact-head Supabase start/reset/pgTAP/export/manifest, run `31344323501` |           0 | pinned CLI, 1,836 assertions, role/server fingerprint and target preflight                                             | source/export/role/preflight chain verified                                                                                           |
-| exact-head seed-free schema phase, run `31344323501`                     |           1 | an empty `template0` target lacked the managed `extensions` schema intentionally excluded by Supabase CLI dumps        | tracked data-free target Prelude is now manifest-checksummed and creates only that empty schema; rerun required                       |
-| exact-head application/browser/credential CI, run `31344675766`          |           0 | format, lint, typecheck, 79 files / 594 tests, safety, credentials, build, 4/4 Playwright                              | verified on `36d47ed5...`                                                                                                             |
-| exact-head Supabase reset / extended pgTAP, run `31344675766`            |           1 | local response fixture used the operation UUID where the frozen request UUID was required                              | exact claimed request identity corrected; restore step was not reached; rerun required                                                |
-| exact-head application/credential CI, run `31344881015`                  |           0 | format, lint, typecheck, 79 files / 594 tests, safety, credentials, build                                              | verified on `0a3d9277...`                                                                                                             |
-| exact-head browser CI, run `31344881015`                                 |           1 | unchanged Research-import assertion did not observe `Preview valid`; 3/4 passed                                        | no retry, timeout, or assertion weakening; fresh exact-head green run required                                                        |
-| exact-head Supabase reset / extended pgTAP, run `31344881015`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | full durable-response, 52/104, drift, privilege, and emergency-fault path green                                                       |
-| exact-head seed-free schema phase, run `31344881015`                     |           1 | `template0` target passed export, manifest, role-policy, and preflight, then lacked the empty `vault` namespace        | checksummed Prelude now creates only empty `extensions` and `vault` namespaces; no extension, table, role, migration, or row          |
-| exact-head application CI, run `31345275407`                             |           0 | format, lint, typecheck, 79 files / 594 tests, safety, credentials, build                                              | verified on `d6d682bd...`                                                                                                             |
-| exact-head browser CI, run `31345275407`                                 |           1 | Research-import again did not expose `Preview valid`; 3/4 passed                                                       | repeated failure is under root-cause investigation; no assertion or timeout weakened                                                  |
-| exact-head Supabase reset / extended pgTAP, run `31345275407`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green                                                                                                      |
-| exact-head seed-free schema phase, run `31345275407`                     |           1 | `template0` advanced through `extensions`/`vault`, then lacked managed `auth`                                          | target construction now clones a real seed-free local Supabase platform baseline; validation Prelude no longer synthesizes namespaces |
-| exact-head application/browser CI, run `31345678279`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `9af64397...`                                                                                                             |
-| exact-head Supabase reset / extended pgTAP, run `31345678279`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green with OID-bound fingerprint                                                                           |
-| exact-head local target preparation, run `31345678279`                   |           1 | target builder failed closed with intentionally generic output                                                         | fixed, non-sensitive phase labels added; no stderr, URL, SQL value, or credential will be emitted                                     |
-| exact-head application/browser CI, run `31345975029`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `2f805bdd...`                                                                                                             |
-| exact-head Supabase reset / extended pgTAP, run `31345975029`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green                                                                                                      |
-| exact-head local target preparation, run `31345975029`                   |           1 | `source_drain` was denied for one or more Supabase service backends                                                    | physical clone removed; logical seed-free platform dump/restore requires no backend termination                                       |
-| exact-head application/browser CI, run `31346276617`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `0e4edb2e...`                                                                                                             |
-| exact-head Supabase startup, run `31346276617`                           |           1 | runner-local port `54322` was already bound before the database container started                                      | infrastructure failure before reset/migration/test; no gate was retried or weakened                                                   |
-| exact-head application/browser CI, run `31346407773`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `02127db2...`                                                                                                             |
-| exact-head Supabase reset / extended pgTAP, run `31346407773`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green                                                                                                      |
-| exact-head local target preparation, run `31346407773`                   |           1 | logical builder reached `platform_schema_dump` and failed closed                                                       | existing category-only PostgreSQL redactor added for fixed platform phases; dump/stdout remain suppressed                             |
-| exact-head application/browser CI, run `31346632981`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `75e58efa...`                                                                                                             |
-| exact-head Supabase reset / extended pgTAP, run `31346632981`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green                                                                                                      |
-| exact-head local target preparation, run `31346632981`                   |           1 | runner `pg_dump` major version differed from the Supabase database                                                     | baseline dump moved to the same pinned Supabase CLI container path already proven by critical export                                  |
-| exact-head application/browser CI, run `31346865611`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `72f923f2...`                                                                                                             |
-| exact-head Supabase reset / extended pgTAP, run `31346865611`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green                                                                                                      |
-| exact-head platform schema restore, run `31346865611`                    |           1 | managed dump required `SET ROLE supabase_admin`; generic operator is not a member                                      | managed baseline alone now restores through fixed local `supabase_admin`; app restore/evidence remain operator-bound                  |
-| exact-head application/browser CI, run `31347131750`                     |           0 | complete application gate and 4/4 Playwright                                                                           | verified on `91785215...`                                                                                                             |
-| exact-head Supabase reset / extended pgTAP, run `31347131750`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remained green                                                                                                      |
-| exact-head platform data restore, run `31347131750`                      |           1 | extension-owned `vault.secrets` was absent while Vault data COPY was attempted                                         | local unpinned `supabase_vault` install added; baseline data narrowed to `auth,storage`; preflight requires actual Vault relation     |
-| exact-head application CI, run `31347387043`                             |           0 | format, lint, typecheck, 79 files / 594 tests, safety, credentials, build                                              | verified on `b6089025...`                                                                                                             |
-| exact-head Supabase reset / extended pgTAP, run `31347387043`            |           0 | pinned CLI, all 14 pgTAP files / 1,851 assertions                                                                      | database contract remains green                                                                                                       |
-| exact-head seed-free platform baseline, run `31347387043`                |           0 | managed baseline schema/data and unpinned local Vault extension provisioned                                            | local-only builder completed without Hosted mutation                                                                                  |
-| exact-head role restore, run `31347387043`                               |           1 | redundant distinct-server role replay lacked authority for a cluster-global setting                                    | full password-free role attributes/memberships now skip replay on equality and reverify any required distinct-server replay           |
-| exact-head browser CI, run `31347387043`                                 |           1 | file input was changed before hydration attached its handler; `Preview valid` remained absent                          | SSR-disabled/client-enabled hydration boundary added; semantic assertion retained                                                     |
-| exact-head application/browser CI, run `31404735561`                     |           0 | complete application gates and 4/4 Playwright flows                                                                    | verified on `c2a864ae...`; hydration-gated import is deterministic                                                                    |
-| exact-head rollback/reset/pgTAP, run `31404735561`                       |           0 | rollback-only PR migration rehearsal, full reset, 14 pgTAP files / 1,851 assertions                                    | migration rollback and database contracts verified                                                                                    |
-| exact-head seed-free schema restore, run `31404735561`                   |           1 | schema-filtered platform baseline lacked the global empty `supabase_realtime` publication                              | disposable builder now creates the exact non-all-table default-DML publication; preflight and checksummed Prelude require it          |
-| exact-head application/browser CI, run `31405499189`                     |           0 | complete application gates and 4/4 Playwright flows                                                                    | verified on `7d9e9707...`                                                                                                             |
-| exact-head rollback/reset/pgTAP, run `31405499189`                       |           0 | rollback-only rehearsal, full reset, 14 pgTAP files / 1,851 assertions                                                 | database contract remains green                                                                                                       |
-| exact-head seed-free data restore, run `31405499189`                     |           1 | unscoped data dump included managed Storage baseline tables outside the critical relation contract                     | data schemas now derive from the canonical relation contract, are manifest-frozen, and exclude separately provisioned platform state  |
-| exact-head application CI, run `31406201745`                             |           0 | format, lint, typecheck, 80 files / 600 tests, safety, 100-commit credential scan, build                               | first complete green cycle at `1023be44ed9f4e1f0e610dba8a501c7ccf687e89`                                                              |
-| exact-head browser CI, run `31406201745`                                 |           0 | 4/4 Playwright flows                                                                                                   | hydration-gated Research import remained green                                                                                        |
-| exact-head local database CI, run `31406201745`                          |           0 | CLI 2.113.0, start, rollback rehearsal, reset, 14 pgTAP files / 1,851 assertions                                       | exact migration and database contracts green                                                                                          |
-| exact-head seed-free export/restore, run `31406201745`                   |           0 | sensitive external export, managed target, full restore evidence for 40 relations                                      | seed-free disposable restore verified                                                                                                 |
+Local machine: Windows, Node `v24.14.0`, mock/paper-only environment. Commands
+that initially failed solely because the sandbox denied browser spawn or public
+font retrieval were rerun with the same command outside that sandbox; both then
+passed. No assertion, timeout, retry, or safety gate was weakened.
+
+| Command                                      |        Exit | Result                                          |
+| -------------------------------------------- | ----------: | ----------------------------------------------- |
+| `prettier --check .`                         |           0 | all matched files formatted                     |
+| `eslint . --max-warnings=0`                  |           0 | zero warnings                                   |
+| `tsc --noEmit`                               |           0 | strict TypeScript passed                        |
+| `vitest run`                                 |           0 | 86 files, 631 tests passed                      |
+| `node scripts/check-paper-only.mjs`          |           0 | PAPER-only scanner passed                       |
+| `node scripts/check-credential-patterns.mjs` |           0 | worktree + 100 commits, zero redacted findings  |
+| `next build`                                 |           0 | Next.js 16.3 production build passed on Node 24 |
+| `playwright test --fail-on-flaky-tests`      |           0 | 4/4 Chromium mock-only flows passed             |
+| `supabase@2.113.0 --version`                 |           0 | exact version `2.113.0`                         |
+| `activation-phase-contract.mjs --verify`     |           0 | 18 phases, exact contract hash                  |
+| `generate-backup-contracts.mjs --verify`     |           0 | 82 pre / 105 post relations                     |
+| `handoff-checksums.mjs --verify`             |           0 | 113 exact entries, exact manifest hash          |
+| `git diff --check`                           |           0 | no whitespace errors                            |
+| `docker version`                             | unavailable | executable absent; no local DB gate claimed     |
+
+The local seed-free pre/post restore, Supabase start/reset/pgTAP, and rollback
+rehearsals were not run because Docker is unavailable. They remain mandatory
+exact-head CI gates. CI run IDs, exact pgTAP assertion count, both restore
+results, Preview deployment ID, and final handoff SHA are recorded after the
+final push; until they are green this report remains NO-GO.
+
+## Exact status-aware changed-file set
+
+`A` and `M` entries hash canonical HEAD bytes. `D` entries hash canonical
+merge-base bytes. The checksum manifest excludes only itself and this report.
+
+```text
+M  .github/workflows/ci.yml
+M  .gitignore
+A  .node-version
+A  .nvmrc
+M  .prettierignore
+M  docs/BACKUP_AND_RESTORE.md
+M  docs/DEPLOYMENT.md
+M  docs/KNOWN_LIMITATIONS.md
+M  docs/post-build/hosting-safety-audit.md
+M  docs/RUNBOOK.md
+M  e2e/mock-mode.spec.ts
+M  IMPLEMENTATION_PLAN.md
+M  package.json
+M  playwright.config.ts
+M  README.md
+A  scripts/activation-artifacts.test.ts
+A  scripts/activation-phase-contract.mjs
+A  scripts/check-credential-patterns.mjs
+A  scripts/critical-backup-contract.mjs
+A  scripts/critical-backup-contract.test.ts
+M  scripts/export-critical-tables.mjs
+A  scripts/generate-backup-contracts.mjs
+A  scripts/generate-backup-contracts.test.ts
+A  scripts/handoff-checksums.mjs
+A  scripts/handoff-checksums.test.ts
+A  scripts/lib/held-files.mjs
+A  scripts/lib/held-files.test.ts
+A  scripts/lib/safe-process.mjs
+A  scripts/lib/safe-process.test.ts
+A  scripts/migration-rehearsal-contract.mjs
+A  scripts/migration-rehearsal-contract.test.ts
+A  scripts/prepare-seed-free-local-restore-target.mjs
+A  scripts/run-activation-phase.mjs
+A  scripts/run-activation-phase.test.ts
+A  scripts/run-ci-gate.mjs
+A  scripts/run-emergency-kill.mjs
+A  scripts/run-emergency-kill.test.ts
+A  scripts/run-local-rollback-migration-rehearsal.mjs
+A  scripts/run-openai-paid-canary-child.mjs
+M  scripts/run-openai-paid-canary.ts
+A  scripts/vercel-deployment-proof.mjs
+A  scripts/vercel-deployment-proof.test.ts
+M  scripts/verify-backup-restore.mjs
+A  src/app/api/health/route.test.ts
+M  src/app/api/health/route.ts
+M  src/app/api/internal/scheduler/route.test.ts
+M  src/app/api/internal/scheduler/route.ts
+A  src/domain/activation-readiness/no-ai-dry-run.test.ts
+A  src/domain/activation-readiness/no-ai-dry-run.ts
+M  src/features/agent/paid-canary.test.ts
+M  src/features/research/research-importer.tsx
+M  src/lib/env/server.test.ts
+M  src/lib/supabase/scheduler-runtime-repository.ts
+M  supabase/activation/disable-hosted-scheduler.sql
+A  supabase/activation/drain-reconcile.sql
+A  supabase/activation/emergency-disable-jobs.sql
+A  supabase/activation/emergency-kill.sql
+M  supabase/activation/enable-hosted-scheduler.sql
+A  supabase/activation/finalize-no-ai-dry-run.sql
+A  supabase/activation/install-hosted-scheduler-jobs-disabled.sql
+A  supabase/activation/phase-contract.json
+A  supabase/activation/plan-and-freeze-no-ai-dry-run.sql
+A  supabase/activation/prepare-no-ai-dry-run.sql
+A  supabase/activation/prepare-scheduler-infrastructure.sql
+A  supabase/activation/project-identity.v1.json
+A  supabase/activation/request-scheduler-auth-failures.sql
+A  supabase/activation/request-scheduler-auth-noop.sql
+A  supabase/activation/unschedule-terminal-jobs.sql
+A  supabase/activation/verify-auth-deployment.sql
+A  supabase/activation/verify-runtime-deployment.sql
+A  supabase/activation/verify-scheduler-auth-failures.sql
+A  supabase/activation/verify-scheduler-auth-noop.sql
+A  supabase/activation/verify-scheduler-vault.sql
+A  supabase/backup/post-activation.v1.json
+A  supabase/backup/pre-activation.v1.json
+A  supabase/backup/seed-free-target-prelude.sql
+D  supabase/migrations/20260806230845_experiment_detail_read_view.sql
+A  supabase/migrations/20260806231551_experiment_detail_read_view.sql
+D  supabase/migrations/20260807003631_hosted_draft_experiment_creation.sql
+A  supabase/migrations/20260807005039_hosted_draft_experiment_creation.sql
+D  supabase/migrations/20260807010216_fix_draft_idempotent_replay.sql
+A  supabase/migrations/20260807010609_fix_draft_idempotent_replay.sql
+D  supabase/migrations/20260807074159_hosted_draft_metadata_update.sql
+A  supabase/migrations/20260807075504_hosted_draft_metadata_update.sql
+D  supabase/migrations/20260807080749_fix_draft_update_lock_order.sql
+A  supabase/migrations/20260807101714_fix_draft_update_lock_order.sql
+D  supabase/migrations/20260807152514_hosted_market_configuration.sql
+A  supabase/migrations/20260807172041_hosted_market_configuration.sql
+D  supabase/migrations/20260807182144_manual_alpaca_ingestion.sql
+A  supabase/migrations/20260807195503_manual_alpaca_ingestion.sql
+D  supabase/migrations/20260807225640_hosted_locked_experiment_lifecycle.sql
+A  supabase/migrations/20260807233649_hosted_locked_experiment_lifecycle.sql
+A  supabase/migrations/20260807233953_reconcile_experiment_clone_provenance_index.sql
+D  supabase/migrations/20260808013901_reconcile_experiment_clone_provenance_index.sql
+D  supabase/migrations/20260808104856_hosted_official_market_calendar.sql
+A  supabase/migrations/20260808115951_hosted_official_market_calendar.sql
+D  supabase/migrations/20260808123948_hosted_experiment_start.sql
+A  supabase/migrations/20260808150423_hosted_experiment_start.sql
+D  supabase/migrations/20260808154152_durable_hosted_manual_cycle.sql
+A  supabase/migrations/20260808181247_durable_hosted_manual_cycle.sql
+D  supabase/migrations/20260808185120_immutable_hosted_decision_memory.sql
+A  supabase/migrations/20260808193957_immutable_hosted_decision_memory.sql
+D  supabase/migrations/20260808213223_structured_shadow_agent_runtime.sql
+A  supabase/migrations/20260808235225_structured_shadow_agent_runtime.sql
+A  supabase/migrations/20260809000307_structured_agent_prompt_pin_indexes.sql
+D  supabase/migrations/20260809015621_structured_agent_prompt_pin_indexes.sql
+A  supabase/migrations/20260809150417_activation_readiness_follow_up.sql
+M  supabase/tests/0001_database_contract.sql
+A  supabase/tests/activation_readiness_follow_up_test.sql
+M  supabase/tests/post_build_hosting_safety_test.sql
+M  tasks/lessons.md
+M  tasks/todo.md
+M  vitest.config.ts
+```
 
 ## Manual gates and stop conditions
 
-- Independent second review of SQL, runner, response contract, backup contract,
-  and CI evidence.
-- Production environment-name/scope review without values, exact Production
-  deployment identity, consumer scope parity, and auto-deploy impact review.
-- Separate authorization for any migration apply, extension/Vault/job change,
-  Production deployment, scheduler request, arm, provider/OpenAI/Canary action,
-  or trading-affecting operation.
-- Immediate NO-GO on Hosted drift, migration-history ambiguity, checksum/HEAD/
-  target mismatch, unexpected Capital-Lab job, missing transport evidence,
-  nonzero side-effect evidence, or any dangerous control not explicitly false.
+- Independent review must validate both exact commits and the checksum manifest.
+- Exact-head CI must pass Node 24 application/browser/Windows gates, pinned
+  Supabase 2.113.0 start/reset, all pgTAP, both rollback rehearsals, and both
+  seed-free backup/restore contracts. Any skipped or flaky safety-critical gate
+  is failure.
+- A future Production operator must separately create and read-only prove two
+  distinct deployments from the same reviewed commit. This report authorizes
+  neither deployment nor request.
+- Production backup/export, migration apply, endpoint probes, Vault/Cron setup,
+  runtime arm, Canary, provider, broker, and trading remain separate manual gates.
+- Any Hosted drift, proof mismatch, unknown request outcome, missing transport
+  evidence, relation/schema/history mismatch, or non-false dangerous control is
+  an immediate fail-closed stop.
 
-All dangerous controls remain false in Hosted observations: scheduler, agent,
-autonomous paper execution, paid models, Canary, web search, Sol challenger, Sol
-execution, and real broker. Data mode remains mock/paper-only.
+## Current conclusion before exact-head CI
 
-## Current status
-
-**READY FOR SECOND INDEPENDENT REVIEW — NOT AUTHORIZED FOR MERGE, MIGRATION APPLY, PRODUCTION DEPLOYMENT OR ACTIVATION**
-
-This status records repository and local-ephemeral evidence only. It is not an
-operator approval, Production readiness declaration, migration authorization,
-deployment approval, activation approval, or permission to send a scheduler,
-provider, OpenAI, Canary, broker, or trading request.
+NO-GO — BLOCKER REMAINS
