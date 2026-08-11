@@ -10,7 +10,7 @@ Draft PR: `#21` (must remain Draft and unmerged)
 
 Verified starting SHA: `e705f67db819be13c99f759e07186c63f114b831`
 
-Implementation SHA: `6f569359a3209e9639acdd9a0526d0381bf168bd`
+Implementation SHA: `70085b7d012e4a7d3f2a7bfc1a5e27ec74f903dd`
 
 Final report/handoff SHA: intentionally recorded in the Draft PR and final chat
 handoff after this report is committed. A Git commit cannot contain its own SHA
@@ -94,7 +94,7 @@ No activation phase was executed in this remediation.
 | `post-activation.v1.json`                           | `e1bf901b7e34177acff0884bd2138cb28359b69b40adc9d3504fe27a7cfb91b3` |
 | `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
 | `phase-contract.json` (18 phases)                   | `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d` |
-| handoff checksum manifest (115 entries)             | `5177522deb69c1a79c6dc7b7a2472302dfdb5791b158284325bba355ff832804` |
+| handoff checksum manifest (115 entries)             | `8f90f421258626d11abfe41ba8fb86c8a94e07c0559287966a34b38d637b98c4` |
 
 ### Phase SQL
 
@@ -250,6 +250,19 @@ existing cleanup boundary, before restoring platform and application schemas.
 Unit coverage freezes this ordering. The post restore did not run after the
 pre-restore failure. This failed run is not readiness evidence; a replacement
 exact-head run remains mandatory.
+
+CI run `31487163698` passed application (87 files / 634 tests), Windows (4
+files / 14 tests), browser (4/4), Supabase start, both rollback rehearsals,
+reset, and all 14 pgTAP files / 1,927 assertions. The pre-activation exporter
+created 82 relation artifacts and the seed-free target preparation completed.
+Application-schema restore then failed closed because the disposable `template0`
+target had not installed the baseline `pgcrypto`, `citext`, and `vector`
+extensions before restoring columns typed as `extensions.vector`. The preparer
+now installs exactly those unversioned extensions, already declared by the first
+historical application migration, in the validated loopback-only disposable
+database before application-schema restore. Unit coverage freezes the ordering.
+The post restore did not run after the pre-restore failure. This failed run is
+not readiness evidence; a replacement exact-head run remains mandatory.
 
 ## Exact status-aware changed-file set
 
