@@ -3,7 +3,7 @@
 68ca3fba3b7e864770cb61aeb306d4bd4354b68ab4dd38450860c5d823e42a53  A  .node-version
 68ca3fba3b7e864770cb61aeb306d4bd4354b68ab4dd38450860c5d823e42a53  A  .nvmrc
 7325c6e9b525024f8c45814869a7093b93cc6965cf1cbcb2b03806b95589e474  M  .prettierignore
-6ee3727b9fa3f3160b66dc697124c8e47f88c72414f3c76fb5d7a184cce93fd3  M  docs/BACKUP_AND_RESTORE.md
+c1795b01a00625a5bd271d0bcb12703d085ee06764efe1f35f774af7e1e64ee5  M  docs/BACKUP_AND_RESTORE.md
 9cc1d3d0e4ec3ae0808d9d6a24446b0248f0e5e8cd6e9a2ac253273628eb5e39  M  docs/DEPLOYMENT.md
 cf408a77bf96844c11e498a3f1b81127cda04520e22022c98c9636f123fca4f1  M  docs/KNOWN_LIMITATIONS.md
 71aa13378ae2fab1eec0c3e48517230c716ced7c8f793355fbc7f68d5c618c82  M  docs/post-build/hosting-safety-audit.md
@@ -16,9 +16,9 @@ e46065913f7975eb1e3f89c86c6c649c674873af3f16ba82e20309d2166fe457  M  README.md
 95b1339915906f0cd5b1bda2f6fda377b2d6d1c5ab07700ea9c626ddf1c70459  A  scripts/activation-artifacts.test.ts
 eb18d01b104e6d4fd96bdfa12803a0ee5cfed1dead86f32f5b8e91aefb67b73e  A  scripts/activation-phase-contract.mjs
 a63966e92e91e5668282a9267d588bef0a1512c431b374d7fa3d8baf8658069d  A  scripts/check-credential-patterns.mjs
-63bc3ae8b38965cac28b3934b76dbed9280586f242671f0fbc490de43f6d3bfa  A  scripts/critical-backup-contract.mjs
-0a6f55485c24be0adc7301c738a0070553b27cc72d67e84d9d874653638dcf8e  A  scripts/critical-backup-contract.test.ts
-c05df84237677de727de6bbb9bc527258aa00a1d118becb45729d8d675cf3d89  M  scripts/export-critical-tables.mjs
+8b2bc358166ba7cea1fea5ac7b3a52bfdd7b38cc2ca79f60a04d32fab02de095  A  scripts/critical-backup-contract.mjs
+79e2bc42de1461a60564bff64f4a4f9e69614c21923d7044430dde081d867c42  A  scripts/critical-backup-contract.test.ts
+dd8b1171ca5780a6d2f68432805a6e8d179744da525b0bd4355caab431363505  M  scripts/export-critical-tables.mjs
 996b0756e3b2a46abed82d563551ea8ff6e1fca49618a42dcbc3dc0f3d1ea63f  A  scripts/generate-backup-contracts.mjs
 a3deb618934376676010ec202c381e8c9811cd5ab95b9af0bf84e2f7991b209b  A  scripts/generate-backup-contracts.test.ts
 3c263dd2d9103990022472676fedc521cad2cdb4d3a57e41818c14cf65293e64  A  scripts/handoff-checksums.mjs
@@ -27,7 +27,7 @@ f3fba878d282e8cd52f7bc602a14a98f83158156600357f9d8984f76e4ed5933  A  scripts/lib
 c11e65b8c6d39b052f12319be4cc2cde86cbdb8fa13150016b1f3cb1834e2cd8  A  scripts/lib/canonical-repository-bytes.test.ts
 114d325dddfdbc9b7f3eb428f51b672ed1a1fc53270f7b423be7e7fb3750f0f8  A  scripts/lib/held-files.mjs
 643939b1784d252d4223ab665acecc85255559d21c5e5190499f0d84dd84a1fb  A  scripts/lib/held-files.test.ts
-f02da74e6d63bc04313fe344d5bf65afe85371728fae4af7b24fdafcd1bc3715  A  scripts/lib/safe-process.mjs
+cd3437d2814cdb03bfc7f0386828b26260cd3a9fba654000795ef21fe1b79ed2  A  scripts/lib/safe-process.mjs
 55e129f67480c2bf3683b5d39848238c662efcc1b3a8c0d44765ca386bfe6f8a  A  scripts/lib/safe-process.test.ts
 566d1ab92b61c63c93a4dd69ba0a93187e8a7a3316492c62bb426c3e65401eb6  A  scripts/migration-rehearsal-contract.mjs
 43bc5d5c90c4b4f50b906625e4c94a697dee5363be42ed0087497503d4324981  A  scripts/migration-rehearsal-contract.test.ts
@@ -111,5 +111,5 @@ a1e40d79625a5950a2da55fc9e56364d215c5ce3b29d0b14c2324d1ba43baf37  A  supabase/mi
 9033e2778ecd514c834feaadcef5e14db68f343946193ab73031f29f07a0222e  A  supabase/tests/activation_readiness_follow_up_test.sql
 a3c973b24e93519cba8209fb89af67de1b6981c592fb8c7b888c27b5153f9d10  M  supabase/tests/post_build_hosting_safety_test.sql
 b6071a603a25aae2034edc5d84335ded7e3d5ad9ce0d8b6b2c142451171e1e1f  M  tasks/lessons.md
-22113be3f40633b174b6f80536f72484d5e3e175c62093ac0a81d9dc651c993d  M  tasks/todo.md
+1d3574c8e0d8d5e4e1b56c800d59c3110877ab74006e7abbc4aa5bde589c1c79  M  tasks/todo.md
 5682b50deced79ecaeec8102e140dce60d5110bf9910a72ee2c2907de8ee0078  M  vitest.config.ts

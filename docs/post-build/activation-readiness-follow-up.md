@@ -10,7 +10,7 @@ Draft PR: `#21` (must remain Draft and unmerged)
 
 Verified starting SHA: `e705f67db819be13c99f759e07186c63f114b831`
 
-Implementation SHA: `70085b7d012e4a7d3f2a7bfc1a5e27ec74f903dd`
+Implementation SHA: `e99fe09d988a76c76927551ac822013230f531cf`
 
 Final report/handoff SHA: intentionally recorded in the Draft PR and final chat
 handoff after this report is committed. A Git commit cannot contain its own SHA
@@ -94,7 +94,7 @@ No activation phase was executed in this remediation.
 | `post-activation.v1.json`                           | `e1bf901b7e34177acff0884bd2138cb28359b69b40adc9d3504fe27a7cfb91b3` |
 | `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
 | `phase-contract.json` (18 phases)                   | `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d` |
-| handoff checksum manifest (115 entries)             | `8f90f421258626d11abfe41ba8fb86c8a94e07c0559287966a34b38d637b98c4` |
+| handoff checksum manifest (115 entries)             | `ccac95aaf3e3a042882ef64fb4b868c2cdcbac965909c2429c36a0c5c8d1dbd5` |
 
 ### Phase SQL
 
@@ -131,7 +131,7 @@ passed. No assertion, timeout, retry, or safety gate was weakened.
 | `prettier --check .`                         |           0 | all matched files formatted                     |
 | `eslint . --max-warnings=0`                  |           0 | zero warnings                                   |
 | `tsc --noEmit`                               |           0 | strict TypeScript passed                        |
-| `vitest run`                                 |           0 | 87 files, 634 tests passed                      |
+| `vitest run`                                 |           0 | 87 files, 635 tests passed                      |
 | `node scripts/check-paper-only.mjs`          |           0 | PAPER-only scanner passed                       |
 | `node scripts/check-credential-patterns.mjs` |           0 | worktree + 100 commits, zero redacted findings  |
 | `next build`                                 |           0 | Next.js 16.3 production build passed on Node 24 |
@@ -263,6 +263,21 @@ historical application migration, in the validated loopback-only disposable
 database before application-schema restore. Unit coverage freezes the ordering.
 The post restore did not run after the pre-restore failure. This failed run is
 not readiness evidence; a replacement exact-head run remains mandatory.
+
+CI run `31488059936` again passed application (87 files / 634 tests), Windows
+(4 files / 14 tests), browser (4/4), Supabase start, both rollback rehearsals,
+reset, and all 14 pgTAP files / 1,927 assertions. The baseline-extension fix
+carried the 82-relation pre restore through application types; the next
+fail-closed statement was a platform-owned `supabase_admin` `ALTER DEFAULT
+PRIVILEGES` emitted by plain `pg_dump --no-owner`. The version-5 exporter now
+creates a restrictive-permission custom archive, parses its explicit TOC,
+retains all application-owned `postgres` default ACLs and current object grants,
+excludes only the classified platform-owned default ACL entries, rejects every
+unknown owner, records both exact owners/counts and all PostgreSQL tool versions,
+and removes its intermediate archive/TOC. The exact current grant fingerprint
+remains mandatory after restore. The post restore did not run after the pre
+failure. This failed run is not readiness evidence; a replacement exact-head run
+remains mandatory.
 
 ## Exact status-aware changed-file set
 
