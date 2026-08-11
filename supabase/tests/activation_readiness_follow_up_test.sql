@@ -920,6 +920,8 @@ select ok(exists (
   select 1 from private.no_ai_shadow_dry_run_transitions
   where dry_run_id = pg_temp.campaign_id() and to_state = 'auto_stopped'
     and evidence ->> 'phase_one_controls_committed' = 'true'
+    and evidence ->> 'operation_id' = '60000000-0000-4000-8000-000000000001'
+    and correlation_id = '60000000-0000-4000-8000-000000000002'
 ), 'retryable phase two records the already-committed emergency outcome');
 
 update private.no_ai_shadow_dry_runs

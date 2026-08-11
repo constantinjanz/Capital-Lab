@@ -5400,7 +5400,61 @@ begin
     raise exception using errcode = '55000', message = 'emergency phase-two operation identity drifted';
   end if;
   if operation.status = 'completed' then
+    if operation.completed_at is null
+      or operation.evidence is distinct from jsonb_build_object(
+        'phase_one_controls_committed', true,
+        'jobs_exactly_verified_inactive', true
+      )
+      or not exists (
+      select 1 from private.no_ai_shadow_dry_run_transitions as transition
+      where transition.dry_run_id = campaign.id
+        and transition.owner_id = campaign.owner_id
+        and transition.from_state = campaign.emergency_killed_from_state
+        and transition.to_state = 'auto_stopped'
+        and transition.actor = 'system'
+        and transition.commit_sha = campaign.prepared_commit_sha
+        and transition.config_version = campaign.config_version
+        and transition.correlation_id = p_correlation_id
+        and transition.evidence = jsonb_build_object(
+          'operation_id', p_operation_id,
+          'phase_one_controls_committed', true,
+          'phase_two_job_disable_attempted', true
+        )
+    ) then
+      raise exception using errcode = '55000', message = 'emergency phase-two durable evidence drifted';
+    end if;
     return;
+  end if;
+  insert into private.no_ai_shadow_dry_run_transitions (
+    dry_run_id, owner_id, from_state, to_state, actor, commit_sha,
+    config_version, correlation_id, evidence
+  ) values (
+    campaign.id, campaign.owner_id, campaign.emergency_killed_from_state,
+    'auto_stopped', 'system', campaign.prepared_commit_sha,
+    campaign.config_version, p_correlation_id,
+    jsonb_build_object(
+      'operation_id', p_operation_id,
+      'phase_one_controls_committed', true,
+      'phase_two_job_disable_attempted', true
+    )
+  ) on conflict (dry_run_id, to_state) do nothing;
+  if not exists (
+    select 1 from private.no_ai_shadow_dry_run_transitions as transition
+    where transition.dry_run_id = campaign.id
+      and transition.owner_id = campaign.owner_id
+      and transition.from_state = campaign.emergency_killed_from_state
+      and transition.to_state = 'auto_stopped'
+      and transition.actor = 'system'
+      and transition.commit_sha = campaign.prepared_commit_sha
+      and transition.config_version = campaign.config_version
+      and transition.correlation_id = p_correlation_id
+      and transition.evidence = jsonb_build_object(
+        'operation_id', p_operation_id,
+        'phase_one_controls_committed', true,
+        'phase_two_job_disable_attempted', true
+      )
+  ) then
+    raise exception using errcode = '55000', message = 'emergency phase-two durable evidence drifted';
   end if;
   perform private.set_activation_jobs_active(
     campaign.id, false, p_operation_id, p_correlation_id

@@ -104,6 +104,17 @@ that all three globally locked model rows bind to the passed Activation Campaign
 The post-migration backup contract was regenerated. Both restores remained
 correctly skipped after pgTAP; a replacement exact-head run is mandatory.
 
+Exact-head CI run `31485089511` passed application, Windows, browser, Supabase
+start, rollback rehearsal, and reset. All 135 Activation assertions executed;
+the only failure was the existing phase-two assertion that required durable
+`auto_stopped` transition evidence. Review showed the later retry-safe
+phase-two implementation had replaced the earlier transition-writing body
+without carrying that evidence forward. Phase two now inserts and immediately
+verifies the exact append-only transition, and a completed retry revalidates
+both its operation evidence and transition operation/correlation identity
+before returning. Both restores remained correctly skipped after pgTAP; a
+replacement exact-head run is mandatory.
+
 ## PR #21 activation-readiness adversarial hardening (2026-08-09)
 
 Safety status: implementation-only. Production migration/deployment/activation, Hosted extension/Vault/Cron mutation, scheduler HTTP, provider/model calls, Canary execution, broker connectivity, and PR merge/undraft are prohibited.
