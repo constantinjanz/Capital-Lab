@@ -10,7 +10,7 @@ Draft PR: `#21` (must remain Draft and unmerged)
 
 Verified starting SHA: `e705f67db819be13c99f759e07186c63f114b831`
 
-Implementation SHA: `0b8bf4903288a105c9b89429d08a032160f31838`
+Implementation SHA: `6f569359a3209e9639acdd9a0526d0381bf168bd`
 
 Final report/handoff SHA: intentionally recorded in the Draft PR and final chat
 handoff after this report is committed. A Git commit cannot contain its own SHA
@@ -94,7 +94,7 @@ No activation phase was executed in this remediation.
 | `post-activation.v1.json`                           | `e1bf901b7e34177acff0884bd2138cb28359b69b40adc9d3504fe27a7cfb91b3` |
 | `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
 | `phase-contract.json` (18 phases)                   | `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d` |
-| handoff checksum manifest (115 entries)             | `3cd2684d88e2158375577890cc291fb27d056403ece37d77758f371b16a9bb90` |
+| handoff checksum manifest (115 entries)             | `5177522deb69c1a79c6dc7b7a2472302dfdb5791b158284325bba355ff832804` |
 
 ### Phase SQL
 
@@ -238,6 +238,18 @@ vault` was requested before the new `template0` database contained schema
 ordering. No Hosted extension or Vault state was inspected or mutated. The post
 restore did not run after the pre-target failure. This failed run is not
 readiness evidence; a replacement exact-head run remains mandatory.
+
+CI run `31486465529` again passed application, Windows, browser, Supabase start,
+both rollback rehearsals, reset, and pgTAP. The pre-activation exporter created
+its 82-relation backup, and disposable Supabase platform preparation completed.
+Schema restore then failed closed because the new `template0` database already
+had an empty `public` schema while the verified dump contains `CREATE SCHEMA
+public`. The preparer now drops only that empty schema in the exact
+loopback-only, confirmation-bound `capital_lab_restore` database, inside the
+existing cleanup boundary, before restoring platform and application schemas.
+Unit coverage freezes this ordering. The post restore did not run after the
+pre-restore failure. This failed run is not readiness evidence; a replacement
+exact-head run remains mandatory.
 
 ## Exact status-aware changed-file set
 
