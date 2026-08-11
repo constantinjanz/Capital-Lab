@@ -10,7 +10,7 @@ Draft PR: `#21` (must remain Draft and unmerged)
 
 Verified starting SHA: `e705f67db819be13c99f759e07186c63f114b831`
 
-Implementation SHA: `e60344ca24d7f31694e0e738aee7ced44032ee8f`
+Implementation SHA: `3ca3ce33c04d6f8f2a857ae664a09d29bc32ea80`
 
 Final report/handoff SHA: intentionally recorded in the Draft PR and final chat
 handoff after this report is committed. A Git commit cannot contain its own SHA
@@ -94,7 +94,7 @@ No activation phase was executed in this remediation.
 | `post-activation.v1.json`                           | `917e8e525984b4657efb137a75406c8c26ccbb1d4be2a7a3729e3f9545721039` |
 | `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
 | `phase-contract.json` (18 phases)                   | `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d` |
-| handoff checksum manifest (115 entries)             | `d262110e8d8f5810974895c0696441a73526f63f580f7983e7d38e9409613d68` |
+| handoff checksum manifest (115 entries)             | `de30a120b406ec2be4f84c07569fc3ca330fade66fc2c97dcdf2a7fce9453bd6` |
 
 ### Phase SQL
 
@@ -170,6 +170,15 @@ Ubuntu Noble's default Apt sources do not contain PostgreSQL client 17. The
 workflow now binds the official PGDG repository to the full expected signing-key
 fingerprint, installs client 17, and asserts major version 17. This run is also
 recorded as failed, not retried or reclassified.
+
+CI run `31480867586` passed the complete application, Windows, and 4/4 browser
+jobs. PGDG fingerprint validation and client-17 installation passed, but the
+rollback process resolved Ubuntu's generic `/usr/bin/psql` wrapper instead of
+the installed native PG17 executable. CI now requires the exact executable
+`/usr/lib/postgresql/17/bin/psql`, verifies its major version directly, and
+prepends only that native tool directory through `GITHUB_PATH`. Reset, pgTAP,
+and both restores were correctly skipped after the rehearsal failure. This run
+is failed evidence and does not support readiness.
 
 ## Exact status-aware changed-file set
 

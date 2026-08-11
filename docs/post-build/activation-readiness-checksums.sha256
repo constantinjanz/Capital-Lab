@@ -1,4 +1,4 @@
-70831dc53f8e1efc2860ea042b749740c7ba02b4cd0084e67997291a4cd10ce6  M  .github/workflows/ci.yml
+83016b712a8392dfeed7892e291d87e66b879c991a25cb2b8f8d5d52908f8a19  M  .github/workflows/ci.yml
 9d944587684969a15afeccb25639898859dfbcdcbf6c65f76de406f55c1eb68a  M  .gitignore
 68ca3fba3b7e864770cb61aeb306d4bd4354b68ab4dd38450860c5d823e42a53  A  .node-version
 68ca3fba3b7e864770cb61aeb306d4bd4354b68ab4dd38450860c5d823e42a53  A  .nvmrc
@@ -111,5 +111,5 @@ a1e40d79625a5950a2da55fc9e56364d215c5ce3b29d0b14c2324d1ba43baf37  A  supabase/mi
 f8cd183675000433a7b248bee686c2bc8457c194af36d0633f020b9d500218d1  A  supabase/tests/activation_readiness_follow_up_test.sql
 a3c973b24e93519cba8209fb89af67de1b6981c592fb8c7b888c27b5153f9d10  M  supabase/tests/post_build_hosting_safety_test.sql
 b6071a603a25aae2034edc5d84335ded7e3d5ad9ce0d8b6b2c142451171e1e1f  M  tasks/lessons.md
-79995ed8315feac2cccefa92c49d91eb943be04fb4dc2eb5e0a7f76c21d342cf  M  tasks/todo.md
+8441619d67444a8b1723c6e9f6b30267c166937367dd2fbc3685ac5146167cb2  M  tasks/todo.md
 5682b50deced79ecaeec8102e140dce60d5110bf9910a72ee2c2907de8ee0078  M  vitest.config.ts
