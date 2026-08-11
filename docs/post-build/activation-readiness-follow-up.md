@@ -10,7 +10,7 @@ Draft PR: `#21` (must remain Draft and unmerged)
 
 Verified starting SHA: `e705f67db819be13c99f759e07186c63f114b831`
 
-Implementation SHA: `e436ea7565707ac671c906fe54b6e79aa3d3bf46`
+Implementation SHA: `11103cb43cccf221d9df954ff71a1681e1c1f008`
 
 Final report/handoff SHA: intentionally recorded in the Draft PR and final chat
 handoff after this report is committed. A Git commit cannot contain its own SHA
@@ -88,36 +88,36 @@ No activation phase was executed in this remediation.
 
 | Artifact                                            | SHA-256                                                            |
 | --------------------------------------------------- | ------------------------------------------------------------------ |
-| `20260809150000_post_build_hosting_safety.sql`      | `3eed555ddd7249e49e21295bfd3cb6e3346d6d3b43b9cef4c85ef9dc2413463a` |
-| `20260809150417_activation_readiness_follow_up.sql` | `eae2977846147a5d668b7c5d600bd5c4e2f96f18ca4fff6e19cf253d753b9651` |
-| `pre-activation.v1.json`                            | `d947784b51612197daf8e01679bcf7114b9364bede15e7f2e0b76b4706fba153` |
-| `post-activation.v1.json`                           | `0df64474a0d545f0bbe44e3db2237ccc991a0cbc2e893430540304e8407423cc` |
+| `20260809150000_post_build_hosting_safety.sql`      | `ee9a1390a6cf1abfca9a8664d6dfe492bc217741265f2d0d5e8b010af6c0352e` |
+| `20260809150417_activation_readiness_follow_up.sql` | `1af10ee12e620c973cda31b2ecb8f7aaf34b87da8bd704c9afcd99f72ed30b91` |
+| `pre-activation.v1.json`                            | `98fad4a3292bf2f0e1d62e8967f04b165f5464e62590d164d80659c26239c706` |
+| `post-activation.v1.json`                           | `917e8e525984b4657efb137a75406c8c26ccbb1d4be2a7a3729e3f9545721039` |
 | `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
-| `phase-contract.json` (18 phases)                   | `bd1bd6a9192ca4fd3aba734e9c1d991e430609f0e9b6f6153ff9e970d23436d5` |
-| handoff checksum manifest (113 entries)             | `fd041b546b9fea3fc21860192cc6e75658bdce7f19ef5a11be0f4c1a44d2fd09` |
+| `phase-contract.json` (18 phases)                   | `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d` |
+| handoff checksum manifest (115 entries)             | `83bb7dcfec0d73dda216c36f3dad9868af2873c3019c4496b8ffcb29ff83ffa7` |
 
 ### Phase SQL
 
 | Phase                                | SHA-256                                                            |
 | ------------------------------------ | ------------------------------------------------------------------ |
-| prepare                              | `291ad466b037ff98e5227ea2bff11daf7ca002ccc3bde81fc7845147e9bf2d54` |
-| scheduler-infrastructure-preparation | `6575394a2177e40617e2cb64a99b6e3898eaad23bdd46cead3f310e2d9fa30c4` |
-| vault-verification                   | `05e200ca47bab99609039a95901c8efbb52a8dcd083a66ec145b436333782429` |
-| install-jobs-disabled                | `9d2616f588aaa38ce15b2e56861f5a6f54a2da3f536b53adc2103b62eab2b786` |
+| prepare                              | `87592e2e3d87155884ad16d431f5a99771f6099a10a4faeab3a26612cf817b4c` |
+| scheduler-infrastructure-preparation | `380c12f533caf6af75abae33b2f7c0a15b0dca8e1721bc45cd4b051335d8df01` |
+| vault-verification                   | `cfd79e63558f668269148e88abd49a22d7be5122d1ae34414546fb41b17f878b` |
+| install-jobs-disabled                | `733ed8603607ef7be0c5d54fdfe88d564c3df61e11c2733c692122b19bb90713` |
 | auth-endpoint-verify                 | `e87a224c33235203fe3cf43ebe0a91fa7eba5324bdc315afab8924aa80258e55` |
-| auth-failure-request                 | `0121b6a2024f953e3721eb7ee89c9e523b0cf3ef13b9532c471c4c0e489f4fcd` |
-| auth-failure-reconcile               | `b3db0b6549d8d1398fa56a0e1fa794e064a83c25c0d402c3a432d895d419b6fd` |
-| auth-noop-request                    | `f8d5caf254eb6485f3be4ae43b042501434a0e3264a952dac09af1e89a97c874` |
-| auth-noop-reconcile                  | `fbdf3b662a58b50cb4c19fa62591c2c62b24709cf7f5f687ec6a9ece5a8403e8` |
+| auth-failure-request                 | `ff9f5fae3852514f707e23f7e371e10f116eeda4e277aa2813025b94009b603f` |
+| auth-failure-reconcile               | `f0ddc8d05101b714d4d6e65dfb6492b348958449c7672151d2eb4fdee9c3b020` |
+| auth-noop-request                    | `25cd5df3aa260b81fec0d80cd7d425151ca6d0cb6776d6f5bf2ab01aa6042b1c` |
+| auth-noop-reconcile                  | `7f033516ed8fbb0fb1e33d74eef3b4412d27f198dd08d5a7ff470102681680da` |
 | runtime-deployment-verify            | `9a744d361d9812a91636d92b7cf1c4ae362d0175c09597523937f558f774d57f` |
-| baseline-freeze                      | `f04829ac8aad48ecbf0d631862815558425790512a3673c1f499404d97554309` |
-| arm                                  | `5c8f77c39778e287033103d2b1cc5f86cd73c156464753d6269a1d13b5ca3ed5` |
-| drain-reconcile                      | `64847fba0b6341ebec4cb0cf8b56ae78ccef717411210a061e9fa649daf0267c` |
-| manual-finalize                      | `34251b228128af43ef25aba45f08dc1359b32bf0a9496709951c25e09030093d` |
-| orderly-stop                         | `5a9c06b84dac412775f0a36fc029d6e7e2b39dcf5825915059084b0e7dd8e1d1` |
-| unschedule-terminal-jobs             | `6cdd3c088941706f284de3cbf0f6b673b344667ae4e6da5ec79da37332201c3f` |
-| emergency-kill                       | `5d88eee2a81f5ad69c9e5a963fbee710f1be6c07833fe8c76b53cbf3b8a74759` |
-| emergency-disable-jobs               | `32b50017555a6acfb2ee6be71486fc73e038e3a685bafbde64cc9eb87c6ddac3` |
+| baseline-freeze                      | `5ec0f72caeac1b4ff66dc3876d0a2e0c838c7ab290be8d7a10e51efbb459e111` |
+| arm                                  | `289f55a7c4c5cd4ddb941ce86874a59ae9517fdfdd77a4684c3fcf69f4faec85` |
+| drain-reconcile                      | `74a7ad9ed88e17e4e2fae20f82d2d1d209fad9e52d53a241867a97968f75abdc` |
+| manual-finalize                      | `92b0cf37028d26e441afd4d5dcb9f41ccbff58c2b94204a4fa0bd08d4a5d2fea` |
+| orderly-stop                         | `66f98a1645e163e945037ffc6f94e71da1c2412479e46fa37dd79e075ac8e7b7` |
+| unschedule-terminal-jobs             | `adb2645b7d667641bbfeddc70c5a5455cc051564ef4dcafc302d051d723d6d2e` |
+| emergency-kill                       | `e395906040ea74cbf23c44a6162851b98c9df974cb5ce2bc3e6129167505e5ea` |
+| emergency-disable-jobs               | `367efa2975e081b3323086ed9d39c2cba62598bd7aee0da96c1b070d7ec2d0c3` |
 
 ## Verification ledger
 
@@ -131,7 +131,7 @@ passed. No assertion, timeout, retry, or safety gate was weakened.
 | `prettier --check .`                         |           0 | all matched files formatted                     |
 | `eslint . --max-warnings=0`                  |           0 | zero warnings                                   |
 | `tsc --noEmit`                               |           0 | strict TypeScript passed                        |
-| `vitest run`                                 |           0 | 86 files, 631 tests passed                      |
+| `vitest run`                                 |           0 | 87 files, 633 tests passed                      |
 | `node scripts/check-paper-only.mjs`          |           0 | PAPER-only scanner passed                       |
 | `node scripts/check-credential-patterns.mjs` |           0 | worktree + 100 commits, zero redacted findings  |
 | `next build`                                 |           0 | Next.js 16.3 production build passed on Node 24 |
@@ -139,7 +139,7 @@ passed. No assertion, timeout, retry, or safety gate was weakened.
 | `supabase@2.113.0 --version`                 |           0 | exact version `2.113.0`                         |
 | `activation-phase-contract.mjs --verify`     |           0 | 18 phases, exact contract hash                  |
 | `generate-backup-contracts.mjs --verify`     |           0 | 82 pre / 105 post relations                     |
-| `handoff-checksums.mjs --verify`             |           0 | 113 exact entries, exact manifest hash          |
+| `handoff-checksums.mjs --verify`             |           0 | 115 exact entries, exact manifest hash          |
 | `git diff --check`                           |           0 | no whitespace errors                            |
 | `docker version`                             | unavailable | executable absent; no local DB gate claimed     |
 
@@ -148,6 +148,17 @@ rehearsals were not run because Docker is unavailable. They remain mandatory
 exact-head CI gates. CI run IDs, exact pgTAP assertion count, both restore
 results, Preview deployment ID, and final handoff SHA are recorded after the
 final push; until they are green this report remains NO-GO.
+
+CI run `31478991594` was a deliberate fail-closed remediation run. Its Windows
+subprocess job and 4/4 Playwright flows passed. The application job stopped at
+a CRLF/LF-dependent phase checksum before any application gate; internal
+repository text identities now canonicalize UTF-8 line endings and include a
+cross-platform negative suite, while external artifacts remain raw-byte exact.
+The database job successfully started Supabase and compiled/applied all
+migrations to the ephemeral stack, then stopped because the Ubuntu image had a
+`psql` wrapper without a versioned client package. CI now explicitly installs
+and verifies PostgreSQL 17 client tools. No failed/skipped gate is counted as a
+pass; the replacement exact-head run is mandatory.
 
 ## Exact status-aware changed-file set
 
@@ -180,6 +191,8 @@ A  scripts/generate-backup-contracts.mjs
 A  scripts/generate-backup-contracts.test.ts
 A  scripts/handoff-checksums.mjs
 A  scripts/handoff-checksums.test.ts
+A  scripts/lib/canonical-repository-bytes.mjs
+A  scripts/lib/canonical-repository-bytes.test.ts
 A  scripts/lib/held-files.mjs
 A  scripts/lib/held-files.test.ts
 A  scripts/lib/safe-process.mjs
