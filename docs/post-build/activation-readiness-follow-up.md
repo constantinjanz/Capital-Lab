@@ -10,7 +10,7 @@ Draft PR: `#21` (must remain Draft and unmerged)
 
 Verified starting SHA: `e705f67db819be13c99f759e07186c63f114b831`
 
-Implementation SHA: `726296a09aa99a81d2e1bf3e884fe87ebb841d26`
+Implementation SHA: `65a727c4454c3c0f509906e80d70a1304d2cbae9`
 
 Final report/handoff SHA: intentionally recorded in the Draft PR and final chat
 handoff after this report is committed. A Git commit cannot contain its own SHA
@@ -89,12 +89,12 @@ No activation phase was executed in this remediation.
 | Artifact                                            | SHA-256                                                            |
 | --------------------------------------------------- | ------------------------------------------------------------------ |
 | `20260809150000_post_build_hosting_safety.sql`      | `ee9a1390a6cf1abfca9a8664d6dfe492bc217741265f2d0d5e8b010af6c0352e` |
-| `20260809150417_activation_readiness_follow_up.sql` | `6cd205c3854fc93cc12a043171452a6ab86308ef69ee69c6d91a8a49bf402d10` |
+| `20260809150417_activation_readiness_follow_up.sql` | `01e5b32ccc10581b272a31b91660854e6875241a88aa2893b3f1e185ef9dfb7d` |
 | `pre-activation.v1.json`                            | `98fad4a3292bf2f0e1d62e8967f04b165f5464e62590d164d80659c26239c706` |
-| `post-activation.v1.json`                           | `b82a5ca1d5d066a4ad8fbe9b599c9e63f9b90d5ef73e5db3f6f17549607f739a` |
+| `post-activation.v1.json`                           | `e1bf901b7e34177acff0884bd2138cb28359b69b40adc9d3504fe27a7cfb91b3` |
 | `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
 | `phase-contract.json` (18 phases)                   | `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d` |
-| handoff checksum manifest (115 entries)             | `4e47ee2d20e99322015bd40be7c23792d687add54472975140a2b740844d9566` |
+| handoff checksum manifest (115 entries)             | `d97b2601b6bfe320a4c2beb254f39c6dbad116d86112fe42acc7343087b5818c` |
 
 ### Phase SQL
 
@@ -215,6 +215,18 @@ rows to bind to the exact passed Activation Campaign. The post-migration backup
 contract was regenerated. Restores were correctly skipped after pgTAP. This
 failed run is not readiness evidence; a replacement exact-head run remains
 mandatory.
+
+CI run `31485089511` passed application, Windows, browser, Supabase start, both
+rollback rehearsals, and reset. Every one of the 135 Activation assertions ran;
+the sole failure was the existing requirement that retryable emergency phase
+two preserve an append-only `auto_stopped` transition proving phase-one controls
+had already committed. The later operation-ID implementation had replaced the
+earlier transition-writing body. Phase two now inserts and immediately verifies
+the exact transition; a completed retry validates both immutable operation
+evidence and the transition's operation/correlation identity before returning.
+The post-migration backup contract was regenerated. Restores were correctly
+skipped after pgTAP. This failed run is not readiness evidence; a replacement
+exact-head run remains mandatory.
 
 ## Exact status-aware changed-file set
 
