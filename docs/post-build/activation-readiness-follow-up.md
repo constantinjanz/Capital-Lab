@@ -10,7 +10,7 @@ Draft PR: `#21` (must remain Draft and unmerged)
 
 Verified starting SHA: `e705f67db819be13c99f759e07186c63f114b831`
 
-Implementation SHA: `a98b30d0fcd68ea96253d60650201b692cd1a2d3`
+Implementation SHA: `aaaff13c68eb05231b86d22784f18fc8a16689d1`
 
 Final report/handoff SHA: intentionally recorded in the Draft PR and final chat
 handoff after this report is committed. A Git commit cannot contain its own SHA
@@ -94,7 +94,7 @@ No activation phase was executed in this remediation.
 | `post-activation.v1.json`                           | `336482a386740e0b6ab2b536d17bb64f5a50c692f89f0b3cdf860a51cb51a8be` |
 | `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
 | `phase-contract.json` (18 phases)                   | `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d` |
-| handoff checksum manifest (115 entries)             | `913f7c7a1b95c52992e4c18fb6194e2549e89e2556d7a0abed6f9a38ec6d1dc9` |
+| handoff checksum manifest (115 entries)             | `6374f422011805fb31acda43ca80a62094b9f17fcf4b877fae03683d991dff3c` |
 
 ### Phase SQL
 
@@ -192,6 +192,17 @@ variable is unambiguous, and the helper is covered by the explicit revoke set.
 The post-migration backup contract was regenerated from the new migration
 bytes. No failing assertion was weakened, and this failed run is not readiness
 evidence; a replacement exact-head run remains mandatory.
+
+CI run `31483832916` passed the complete application, Windows, and 4/4 browser
+jobs, followed by Supabase start, both rollback rehearsals, and a fresh reset.
+The prior 401/proof/privilege defects were resolved. pgTAP's next first failure
+showed the synthetic test setup writing forbidden market-calendar/session and
+experiment state after `runtime_deployment_verified`; the production mutation
+guard correctly committed a DB-first stop. The deterministic local fixture now
+runs before Campaign preparation, while every protected-state mutation test and
+its emergency-stop assertion remains unchanged. The restores were correctly
+skipped after pgTAP. This failed run is not readiness evidence; a replacement
+exact-head run remains mandatory.
 
 ## Exact status-aware changed-file set
 
