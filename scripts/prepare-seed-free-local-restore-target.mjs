@@ -220,6 +220,11 @@ async function main() {
       platformAdminEnv,
     )
     await sql(
+      'create schema if not exists vault authorization supabase_admin',
+      'platform_vault_schema',
+      platformAdminEnv,
+    )
+    await sql(
       'create extension if not exists supabase_vault with schema vault',
       'platform_vault_extension',
       platformAdminEnv,

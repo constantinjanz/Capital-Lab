@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 
 import {
   assertBackupManifest,
@@ -83,6 +84,21 @@ const expected = {
 }
 
 describe('critical backup contract', () => {
+  it('creates the disposable Vault schema before installing its local extension', () => {
+    const source = readFileSync(
+      new URL('./prepare-seed-free-local-restore-target.mjs', import.meta.url),
+      'utf8',
+    )
+    const schemaIndex = source.indexOf(
+      'create schema if not exists vault authorization supabase_admin',
+    )
+    const extensionIndex = source.indexOf(
+      'create extension if not exists supabase_vault with schema vault',
+    )
+    expect(schemaIndex).toBeGreaterThan(-1)
+    expect(extensionIndex).toBeGreaterThan(schemaIndex)
+  })
+
   it('hashes a secret-free deterministic role policy and server boundary', () => {
     const rolePolicy = {
       roles: [

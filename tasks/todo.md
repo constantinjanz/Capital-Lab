@@ -115,6 +115,16 @@ both its operation evidence and transition operation/correlation identity
 before returning. Both restores remained correctly skipped after pgTAP; a
 replacement exact-head run is mandatory.
 
+Exact-head CI run `31485769952` passed application, Windows, browser, Supabase
+start, both rollback rehearsals, reset, and every pgTAP assertion. The restore
+step created and exported the 82-relation pre-activation backup, then failed
+closed while preparing its disposable `template0` target because the script
+requested `supabase_vault WITH SCHEMA vault` before creating the target schema.
+The local-only target path now creates `vault` under `supabase_admin` before the
+extension, with a unit assertion for that ordering. No Hosted extension or Vault
+state was read or changed. The post restore did not run after the pre-target
+failure; a replacement exact-head run is mandatory.
+
 ## PR #21 activation-readiness adversarial hardening (2026-08-09)
 
 Safety status: implementation-only. Production migration/deployment/activation, Hosted extension/Vault/Cron mutation, scheduler HTTP, provider/model calls, Canary execution, broker connectivity, and PR merge/undraft are prohibited.
