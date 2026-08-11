@@ -61,6 +61,15 @@ the official PGDG HTTPS repository only after validating its full signing-key
 fingerprint, installs client 17, and asserts the major version. A fresh exact-head
 run is mandatory; no failing result is counted as evidence of completion.
 
+Exact-head CI run `31480867586` passed the complete application, Windows, and
+browser jobs. PGDG key validation and PostgreSQL 17 installation also passed.
+Rollback rehearsal then failed because the Node resolver found Ubuntu's generic
+`/usr/bin/psql` wrapper rather than PGDG's installed native binary. CI now
+asserts `/usr/lib/postgresql/17/bin/psql` is executable, verifies its major
+version directly, and prepends that exact native directory through
+`GITHUB_PATH` for subsequent `shell:false` resolution. Reset, pgTAP, and restore
+were correctly skipped; a fresh exact-head database run remains mandatory.
+
 ## PR #21 activation-readiness adversarial hardening (2026-08-09)
 
 Safety status: implementation-only. Production migration/deployment/activation, Hosted extension/Vault/Cron mutation, scheduler HTTP, provider/model calls, Canary execution, broker connectivity, and PR merge/undraft are prohibited.
