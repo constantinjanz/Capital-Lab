@@ -178,6 +178,7 @@ async function main() {
   const targetEnv = { ...commonEnv, PGDATABASE: RESTORE_DATABASE }
   const platformAdminEnv = { ...targetEnv, PGUSER: PLATFORM_ADMIN }
   try {
+    await sql('drop schema public', 'target_public_schema_drop', targetEnv)
     await run(
       'pg_dump',
       [

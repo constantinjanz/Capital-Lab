@@ -125,6 +125,16 @@ extension, with a unit assertion for that ordering. No Hosted extension or Vault
 state was read or changed. The post restore did not run after the pre-target
 failure; a replacement exact-head run is mandatory.
 
+Exact-head CI run `31486465529` again passed application, Windows, browser,
+Supabase start, rollback rehearsal, reset, and pgTAP. Pre-activation export and
+the seed-free Supabase platform target then succeeded. App-schema restore failed
+closed because a `template0` database starts with an empty `public` schema while
+the verified schema dump contains its own `CREATE SCHEMA public`. The target
+preparer now drops only that empty schema in the already validated loopback-only
+`capital_lab_restore` database, inside the existing `try/finally`, before any
+platform/app restore. Unit coverage freezes this ordering. Post restore did not
+run after the pre-restore failure; a replacement exact-head run is mandatory.
+
 ## PR #21 activation-readiness adversarial hardening (2026-08-09)
 
 Safety status: implementation-only. Production migration/deployment/activation, Hosted extension/Vault/Cron mutation, scheduler HTTP, provider/model calls, Canary execution, broker connectivity, and PR merge/undraft are prohibited.

@@ -84,7 +84,7 @@ const expected = {
 }
 
 describe('critical backup contract', () => {
-  it('creates the disposable Vault schema before installing its local extension', () => {
+  it('prepares disposable schemas in the required restore order', () => {
     const source = readFileSync(
       new URL('./prepare-seed-free-local-restore-target.mjs', import.meta.url),
       'utf8',
@@ -95,8 +95,12 @@ describe('critical backup contract', () => {
     const extensionIndex = source.indexOf(
       'create extension if not exists supabase_vault with schema vault',
     )
+    const publicDropIndex = source.indexOf("'target_public_schema_drop'")
+    const platformRestoreIndex = source.indexOf("'platform_schema_restore'")
     expect(schemaIndex).toBeGreaterThan(-1)
     expect(extensionIndex).toBeGreaterThan(schemaIndex)
+    expect(publicDropIndex).toBeGreaterThan(-1)
+    expect(platformRestoreIndex).toBeGreaterThan(publicDropIndex)
   })
 
   it('hashes a secret-free deterministic role policy and server boundary', () => {
