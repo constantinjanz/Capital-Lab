@@ -179,6 +179,7 @@ export async function emergencyDependencyClosure(repository) {
     }
   }
   discovered.add('scripts/lib/canonical-repository-bytes.mjs')
+  discovered.add('scripts/run-emergency-bootstrap.mjs')
   discovered.add('package.json')
   discovered.add('supabase/activation/emergency-kill.sql')
   return [...discovered].sort()

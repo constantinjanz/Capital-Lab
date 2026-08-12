@@ -81,6 +81,7 @@ export const ZERO_SCHEDULER_EFFECTS = Object.freeze({
   fills: 0,
   position_mutations: 0,
   ledger_entries: 0,
+  portfolio_mutations: 0,
   canary_runs: 0,
   broker_requests: 0,
   sol_executions: 0,
@@ -210,8 +211,8 @@ export function observedRuntimeConfiguration(environment: ServerEnvironment) {
     market_data_provider: environment.MARKET_DATA_PROVIDER,
     news_provider: environment.NEWS_PROVIDER,
     openai_api_key_present: Boolean(environment.OPENAI_API_KEY),
-    data_mode: 'mock',
-    execution_mode: 'paper',
+    data_mode: environment.DATA_MODE,
+    execution_mode: environment.EXECUTION_MODE,
   })
 }
 

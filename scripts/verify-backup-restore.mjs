@@ -6,12 +6,17 @@ import {
   BACKUP_ARTIFACT_KEYS,
   assertBackupManifest,
   assertContractKeys,
+  assertEmptyRestoreTargetPreflight,
+  assertForeignKeyCatalog,
   assertRestoredAuthEvidence,
   assertRestoredEvidence,
   buildAuthEvidenceSql,
   buildCriticalEvidenceSql,
+  buildForeignKeyCatalogSql,
+  buildForeignKeyViolationSql,
   buildRolePolicySql,
   buildServerIdentitySql,
+  buildSensitiveAuthStateSql,
   canonicalJson,
   criticalRelationSchemas,
   fingerprintRolePolicy,
@@ -140,6 +145,23 @@ async function evidence(connectionEnv, sql) {
     sql,
   )
   return JSON.parse(output.trim())
+}
+
+async function assertForeignKeyIntegrity(connectionEnv) {
+  const catalog = await evidence(connectionEnv, buildForeignKeyCatalogSql())
+  assertForeignKeyCatalog(catalog)
+  for (const specification of catalog.constraints) {
+    const result = await evidence(
+      connectionEnv,
+      buildForeignKeyViolationSql(specification),
+    )
+    if (result.violationCount !== '0') {
+      throw new Error(
+        'Restored database contains a foreign-key integrity violation',
+      )
+    }
+  }
+  return catalog
 }
 
 function inspectRestoreContainer(projectId) {
@@ -339,6 +361,13 @@ async function main() {
     sourceConnection.libpqEnv,
     buildAuthEvidenceSql(),
   )
+  const sourceSensitiveAuthBefore = await evidence(
+    sourceConnection.libpqEnv,
+    buildSensitiveAuthStateSql(),
+  )
+  const sourceForeignKeyCatalogBefore = await assertForeignKeyIntegrity(
+    sourceConnection.libpqEnv,
+  )
   assertContractKeys(contract, sourceEvidenceBefore)
   assertRestoredEvidence(manifest, sourceEvidenceBefore)
   assertRestoredAuthEvidence(manifest, sourceAuthEvidenceBefore)
@@ -352,28 +381,24 @@ async function main() {
   const preflight = await evidence(
     restoreConnection.libpqEnv,
     `select jsonb_build_object(
-      'userRelations', count(*) filter (where namespace.nspname in ('public','private','supabase_migrations')),
+      'userRelations', (select count(*) from pg_catalog.pg_class as class
+        join pg_catalog.pg_namespace as namespace on namespace.oid = class.relnamespace
+        where class.relkind in ('r','p')
+          and namespace.nspname in ('public','private','supabase_migrations')),
       'authPresent', pg_catalog.to_regnamespace('auth') is not null,
-      'serverIdentity', current_setting('server_version_num') || ':' || max(control.system_identifier)::text,
-      'databaseIdentity', max(database.oid)::text || ':' || current_database() || ':'
-        || current_setting('server_version_num') || ':' || max(control.system_identifier)::text
-    ) from pg_catalog.pg_class as class
-    join pg_catalog.pg_namespace as namespace on namespace.oid = class.relnamespace
-    cross join pg_catalog.pg_control_system() as control
-    cross join pg_catalog.pg_database as database
-    where class.relkind in ('r','p') and database.datname = current_database();\n`,
-  )
-  if (
-    preflight.userRelations !== 0 ||
-    preflight.authPresent !== false ||
-    sha256(preflight.serverIdentity) ===
-      sha256(sourceIdentity.serverIdentity) ||
-    sha256(preflight.databaseIdentity) === manifest.source.databaseFingerprint
-  ) {
-    throw new Error(
-      'Restore target is not an empty disposable database on distinct stack B',
+      'serverIdentity', current_setting('server_version_num') || ':' || control.system_identifier::text,
+      'databaseIdentity', database.oid::text || ':' || current_database() || ':'
+        || current_setting('server_version_num') || ':' || control.system_identifier::text
     )
-  }
+    from pg_catalog.pg_control_system() as control
+    cross join pg_catalog.pg_database as database
+    where database.datname = current_database();\n`,
+  )
+  assertEmptyRestoreTargetPreflight(
+    preflight,
+    sourceIdentity.serverIdentity,
+    manifest.source.databaseFingerprint,
+  )
   const targetRolePolicy = fingerprintRolePolicy(
     await evidence(restoreConnection.libpqEnv, buildRolePolicySql()),
   )
@@ -432,6 +457,21 @@ async function main() {
     manifest,
     await evidence(restoreConnection.libpqEnv, buildAuthEvidenceSql()),
   )
+  const restoredSensitiveAuth = await evidence(
+    restoreConnection.libpqEnv,
+    buildSensitiveAuthStateSql(),
+  )
+  const restoredForeignKeyCatalog = await assertForeignKeyIntegrity(
+    restoreConnection.libpqEnv,
+  )
+  if (
+    canonicalJson(restoredSensitiveAuth) !==
+      canonicalJson(sourceSensitiveAuthBefore) ||
+    canonicalJson(restoredForeignKeyCatalog) !==
+      canonicalJson(sourceForeignKeyCatalogBefore)
+  ) {
+    throw new Error('Restored Auth or foreign-key closure differs from source')
+  }
   if (
     actualEvidence.databaseFingerprint === manifest.source.databaseFingerprint
   ) {
@@ -451,6 +491,13 @@ async function main() {
     sourceConnection.libpqEnv,
     buildAuthEvidenceSql(),
   )
+  const sourceSensitiveAuthAfter = await evidence(
+    sourceConnection.libpqEnv,
+    buildSensitiveAuthStateSql(),
+  )
+  const sourceForeignKeyCatalogAfter = await assertForeignKeyIntegrity(
+    sourceConnection.libpqEnv,
+  )
   const markerEvidenceAfter = await evidence(
     restoreConnection.libpqEnv,
     `select jsonb_build_object(
@@ -464,6 +511,10 @@ async function main() {
       canonicalJson(sourceEvidenceAfter) ||
     canonicalJson(sourceAuthEvidenceBefore) !==
       canonicalJson(sourceAuthEvidenceAfter) ||
+    canonicalJson(sourceSensitiveAuthBefore) !==
+      canonicalJson(sourceSensitiveAuthAfter) ||
+    canonicalJson(sourceForeignKeyCatalogBefore) !==
+      canonicalJson(sourceForeignKeyCatalogAfter) ||
     canonicalJson(markerEvidence) !== canonicalJson(markerEvidenceAfter)
   ) {
     throw new Error(

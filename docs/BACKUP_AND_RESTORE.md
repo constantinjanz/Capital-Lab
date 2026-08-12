@@ -15,6 +15,41 @@ the reviewed migrations. Normal CI is verify-only. A backup source and its
 restore target are both compared with the same golden, so copying the same
 schema drift into both databases cannot pass.
 
+Golden capture has a separate, fail-closed provenance gate. First build a
+fresh seed-free local Supabase reference stack under a run-specific project ID
+`capital-lab-reference-$runId`; it must expose only its exact loopback port and
+must contain the reviewed migration history with zero Auth/application users.
+Then retain the proof hash outside the repository. The update command queries
+both that reference cluster and a separately identified Source A and rejects a
+shared PostgreSQL system or database identity.
+
+```powershell
+$runId = 'run-<reviewed-random-id>'
+$proof = 'D:\Capital-Lab-Temp\schema-reference-proof.json'
+$golden = 'D:\Capital-Lab-Temp\pre-activation.schema-golden.v2.json'
+$env:CAPITAL_LAB_REFERENCE_RUN_ID = $runId
+$env:CAPITAL_LAB_REFERENCE_DATABASE_URL = '<redacted loopback reference URL>'
+$env:CAPITAL_LAB_BACKUP_SOURCE_DATABASE_URL = '<redacted distinct loopback Source-A URL>'
+try {
+  node scripts/prepare-schema-golden-reference-proof.mjs `
+    --contract=pre --proof=$proof
+  $proofHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $proof).Hash.ToLowerInvariant()
+  node scripts/capture-backup-schema-golden.mjs `
+    --contract=pre --output=$golden `
+    --reference-proof=$proof `
+    --expected-reference-proof-sha256=$proofHash `
+    --confirm="UPDATE REVIEWED CAPITAL LAB SCHEMA GOLDEN"
+} finally {
+  Remove-Item Env:\CAPITAL_LAB_REFERENCE_RUN_ID -ErrorAction SilentlyContinue
+  Remove-Item Env:\CAPITAL_LAB_REFERENCE_DATABASE_URL -ErrorAction SilentlyContinue
+  Remove-Item Env:\CAPITAL_LAB_BACKUP_SOURCE_DATABASE_URL -ErrorAction SilentlyContinue
+}
+```
+
+Repeat with `--contract=post` on a separately migration-built post-activation
+reference stack. Normal CI invokes only `verify-schema-golden-contracts.mjs`;
+it never executes either update command.
+
 These generated contracts are the only relation source of truth for the
 exporter, manifest writer, restore verifier, row ordering, full-row hashes,
 primary keys, column signatures, and evidence rules. Their bytes and exact
@@ -66,11 +101,11 @@ path only, with credential-file paths redacted.
   schema version 7 also freezes the exact Auth data-relation allowlist and the
   names of every excluded Auth state relation.
 
-The independent Golden also freezes the supported Auth dependency structure:
-Auth schema/relation owners and ACLs, user/identity columns and defaults,
-constraints, indexes, RLS/policies, table grants and triggers, plus Auth-schema
-function/view definitions and function grants. The Auth schema dump preserves
-those owners; only data outside `auth.users` and `auth.identities` is excluded.
+The independent Golden also freezes the complete portable Auth schema
+dependency structure: every Auth base relation's owner, ACL, columns, defaults,
+constraints, indexes, RLS/policies, grants and triggers, plus Auth functions,
+views and function grants. Auth row data remains deliberately limited to
+`auth.users` and `auth.identities`.
 
 Auth recovery deliberately excludes sessions, refresh tokens, MFA state,
 one-time codes, SSO state, audit entries, and every other internal Auth data

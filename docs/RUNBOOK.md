@@ -74,9 +74,13 @@ The minimal runner deliberately accepts unrelated dirty files and needs no Campa
 $campaignId = '<exact-campaign-uuid>'
 $env:CAPITAL_LAB_DATABASE_URL = '<redacted exact project URL with sslmode=verify-full>'
 try {
-  pnpm activation:emergency-kill -- `
-    --campaign-id=$campaignId `
-    --confirm="EMERGENCY KILL CAPITAL LAB CAMPAIGN $campaignId"
+  $gitExe = (Get-Command git -CommandType Application).Source
+  $nodeExe = (Get-Command node -CommandType Application).Source
+  & $gitExe show HEAD:scripts/run-emergency-bootstrap.mjs |
+    & $nodeExe --input-type=module - `
+      --git-executable="$gitExe" `
+      --campaign-id=$campaignId `
+      --confirm="EMERGENCY KILL CAPITAL LAB CAMPAIGN $campaignId"
 } finally {
   Remove-Item Env:\CAPITAL_LAB_DATABASE_URL -ErrorAction SilentlyContinue
 }

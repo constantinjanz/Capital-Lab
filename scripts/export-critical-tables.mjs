@@ -13,9 +13,13 @@ import {
   BACKUP_ARTIFACT_KEYS,
   AUTH_DATA_RELATIONS,
   assertContractKeys,
+  assertForeignKeyCatalog,
   buildAuthEvidenceSql,
   buildCriticalEvidenceSql,
+  buildForeignKeyCatalogSql,
+  buildForeignKeyViolationSql,
   buildRolePolicySql,
+  buildSensitiveAuthStateSql,
   buildServerIdentitySql,
   canonicalJson,
   criticalRelationSchemas,
@@ -160,6 +164,28 @@ async function evidence(connectionEnv, sql, snapshot) {
     snapshot ? snapshotSql(sql, snapshot) : sql,
   )
   return JSON.parse(result.stdout.trim())
+}
+
+async function assertForeignKeyIntegrity(connectionEnv, snapshot) {
+  const catalog = await evidence(
+    connectionEnv,
+    buildForeignKeyCatalogSql(),
+    snapshot,
+  )
+  assertForeignKeyCatalog(catalog)
+  for (const specification of catalog.constraints) {
+    const result = await evidence(
+      connectionEnv,
+      buildForeignKeyViolationSql(specification),
+      snapshot,
+    )
+    if (result.violationCount !== '0') {
+      throw new Error(
+        'Backup source contains a foreign-key integrity violation',
+      )
+    }
+  }
+  return catalog
 }
 
 async function withExportedSnapshot(connectionEnv, callback) {
@@ -376,6 +402,8 @@ async function main() {
     const evidenceSql = buildCriticalEvidenceSql(contract)
     let evidenceBefore
     let authEvidence
+    let sensitiveAuthBefore
+    let foreignKeyCatalogBefore
     let filteredToc
     let mvccRaceFixtureEnabled = false
     await withExportedSnapshot(connection.libpqEnv, async (snapshot) => {
@@ -387,6 +415,15 @@ async function main() {
       authEvidence = await evidence(
         connection.libpqEnv,
         buildAuthEvidenceSql(),
+        snapshot,
+      )
+      sensitiveAuthBefore = await evidence(
+        connection.libpqEnv,
+        buildSensitiveAuthStateSql(),
+        snapshot,
+      )
+      foreignKeyCatalogBefore = await assertForeignKeyIntegrity(
+        connection.libpqEnv,
         snapshot,
       )
       assertContractKeys(contract, evidenceBefore)
@@ -520,11 +557,22 @@ async function main() {
       connection.libpqEnv,
       buildAuthEvidenceSql(),
     )
+    const sensitiveAuthAfter = await evidence(
+      connection.libpqEnv,
+      buildSensitiveAuthStateSql(),
+    )
+    const foreignKeyCatalogAfter = await assertForeignKeyIntegrity(
+      connection.libpqEnv,
+    )
     if (
       canonicalJson(identityBefore) !== canonicalJson(identityAfter) ||
       canonicalJson(rolePolicyBefore) !== canonicalJson(rolePolicyAfter) ||
       canonicalJson(evidenceBefore) !== canonicalJson(evidenceAfter) ||
-      canonicalJson(authEvidence) !== canonicalJson(authEvidenceAfter)
+      canonicalJson(authEvidence) !== canonicalJson(authEvidenceAfter) ||
+      canonicalJson(sensitiveAuthBefore) !==
+        canonicalJson(sensitiveAuthAfter) ||
+      canonicalJson(foreignKeyCatalogBefore) !==
+        canonicalJson(foreignKeyCatalogAfter)
     ) {
       throw new Error(
         'Backup source changed or database identity switched during export',

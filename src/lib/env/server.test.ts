@@ -21,6 +21,8 @@ const environmentKeys = [
   'SOL_ENABLED',
   'SOL_CHALLENGER_ENABLED',
   'SOL_LIVE_EXECUTION_ENABLED',
+  'DATA_MODE',
+  'EXECUTION_MODE',
 ] as const
 
 const originalValues = new Map<string, string | undefined>()
@@ -98,7 +100,18 @@ describe('server environment Alpaca readiness', () => {
       SCHEDULER_ENABLED: false,
       SCHEDULER_PROVIDER: 'supabase',
       REAL_BROKER_ENABLED: false,
+      DATA_MODE: 'mock',
+      EXECUTION_MODE: 'paper',
     })
+  })
+
+  it.each([
+    ['DATA_MODE', 'hosted'],
+    ['EXECUTION_MODE', 'live'],
+  ] as const)('rejects an unreviewed observed %s', (key, value) => {
+    process.env[key] = value
+
+    expect(() => getServerEnvironment()).toThrow()
   })
 
   it('accepts the later Production no-AI scheduler state without an OpenAI key', () => {

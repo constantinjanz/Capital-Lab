@@ -36,6 +36,8 @@ const safeEnvironment = {
   REAL_BROKER_ENABLED: false,
   MARKET_DATA_PROVIDER: 'mock',
   NEWS_PROVIDER: 'mock',
+  DATA_MODE: 'mock',
+  EXECUTION_MODE: 'paper',
 } as ServerEnvironment
 
 const authBody = {
@@ -242,6 +244,8 @@ describe('protected Supabase scheduler route', () => {
       { SCHEDULER_ENABLED: false },
       {},
     ],
+    ['observed data mode', { DATA_MODE: 'hosted' as never }, {}],
+    ['observed execution mode', { EXECUTION_MODE: 'live' as never }, {}],
     ['agent flag', { AGENT_ENABLED: true }, {}],
     ['paid models', { PAID_MODEL_CALLS_ENABLED: true }, {}],
     ['OpenAI key presence', { OPENAI_API_KEY: 'fixture-only-never-used' }, {}],
@@ -300,6 +304,25 @@ describe('protected Supabase scheduler route', () => {
       expect(deps.dispatch).not.toHaveBeenCalled()
     },
   )
+
+  it('rejects an Auth-disabled role whose observed scheduler is enabled', async () => {
+    const base = dependencies({ runtime: true })
+    const deps = {
+      ...base,
+      deploymentIdentity: () => ({
+        ...identity,
+        deploymentId: authDeploymentId,
+      }),
+    }
+    const result = await handleSchedulerPost(request(authBody), deps)
+
+    expect(result.status).toBe(409)
+    expect(await result.json()).toMatchObject({
+      error: 'auth_noop_requires_disabled_runtime',
+      counters: ZERO_SCHEDULER_EFFECTS,
+    })
+    expect(deps.dispatch).not.toHaveBeenCalled()
+  })
 
   it('rejects unknown request fields before any dispatch', async () => {
     const deps = dependencies()

@@ -189,6 +189,7 @@ jobs:
           mv supabase/migrations/20260809150000_post_build_hosting_safety.sql "$hold_root"/
           mv supabase/migrations/20260809150417_activation_readiness_follow_up.sql "$hold_root"/
           mv supabase/migrations/20260812092043_fourth_activation_readiness_remediation.sql "$hold_root"/
+          mv supabase/migrations/20260812140953_fourth_activation_readiness_review_closure.sql "$hold_root"/
           supabase db reset --no-seed
           restore_pending
           export CAPITAL_LAB_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
@@ -289,7 +290,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Native Windows subprocess and path gates
-        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/lib/held-files.test.ts scripts/lib/safe-artifact-path.test.ts scripts/lib/mvcc-race-control.test.ts scripts/run-activation-phase.test.ts scripts/run-emergency-kill.test.ts scripts/run-redacted-subprocess.test.ts scripts/migration-rehearsal-contract.test.ts scripts/critical-backup-contract.test.ts scripts/local-supabase-target-proof.test.ts
+        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/lib/held-files.test.ts scripts/lib/safe-artifact-path.test.ts scripts/lib/credential-scan-safety.test.ts scripts/lib/schema-golden-reference-proof.test.ts scripts/lib/mvcc-race-control.test.ts scripts/run-activation-phase.test.ts scripts/run-database-tests.test.ts scripts/run-emergency-kill.test.ts scripts/run-redacted-subprocess.test.ts scripts/migration-rehearsal-contract.test.ts scripts/critical-backup-contract.test.ts scripts/local-supabase-target-proof.test.ts scripts/prepare-seed-free-local-restore-target.test.ts
       - name: Parse every Windows-sensitive subprocess wrapper
         run: |
           node --check scripts/export-critical-tables.mjs
@@ -301,3 +302,7 @@ jobs:
           node --check scripts/run-local-mvcc-race-writer.mjs
           node --check scripts/create-local-restore-stack.mjs
           node --check scripts/run-redacted-subprocess.mjs
+          node --check scripts/run-database-tests.mjs
+          node --check scripts/prepare-schema-golden-reference-proof.mjs
+          node --check scripts/capture-backup-schema-golden.mjs
+          node --check scripts/run-emergency-bootstrap.mjs

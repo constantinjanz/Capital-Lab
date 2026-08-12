@@ -27,6 +27,7 @@ const MIGRATIONS = Object.freeze([
   '20260809150000_post_build_hosting_safety.sql',
   '20260809150417_activation_readiness_follow_up.sql',
   '20260812092043_fourth_activation_readiness_remediation.sql',
+  '20260812140953_fourth_activation_readiness_review_closure.sql',
 ])
 const PROBE_RELATION = 'private.no_ai_shadow_dry_runs'
 

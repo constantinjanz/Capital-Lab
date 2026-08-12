@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 
@@ -6,6 +6,11 @@ import {
   resolvedArguments,
   resolveNativeExecutable,
 } from './lib/safe-process.mjs'
+import {
+  assertCredentialCandidatePath,
+  credentialRuleMatches,
+  genericDatabasePasswordRule,
+} from './lib/credential-scan-safety.mjs'
 
 const root = process.cwd()
 const ignoredDirectories = new Set([
@@ -105,6 +110,7 @@ const rules = [
     historyPattern:
       'Authorization[[:space:]]*[:=][[:space:]]*Bearer[[:space:]]+[A-Za-z0-9._~-]{20,}',
   },
+  genericDatabasePasswordRule,
 ]
 
 async function filesUnder(directory) {
@@ -117,7 +123,8 @@ async function filesUnder(directory) {
     // the bounded stat/read path and therefore cannot silently escape scope.
     if (ignoredDirectories.has(entry.name)) continue
     const fullPath = path.join(directory, entry.name)
-    if (entry.isDirectory()) files.push(...(await filesUnder(fullPath)))
+    const { metadata } = await assertCredentialCandidatePath(root, fullPath)
+    if (metadata.isDirectory()) files.push(...(await filesUnder(fullPath)))
     else if (
       entry.name.startsWith('.env') ||
       entry.name === '.npmrc' ||
@@ -128,7 +135,6 @@ async function filesUnder(directory) {
         entry.name,
       )
     ) {
-      const metadata = await stat(fullPath)
       if (metadata.size > 2 * 1024 * 1024) {
         throw new Error('Credential candidate exceeds the bounded scanner size')
       }
@@ -227,7 +233,14 @@ for (const rule of rules.filter((candidate) => candidate.historyPattern)) {
           'Bounded Git-history credential scan could not inspect a candidate',
         )
       }
-      if (!rule.pattern.test(scanContent(rule, filename, blob.stdout))) continue
+      if (
+        !credentialRuleMatches(
+          rule,
+          filename,
+          scanContent(rule, filename, blob.stdout),
+        )
+      )
+        continue
       findings.push({
         path: `git-history/${commit.slice(0, 12)}/${filename}`,
         ruleId: rule.id,
@@ -252,7 +265,13 @@ for (const filename of await filesUnder(root)) {
   }
   const content = bytes.toString('utf8')
   for (const rule of rules) {
-    if (rule.pattern.test(scanContent(rule, filename, content))) {
+    if (
+      credentialRuleMatches(
+        rule,
+        filename,
+        scanContent(rule, filename, content),
+      )
+    ) {
       findings.push({
         path: path.relative(root, filename).replaceAll('\\', '/'),
         ruleId: rule.id,

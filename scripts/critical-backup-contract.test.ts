@@ -5,11 +5,16 @@ import {
   AUTH_DATA_RELATIONS,
   assertBackupManifest,
   assertContractKeys,
+  assertEmptyRestoreTargetPreflight,
   assertRestoredAuthEvidence,
   assertRestoredEvidence,
+  assertForeignKeyCatalog,
+  buildForeignKeyCatalogSql,
+  buildForeignKeyViolationSql,
   buildRolePolicySql,
   buildSchemaFingerprintPayloadExpression,
   buildServerIdentitySql,
+  buildSensitiveAuthStateSql,
   canonicalJson,
   criticalRelationSchemas,
   filterApplicationSchemaArchiveToc,
@@ -234,7 +239,42 @@ describe('critical backup contract', () => {
       expect(sql.slice(sql.indexOf("'authDependencies'"))).toContain(key)
     }
     expect(sql).toContain("namespace.nspname = 'auth'")
-    expect(sql).toContain("relation.relname in ('users','identities')")
+    expect(sql).not.toContain("relation.relname in ('users','identities')")
+    expect(sql).toContain("relation.relkind in ('r','p')")
+    expect(buildSensitiveAuthStateSql()).toContain('auth.users')
+    expect(buildSensitiveAuthStateSql()).toContain('auth.identities')
+    expect(buildSensitiveAuthStateSql()).not.toMatch(/email|password/iu)
+  })
+
+  it('builds a schema-driven, row-redacted foreign-key orphan check', () => {
+    const catalog = {
+      constraints: [
+        {
+          name: 'example_owner_fkey',
+          childSchema: 'private',
+          childTable: 'example',
+          childColumns: ['owner_id'],
+          parentSchema: 'public',
+          parentTable: 'app_users',
+          parentColumns: ['user_id'],
+          matchType: 's',
+        },
+      ],
+    }
+    expect(() => assertForeignKeyCatalog(catalog)).not.toThrow()
+    const sql = buildForeignKeyViolationSql(catalog.constraints[0])
+    expect(sql).toContain('violationCount')
+    expect(sql).toContain('not exists')
+    expect(sql).not.toContain('select child.*')
+    expect(buildForeignKeyCatalogSql()).toContain(
+      "constraint_record.contype = 'f'",
+    )
+    expect(() =>
+      buildForeignKeyViolationSql({
+        ...catalog.constraints[0],
+        childTable: 'example; drop schema public',
+      }),
+    ).toThrow(/unsafe identifier/)
   })
   it('keeps application DEFAULT ACL entries and excludes only platform-owned entries', () => {
     const toc = [
@@ -282,6 +322,45 @@ describe('critical backup contract', () => {
       source.indexOf('const proof = buildRestoreTargetProof'),
     ).toBeLessThan(source.indexOf('drop schema if exists private cascade'))
     expect(source).not.toMatch(/drop database/iu)
+  })
+
+  it('accepts only a relation-empty target with non-null distinct identities', () => {
+    const sourceServerIdentity = '170000:source-system-identifier'
+    const sourceDatabaseFingerprint = sha256(
+      '42:postgres:170000:source-system-identifier',
+    )
+    const valid = {
+      userRelations: 0,
+      authPresent: false,
+      serverIdentity: '170000:target-system-identifier',
+      databaseIdentity: '84:postgres:170000:target-system-identifier',
+    }
+    expect(() =>
+      assertEmptyRestoreTargetPreflight(
+        valid,
+        sourceServerIdentity,
+        sourceDatabaseFingerprint,
+      ),
+    ).not.toThrow()
+    for (const invalid of [
+      { ...valid, userRelations: 1 },
+      { ...valid, authPresent: true },
+      { ...valid, serverIdentity: null },
+      { ...valid, databaseIdentity: null },
+      { ...valid, serverIdentity: sourceServerIdentity },
+      {
+        ...valid,
+        databaseIdentity: '42:postgres:170000:source-system-identifier',
+      },
+    ]) {
+      expect(() =>
+        assertEmptyRestoreTargetPreflight(
+          invalid,
+          sourceServerIdentity,
+          sourceDatabaseFingerprint,
+        ),
+      ).toThrow(/empty disposable database/)
+    }
   })
 
   it('hashes a secret-free deterministic role policy and server boundary', () => {
@@ -623,5 +702,20 @@ describe('critical backup contract', () => {
         userCount: '1',
       }),
     ).toThrow(/Auth user\/identity\/owner closure evidence differs/)
+    for (const mutation of [
+      { mappedApplicationOwnerCount: '0' },
+      { mappedApplicationOwnerCount: '2' },
+      { orphanApplicationOwnerCount: '1' },
+      { orphanIdentityCount: '1' },
+      { usersWithoutIdentityCount: '1' },
+    ]) {
+      const driftedManifest = {
+        ...manifest,
+        authEvidence: { ...manifest.authEvidence, ...mutation },
+      }
+      expect(() => assertBackupManifest(driftedManifest, expected)).toThrow(
+        /auth_evidence/,
+      )
+    }
   })
 })

@@ -87,6 +87,7 @@ describe('minimal DB-first emergency runner', () => {
       'package.json',
       'scripts/lib/canonical-repository-bytes.mjs',
       'scripts/lib/safe-process.mjs',
+      'scripts/run-emergency-bootstrap.mjs',
       'scripts/run-emergency-kill.mjs',
       'supabase/activation/emergency-kill.sql',
     ])
@@ -151,6 +152,53 @@ describe('minimal DB-first emergency runner', () => {
     )
     await expect(verifyEmergencyDependencies(linkedRoot)).rejects.toThrow(
       /symlink or junction/,
+    )
+  }, 20_000)
+
+  it('rejects a modified package launcher before any runner or database action', async () => {
+    const { root } = await emergencyRepositoryFixture()
+    const packagePath = path.join(root, 'package.json')
+    await writeFile(
+      packagePath,
+      '{"scripts":{"activation:emergency-kill":"unsafe-worktree-launcher"}}\n',
+    )
+    const gitExecutable = resolveNativeExecutable('git')
+    const committedBootstrap = spawnSync(
+      gitExecutable.command,
+      resolvedArguments(gitExecutable, [
+        'show',
+        'HEAD:scripts/run-emergency-bootstrap.mjs',
+      ]),
+      {
+        cwd: root,
+        encoding: 'utf8',
+        shell: false,
+        windowsHide: true,
+      },
+    )
+    expect(committedBootstrap.status).toBe(0)
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-',
+        `--git-executable=${gitExecutable.command}`,
+        `--campaign-id=${campaignId}`,
+        `--confirm=EMERGENCY KILL CAPITAL LAB CAMPAIGN ${campaignId}`,
+      ],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, CAPITAL_LAB_DATABASE_URL: direct },
+        input: committedBootstrap.stdout,
+        shell: false,
+        timeout: 20_000,
+        windowsHide: true,
+      },
+    )
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain(
+      'Emergency bootstrap dependency differs from committed HEAD',
     )
   }, 20_000)
 

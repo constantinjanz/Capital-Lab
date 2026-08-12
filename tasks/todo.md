@@ -19,27 +19,32 @@ fixtures pass.
 
 ### P0 executable remediation
 
-- [ ] Add actual runtime configuration attestation with the mandatory identity/requested/config-verified/deployment-verified sequence, immutable one-shot request identity, exact no-store schema, centralized runtime reads, two distinct deployment roles, unknown-outcome reconciliation, and hostile fixtures; send no live request.
+- [x] Add actual runtime configuration attestation with the mandatory identity/requested/config-verified/deployment-verified sequence, immutable one-shot request identity, exact no-store schema, centralized runtime reads, two distinct deployment roles, unknown-outcome reconciliation, and hostile fixtures; send no live request.
 - [ ] Add officially supported Auth backup/restore closure and a synthetic two-user, two-isolated-stack login/JWT/Data-API/RLS E2E with exact UUID/identity/owner/orphan checks and Auth/RLS fault injection.
 - [ ] Commit independent pre/post schema goldens generated only from seed-free migration-built reference clusters; normal CI is verify-only and rejects source+target common-mode drift across all required schema objects.
-- [ ] Replace same-cluster two-database restore proof with separate run-owned Source and Target Supabase/Postgres stacks, distinct cluster/system IDs, immutable target marker, source-read-only proof, loopback/Hosted-deny target validation, and run-scoped cleanup.
-- [ ] Enforce one compatible MVCC snapshot across application/Auth/history/count/hash export evidence; concurrency fault injection must observe a complete old or new state and never mixed state or a completed manifest after abort.
+- [x] Replace same-cluster two-database restore proof with separate run-owned Source and Target Supabase/Postgres stacks, distinct cluster/system IDs, immutable target marker, source-read-only proof, loopback/Hosted-deny target validation, and run-scoped cleanup.
+- [x] Enforce one compatible MVCC snapshot across application/Auth/history/count/hash export evidence; concurrency fault injection must observe a complete old or new state and never mixed state or a completed manifest after abort.
 
 ### P1 executable remediation
 
-- [ ] Close break-glass integrity over the entrypoint and every transitive helper/SQL/template/config/wrapper using realpath plus exact HEAD Git-blob bytes before database/network access while allowing unrelated dirt.
+- [x] Close break-glass integrity over the entrypoint and every transitive helper/SQL/template/config/wrapper using realpath plus exact HEAD Git-blob bytes before database/network access while allowing unrelated dirt.
 - [ ] Replace table-level side-effect exceptions with row/column/operation/transition/cardinality-bounded contracts and adversarial tests for same-count mutation, wrong campaign/column, trigger mutation, insert-delete compensation and unclassified relations.
-- [ ] Require strong source/target cluster identity, run ID, target marker, role/database/fingerprint and source-not-target proof before every destructive process; prove zero spawn on failed validation.
+- [x] Require strong source/target cluster identity, run ID, target marker, role/database/fingerprint and source-not-target proof before every destructive process; prove zero spawn on failed validation.
 - [x] Revalidate backup/artifact realpaths and parents against symlink/junction/case escapes, use restrictive temporary artifacts, redact stdout and stderr, distinguish backup/restore/schema-golden/activation status, and cover encoded URLs/JWT/header/token patterns.
 - [ ] Add a forward-only migration through the pinned Supabase CLI workflow without modifying the 32 Hosted-applied migration bytes; update reset, pgTAP, rollback rehearsal and grants/RLS contracts.
 
 ### Independent review, exact-head gates and handoff
 
-- [ ] Run three independent adversarial reviews: Runtime/Vercel/State Machine; Backup/Auth/Schema/Snapshot; Break-glass/Filesystem/Side-effects/Credentials. Reproduce and close every accepted finding.
+- [x] Run three independent adversarial reviews: Runtime/Vercel/State Machine; Backup/Auth/Schema/Snapshot; Break-glass/Filesystem/Side-effects/Credentials. Reproduce and close every accepted finding.
 - [ ] Run all focused fault-injection tests, then the complete Node 24 application, Windows, mock Playwright, credential-history, Supabase CLI 2.113.0, start/reset/pgTAP, every pending rollback, dual-cluster pre/post restore, synthetic Auth/RLS, golden/MVCC, filesystem/redaction/side-effect/checksum and Git gates on one exact clean commit.
 - [ ] Regenerate final-byte phase/migration/handoff checksums, update the post-build report with implementation/handoff SHAs and exact non-execution evidence, push only the existing branch, keep PR #21 Draft/unmerged, and wait for exact-head green CI plus Preview `target=null` evidence.
 
 ### Verification checkpoint 2026-08-12
+
+- [x] The three required adversarial reviews inspected exact commit `1747df0c870e51906485b30419dd5b66315530d2`. Accepted fixes now use the immutable Auth deployment URL, exact JSON/no-store transport evidence, a portfolio zero-counter, pre-statement forbidden-mutation rejection, campaign-scoped/terminal-state emergency repair, a committed-blob break-glass bootstrap, native Windows database execution, contextual redacted credential scanning, full Auth schema fingerprints, Auth/owner cardinality, ephemeral sensitive Auth equality, schema-driven FK validation, empty-target identity validation and seed-free reference-proof enforcement.
+- [x] Current Node `v24.14.0` verification: focused security suite 8 files / 94 tests; complete Vitest 96 files / 715 tests; strict TypeScript; zero-warning ESLint after test typing cleanup; Prettier; PAPER-only scan; credential scan over worktree plus 100 commits with zero redacted findings. Backup contracts deterministically contain 82 relations / 32 migrations pre and 108 relations / 36 migrations post.
+- [ ] The pinned forward migration `20260812140953_fourth_activation_readiness_review_closure.sql` and its rollback/reset/pgTAP path require clean exact-head CI because this workstation has no Docker executable.
+- [ ] Both independently generated seed-free schema Golden files remain absent. Their approved provenance workflow is implemented and tested, but no Golden was fabricated from Source A, Stack B, Hosted, a placeholder or a circular workflow artifact. Until both reviewed files exist and exact-head CI passes, the required result remains `BLOCKED — CODE-LEVEL ACCEPTANCE CRITERIA NOT MET`.
 
 - [x] Focused runtime, backup/Auth, break-glass, filesystem, redaction and contract suites passed: 12 files / 113 tests.
 - [x] Complete Vitest suite passed after canonical Auth-artifact path hardening: 91 files / 678 tests.

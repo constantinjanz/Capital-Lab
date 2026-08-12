@@ -9,6 +9,7 @@ const PENDING = new Set([
   '20260809150000_post_build_hosting_safety.sql',
   '20260809150417_activation_readiness_follow_up.sql',
   '20260812092043_fourth_activation_readiness_remediation.sql',
+  '20260812140953_fourth_activation_readiness_review_closure.sql',
 ])
 
 function canonicalJson(value) {

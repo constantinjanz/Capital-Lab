@@ -1,15 +1,17 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { chmod, realpath, writeFile } from 'node:fs/promises'
+import { chmod, readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import {
   buildSchemaGoldenEvidenceSql,
+  buildServerIdentitySql,
   canonicalJson,
   loadCriticalRelationContract,
   postgresUrlToLibpqEnv,
   redactedPostgresError,
   sha256,
 } from './critical-backup-contract.mjs'
+import { validateSchemaGoldenReferenceProof } from './lib/schema-golden-reference-proof.mjs'
 import {
   resolvedArguments,
   resolveNativeExecutable,
@@ -17,25 +19,30 @@ import {
 import {
   newExternalPath,
   verifyCreatedExternalPath,
+  verifiedExternalFile,
 } from './lib/safe-artifact-path.mjs'
 
 const CONFIRMATION = 'UPDATE REVIEWED CAPITAL LAB SCHEMA GOLDEN'
 
 function options() {
   const entries = process.argv.slice(2).map((argument) => {
-    const match = /^--(confirm|contract|output)=(.+)$/u.exec(argument)
+    const match =
+      /^--(confirm|contract|expected-reference-proof-sha256|output|reference-proof)=(.+)$/u.exec(
+        argument,
+      )
     if (!match) throw new Error('Schema-golden arguments are invalid')
     return [match[1], match[2]]
   })
   const parsed = Object.fromEntries(entries)
   if (
-    entries.length !== 3 ||
+    entries.length !== 5 ||
     new Set(entries.map(([key]) => key)).size !== 3 ||
     !['pre', 'post'].includes(parsed.contract) ||
-    parsed.confirm !== CONFIRMATION
+    parsed.confirm !== CONFIRMATION ||
+    !/^[0-9a-f]{64}$/u.test(parsed['expected-reference-proof-sha256'] ?? '')
   ) {
     throw new Error(
-      'Explicit --contract, --output, and reviewed schema-golden confirmation are required',
+      'Explicit --contract, --output, --reference-proof, retained proof hash, and reviewed confirmation are required',
     )
   }
   return parsed
@@ -118,9 +125,12 @@ async function main() {
     throw new Error('Schema-golden capture requires a clean Working Tree')
   }
   const output = await newExternalPath(workspace, requested.output)
-  const databaseUrl = process.env.CAPITAL_LAB_DATABASE_URL
-  if (!databaseUrl)
-    throw new Error('Database URL is required and never printed')
+  const databaseUrl = process.env.CAPITAL_LAB_REFERENCE_DATABASE_URL
+  const sourceDatabaseUrl = process.env.CAPITAL_LAB_BACKUP_SOURCE_DATABASE_URL
+  if (!databaseUrl || !sourceDatabaseUrl)
+    throw new Error(
+      'Reference and distinct Source-A database URLs are required and never printed',
+    )
   const contractKind =
     requested.contract === 'pre' ? 'pre_activation' : 'post_activation'
   const contractPath = path.join(
@@ -131,8 +141,14 @@ async function main() {
   )
   const { contract, sha256: relationContractSha256 } =
     await loadCriticalRelationContract(contractPath, contractKind)
+  const referenceConnection = postgresUrlToLibpqEnv(databaseUrl, {
+    localOnly: true,
+  })
+  const sourceConnection = postgresUrlToLibpqEnv(sourceDatabaseUrl, {
+    localOnly: true,
+  })
   const actual = await evidence(
-    postgresUrlToLibpqEnv(databaseUrl, { localOnly: true }).libpqEnv,
+    referenceConnection.libpqEnv,
     buildSchemaGoldenEvidenceSql(contract),
   )
   if (
@@ -147,6 +163,51 @@ async function main() {
       )
   ) {
     throw new Error('Schema-golden source migration history differs')
+  }
+  const referenceProofPath = await verifiedExternalFile(
+    workspace,
+    requested['reference-proof'],
+  )
+  const referenceProofBytes = await readFile(referenceProofPath)
+  if (
+    sha256(referenceProofBytes) !== requested['expected-reference-proof-sha256']
+  ) {
+    throw new Error(
+      'Schema-golden reference proof differs from its retained hash',
+    )
+  }
+  let referenceProof
+  try {
+    referenceProof = JSON.parse(referenceProofBytes.toString('utf8'))
+  } catch {
+    throw new Error('Schema-golden reference proof is invalid JSON')
+  }
+  const referenceIdentity = await evidence(
+    referenceConnection.libpqEnv,
+    buildServerIdentitySql(),
+  )
+  const sourceIdentity = await evidence(
+    sourceConnection.libpqEnv,
+    buildServerIdentitySql(),
+  )
+  validateSchemaGoldenReferenceProof(
+    referenceProof,
+    {
+      contractKind,
+      gitCommitSha: git(['rev-parse', 'HEAD'], workspace),
+      relationContractSha256,
+      migrationHistorySha256: actual.migrationHistorySha256,
+      sha256,
+    },
+    referenceIdentity,
+    sourceIdentity,
+  )
+  if (
+    referenceProof.hostname !== referenceConnection.hostname ||
+    referenceProof.port !== referenceConnection.port ||
+    referenceProof.database !== referenceConnection.database
+  ) {
+    throw new Error('Schema-golden reference proof target changed')
   }
   const golden = {
     contractKind,

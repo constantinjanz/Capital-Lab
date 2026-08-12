@@ -59,6 +59,128 @@ export function buildAuthEvidenceSql() {
   );\n`
 }
 
+// This digest is deliberately ephemeral. Callers may compare it in memory but
+// must never persist or log it because it is derived from Auth credential rows.
+export function buildSensitiveAuthStateSql() {
+  return `select jsonb_build_object(
+    'usersSha256', encode(extensions.digest(convert_to(coalesce((
+      select string_agg(to_jsonb(auth_user)::text, E'\\n' order by auth_user.id)
+      from auth.users as auth_user
+    ), ''), 'UTF8'), 'sha256'), 'hex'),
+    'identitiesSha256', encode(extensions.digest(convert_to(coalesce((
+      select string_agg(to_jsonb(identity)::text, E'\\n' order by identity.id)
+      from auth.identities as identity
+    ), ''), 'UTF8'), 'sha256'), 'hex')
+  );\n`
+}
+
+export function buildForeignKeyCatalogSql() {
+  return `select jsonb_build_object(
+    'constraints', coalesce(jsonb_agg(jsonb_build_object(
+      'name', source.constraint_name,
+      'childSchema', source.child_schema,
+      'childTable', source.child_table,
+      'childColumns', source.child_columns,
+      'parentSchema', source.parent_schema,
+      'parentTable', source.parent_table,
+      'parentColumns', source.parent_columns,
+      'matchType', source.match_type
+    ) order by source.child_schema, source.child_table, source.constraint_name), '[]'::jsonb)
+  ) from (
+    select constraint_record.conname as constraint_name,
+      child_namespace.nspname as child_schema,
+      child_relation.relname as child_table,
+      array(select child_attribute.attname
+        from unnest(constraint_record.conkey) with ordinality as key(attnum, position)
+        join pg_catalog.pg_attribute as child_attribute
+          on child_attribute.attrelid = child_relation.oid
+          and child_attribute.attnum = key.attnum
+        order by key.position) as child_columns,
+      parent_namespace.nspname as parent_schema,
+      parent_relation.relname as parent_table,
+      array(select parent_attribute.attname
+        from unnest(constraint_record.confkey) with ordinality as key(attnum, position)
+        join pg_catalog.pg_attribute as parent_attribute
+          on parent_attribute.attrelid = parent_relation.oid
+          and parent_attribute.attnum = key.attnum
+        order by key.position) as parent_columns,
+      constraint_record.confmatchtype::text as match_type
+    from pg_catalog.pg_constraint as constraint_record
+    join pg_catalog.pg_class as child_relation
+      on child_relation.oid = constraint_record.conrelid
+    join pg_catalog.pg_namespace as child_namespace
+      on child_namespace.oid = child_relation.relnamespace
+    join pg_catalog.pg_class as parent_relation
+      on parent_relation.oid = constraint_record.confrelid
+    join pg_catalog.pg_namespace as parent_namespace
+      on parent_namespace.oid = parent_relation.relnamespace
+    where constraint_record.contype = 'f'
+      and child_namespace.nspname in ('public','private','auth')
+  ) as source;\n`
+}
+
+function quotedIdentifier(value) {
+  if (!IDENTIFIER.test(value ?? '')) {
+    throw new Error('Foreign-key catalog contains an unsafe identifier')
+  }
+  return `"${value}"`
+}
+
+export function buildForeignKeyViolationSql(specification) {
+  const childColumns = specification?.childColumns
+  const parentColumns = specification?.parentColumns
+  if (
+    !IDENTIFIER.test(specification?.name ?? '') ||
+    !Array.isArray(childColumns) ||
+    !Array.isArray(parentColumns) ||
+    childColumns.length === 0 ||
+    childColumns.length !== parentColumns.length ||
+    !['s', 'f'].includes(specification?.matchType)
+  ) {
+    throw new Error('Foreign-key catalog entry is invalid or unsupported')
+  }
+  const child = `${quotedIdentifier(specification.childSchema)}.${quotedIdentifier(specification.childTable)}`
+  const parent = `${quotedIdentifier(specification.parentSchema)}.${quotedIdentifier(specification.parentTable)}`
+  const childIdentifiers = childColumns.map(quotedIdentifier)
+  const parentIdentifiers = parentColumns.map(quotedIdentifier)
+  const applicable =
+    specification.matchType === 's'
+      ? childIdentifiers
+          .map((column) => `child.${column} is not null`)
+          .join(' and ')
+      : `not (${childIdentifiers.map((column) => `child.${column} is null`).join(' and ')})`
+  const matches = childIdentifiers
+    .map(
+      (column, index) =>
+        `parent.${parentIdentifiers[index]} is not distinct from child.${column}`,
+    )
+    .join(' and ')
+  return `select jsonb_build_object(
+    'constraint', '${specification.name}',
+    'violationCount', count(*)::text
+  ) from ${child} as child
+  where ${applicable}
+    and not exists (select 1 from ${parent} as parent where ${matches});\n`
+}
+
+export function assertForeignKeyCatalog(catalog) {
+  if (
+    !Array.isArray(catalog?.constraints) ||
+    catalog.constraints.length === 0
+  ) {
+    throw new Error('Foreign-key integrity catalog is empty')
+  }
+  const identities = new Set()
+  for (const specification of catalog.constraints) {
+    buildForeignKeyViolationSql(specification)
+    const identity = `${specification.childSchema}.${specification.childTable}.${specification.name}`
+    if (identities.has(identity)) {
+      throw new Error('Foreign-key integrity catalog contains a duplicate')
+    }
+    identities.add(identity)
+  }
+}
+
 export function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
   if (value && typeof value === 'object') {
@@ -72,6 +194,30 @@ export function canonicalJson(value) {
 
 export function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
+}
+
+export function assertEmptyRestoreTargetPreflight(
+  preflight,
+  sourceServerIdentity,
+  sourceDatabaseFingerprint,
+) {
+  if (
+    preflight?.userRelations !== 0 ||
+    preflight?.authPresent !== false ||
+    typeof preflight?.serverIdentity !== 'string' ||
+    preflight.serverIdentity.length < 8 ||
+    typeof preflight?.databaseIdentity !== 'string' ||
+    preflight.databaseIdentity.length < 8 ||
+    typeof sourceServerIdentity !== 'string' ||
+    sourceServerIdentity.length < 8 ||
+    !SHA256.test(sourceDatabaseFingerprint ?? '') ||
+    sha256(preflight.serverIdentity) === sha256(sourceServerIdentity) ||
+    sha256(preflight.databaseIdentity) === sourceDatabaseFingerprint
+  ) {
+    throw new Error(
+      'Restore target is not an empty disposable database on distinct stack B',
+    )
+  }
 }
 
 export function buildServerIdentitySql() {
@@ -592,8 +738,7 @@ export function buildSchemaFingerprintPayloadExpression() {
       from pg_catalog.pg_class as relation
       join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
       join pg_catalog.pg_roles as owner on owner.oid = relation.relowner
-      where namespace.nspname = 'auth' and relation.relname in ('users','identities')
-        and relation.relkind in ('r','p')),
+      where namespace.nspname = 'auth' and relation.relkind in ('r','p')),
       'columns', (select coalesce(jsonb_agg(jsonb_build_object(
         'relation', relation.relname, 'position', attribute.attnum,
         'name', attribute.attname,
@@ -607,7 +752,7 @@ export function buildSchemaFingerprintPayloadExpression() {
       join pg_catalog.pg_attribute as attribute on attribute.attrelid = relation.oid
       left join pg_catalog.pg_attrdef as default_value
         on default_value.adrelid = relation.oid and default_value.adnum = attribute.attnum
-      where namespace.nspname = 'auth' and relation.relname in ('users','identities')
+      where namespace.nspname = 'auth' and relation.relkind in ('r','p')
         and attribute.attnum > 0 and not attribute.attisdropped),
       'constraints', (select coalesce(jsonb_agg(jsonb_build_object(
         'relation', relation.relname, 'name', constraint_record.conname,
@@ -617,24 +762,24 @@ export function buildSchemaFingerprintPayloadExpression() {
       from pg_catalog.pg_constraint as constraint_record
       join pg_catalog.pg_class as relation on relation.oid = constraint_record.conrelid
       join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
-      where namespace.nspname = 'auth' and relation.relname in ('users','identities')),
+      where namespace.nspname = 'auth' and relation.relkind in ('r','p')),
       'indexes', (select coalesce(jsonb_agg(jsonb_build_object(
         'relation', tablename, 'name', indexname, 'definition', indexdef
       ) order by tablename, indexname), '[]'::jsonb)
       from pg_catalog.pg_indexes
-      where schemaname = 'auth' and tablename in ('users','identities')),
+      where schemaname = 'auth'),
       'policies', (select coalesce(jsonb_agg(jsonb_build_object(
         'relation', tablename, 'name', policyname, 'permissive', permissive,
         'roles', roles, 'command', cmd, 'using', qual, 'check', with_check
       ) order by tablename, policyname), '[]'::jsonb)
       from pg_catalog.pg_policies
-      where schemaname = 'auth' and tablename in ('users','identities')),
+      where schemaname = 'auth'),
       'tableGrants', (select coalesce(jsonb_agg(jsonb_build_object(
         'relation', table_name, 'grantee', grantee,
         'privilege', privilege_type, 'grantable', is_grantable
       ) order by table_name, grantee, privilege_type), '[]'::jsonb)
       from information_schema.table_privileges
-      where table_schema = 'auth' and table_name in ('users','identities')),
+      where table_schema = 'auth'),
       'triggers', (select coalesce(jsonb_agg(jsonb_build_object(
         'relation', relation.relname, 'name', trigger_record.tgname,
         'internal', trigger_record.tgisinternal,
@@ -643,8 +788,7 @@ export function buildSchemaFingerprintPayloadExpression() {
       from pg_catalog.pg_trigger as trigger_record
       join pg_catalog.pg_class as relation on relation.oid = trigger_record.tgrelid
       join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
-      where namespace.nspname = 'auth'
-        and relation.relname in ('users','identities')),
+      where namespace.nspname = 'auth'),
       'functions', (select coalesce(jsonb_agg(jsonb_build_object(
         'identity', procedure.oid::regprocedure::text,
         'owner', owner.rolname, 'acl', procedure.proacl,
@@ -829,6 +973,13 @@ export function assertBackupManifest(manifest, expected) {
       /^\d+$/.test(manifest.authEvidence?.orphanApplicationOwnerCount ?? '') &&
       /^\d+$/.test(manifest.authEvidence?.orphanIdentityCount ?? '') &&
       /^\d+$/.test(manifest.authEvidence?.usersWithoutIdentityCount ?? '') &&
+      BigInt(manifest.authEvidence.userCount) > 0n &&
+      BigInt(manifest.authEvidence.identityCount) >=
+        BigInt(manifest.authEvidence.userCount) &&
+      manifest.authEvidence.mappedApplicationOwnerCount === '1' &&
+      manifest.authEvidence.orphanApplicationOwnerCount === '0' &&
+      manifest.authEvidence.orphanIdentityCount === '0' &&
+      manifest.authEvidence.usersWithoutIdentityCount === '0' &&
       Array.isArray(manifest.authEvidence?.excludedDataRelations) &&
       manifest.authEvidence.excludedDataRelations.every((relation) =>
         /^auth\.[a-z][a-z0-9_]{0,62}$/.test(relation),
@@ -979,5 +1130,18 @@ export function assertRestoredAuthEvidence(manifest, actualAuthEvidence) {
     throw new Error(
       'Restored Auth user/identity/owner closure evidence differs',
     )
+  }
+  if (
+    actualAuthEvidence.mappedApplicationOwnerCount !== '1' ||
+    actualAuthEvidence.orphanApplicationOwnerCount !== '0' ||
+    actualAuthEvidence.orphanIdentityCount !== '0' ||
+    actualAuthEvidence.usersWithoutIdentityCount !== '0' ||
+    !/^\d+$/.test(actualAuthEvidence.userCount ?? '') ||
+    !/^\d+$/.test(actualAuthEvidence.identityCount ?? '') ||
+    BigInt(actualAuthEvidence.userCount) === 0n ||
+    BigInt(actualAuthEvidence.identityCount) <
+      BigInt(actualAuthEvidence.userCount)
+  ) {
+    throw new Error('Restored Auth/Owner integrity invariants are invalid')
   }
 }

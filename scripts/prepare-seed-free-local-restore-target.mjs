@@ -1,6 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { chmod, readFile, realpath, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import {
   buildServerIdentitySql,
@@ -132,6 +134,43 @@ async function inspectRestoreContainer(runId) {
     throw new Error('Disposable Supabase stack B container is not unique')
   }
   return parsed[0]
+}
+
+export function validateDestructiveResetBinding({
+  proof,
+  inspection,
+  targetIdentity,
+  proofBinding,
+  preparedAt,
+  target,
+}) {
+  const canonical = buildRestoreTargetProof(
+    inspection,
+    targetIdentity,
+    proofBinding,
+    preparedAt,
+  )
+  if (
+    canonicalProofJson(proof) !== canonicalProofJson(canonical) ||
+    proof.hostname !== '127.0.0.1' ||
+    proof.port !== '55322' ||
+    proof.database !== 'postgres' ||
+    proof.databaseRole !== 'postgres' ||
+    proof.hostname !== target.hostname ||
+    proof.port !== target.port ||
+    proof.database !== target.database ||
+    proof.runId !== proofBinding.runId ||
+    proof.disposableMarker !== proofBinding.disposableMarker ||
+    proof.serverFingerprint === proof.sourceServerFingerprint
+  ) {
+    throw new Error('Destructive target authority is invalid')
+  }
+  return canonical
+}
+
+export async function executeDestructiveReset(binding, destructiveAction) {
+  validateDestructiveResetBinding(binding)
+  return destructiveAction()
 }
 
 async function main() {
@@ -266,16 +305,26 @@ commit;
   ) {
     throw new Error('Destructive target proof differs before reset')
   }
-  await run(
-    'psql',
-    ['-X', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1'],
+  await executeDestructiveReset(
     {
-      ...process.env,
-      ...target.libpqEnv,
-      PGCONNECT_TIMEOUT: '10',
-      PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
+      proof,
+      inspection,
+      targetIdentity,
+      proofBinding,
+      preparedAt,
+      target,
     },
-    `begin;
+    () =>
+      run(
+        'psql',
+        ['-X', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1'],
+        {
+          ...process.env,
+          ...target.libpqEnv,
+          PGCONNECT_TIMEOUT: '10',
+          PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
+        },
+        `begin;
 drop schema if exists private cascade;
 drop schema if exists public cascade;
 drop schema if exists supabase_migrations cascade;
@@ -283,6 +332,7 @@ drop schema if exists auth cascade;
 create schema public authorization postgres;
 commit;
 `,
+      ),
   )
   const postResetIdentity = await databaseEvidence(
     target,
@@ -325,11 +375,16 @@ commit;
   )
 }
 
-await main().catch((error) => {
-  console.error(
-    error instanceof Error
-      ? error.message
-      : 'Local restore target preparation failed closed',
-  )
-  process.exit(1)
-})
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
+  await main().catch((error) => {
+    console.error(
+      error instanceof Error
+        ? error.message
+        : 'Local restore target preparation failed closed',
+    )
+    process.exit(1)
+  })
+}

@@ -16,8 +16,8 @@ returns jsonb language sql immutable as $$
     'broker_requests', 0, 'budget_reservations', 0, 'canary_runs', 0,
     'fills', 0, 'ledger_entries', 0, 'market_data_requests', 0,
     'model_calls', 0, 'news_requests', 0, 'orders', 0,
-    'position_mutations', 0, 'provider_requests', 0, 'sol_executions', 0,
-    'web_search_requests', 0
+    'portfolio_mutations', 0, 'position_mutations', 0,
+    'provider_requests', 0, 'sol_executions', 0, 'web_search_requests', 0
   );
 $$;
 
@@ -150,7 +150,8 @@ create function pg_temp.assert_invalid_runtime_config_response(
   p_status integer default 200,
   p_timed_out boolean default false,
   p_error text default null,
-  p_headers jsonb default '{"cache-control":"no-store"}'::jsonb
+  p_headers jsonb default '{"cache-control":"no-store"}'::jsonb,
+  p_content_type text default 'application/json'
 )
 returns void language plpgsql as $$
 begin
@@ -162,7 +163,7 @@ begin
     insert into net._http_response (
       id, status_code, content_type, headers, content, timed_out, error_msg
     ) values (
-      p_transport_id, p_status, 'application/json', p_headers,
+      p_transport_id, p_status, p_content_type, p_headers,
       p_body::text, p_timed_out, p_error
     );
     perform private.capture_activation_runtime_config_response(pg_temp.campaign_id());
@@ -195,7 +196,8 @@ create function pg_temp.assert_invalid_auth_response(
   p_body jsonb,
   p_status integer default 200,
   p_timed_out boolean default false,
-  p_error text default null
+  p_error text default null,
+  p_headers jsonb default '{"cache-control":"no-store"}'::jsonb
 )
 returns void language plpgsql as $$
 begin
@@ -207,7 +209,7 @@ begin
     insert into net._http_response (
       id, status_code, content_type, headers, content, timed_out, error_msg
     ) values (
-      p_transport_id, p_status, 'application/json', '{}'::jsonb,
+      p_transport_id, p_status, 'application/json', p_headers,
       p_body::text, p_timed_out, p_error
     );
     perform private.capture_activation_http_responses();
@@ -287,6 +289,24 @@ select has_function('private', 'assert_activation_job_specs', array['uuid', 'boo
 select has_function('private', 'finalize_activation_campaign', array[
   'uuid', 'text', 'text', 'text', 'text', 'text', 'uuid', 'uuid'
 ], 'strict finalizer exists');
+select has_column('private', 'activation_http_responses', 'response_content_type',
+  'durable HTTP evidence records only the sanitized content type');
+select has_column('private', 'activation_http_responses', 'cache_control_no_store',
+  'durable HTTP evidence records the no-store decision');
+select like(
+  pg_get_functiondef('private.submit_activation_auth_noop(uuid)'::regprocedure),
+  '%using binding.runtime_config_url, shared_secret%',
+  'the valid Bearer is sent only to the immutable Auth deployment URL'
+);
+select like(
+  pg_get_functiondef('private.submit_activation_auth_failure_probes(uuid,uuid)'::regprocedure),
+  '%using binding.runtime_config_url,%',
+  'both 401 probes use the immutable Auth deployment URL'
+);
+select ok(private.activation_zero_counters_valid(pg_temp.zero_counters()),
+  'the exact zero-counter schema includes portfolio mutations');
+select ok(not private.activation_zero_counters_valid(pg_temp.zero_counters() - 'portfolio_mutations'),
+  'a response that omits portfolio mutations fails closed');
 
 select ok((
   select bool_and(class.relrowsecurity and class.relforcerowsecurity)
@@ -354,6 +374,11 @@ select is((
 -- exists. Once endpoint verification begins these relations are intentionally
 -- forbidden, so fixture setup after that gate would correctly trigger the
 -- DB-first emergency stop.
+insert into public.app_users (user_id, email, is_active)
+select auth_user.id, auth_user.email, false
+from auth.users as auth_user
+where auth_user.id = '00000000-0000-0000-0000-000000000002'
+on conflict (user_id) do update set is_active = false;
 insert into public.market_calendar_manifests (
   id, owner_id, manifest_id, calendar_year, timezone, definition,
   content_hash, reviewed_at
@@ -414,6 +439,32 @@ select lives_ok(
     '10000000-0000-4000-8000-000000000002'
   )$$,
   'prepare derives and persists the server database identity'
+);
+update public.app_users
+set is_active = user_id = '00000000-0000-0000-0000-000000000002'
+where user_id in (
+  '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000002'
+);
+select lives_ok(
+  $$select private.prepare_no_ai_shadow_dry_run_v2(
+    '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d299', repeat('a', 40),
+    'activation-readiness-v2', repeat('b', 64), repeat('c', 64),
+    private.activation_relation_contract_hash(),
+    jsonb_set(
+      pg_temp.campaign_manifest(), '{campaign_id}',
+      to_jsonb('6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d299'::text)
+    ),
+    '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d297',
+    '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d298'
+  )$$,
+  'a second state-drift Campaign is created only through the reviewed prepare function'
+);
+update public.app_users
+set is_active = user_id = '00000000-0000-0000-0000-000000000001'
+where user_id in (
+  '00000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000002'
 );
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'prepared', 'campaign begins prepared');
 select is((select database_fingerprint from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), private.activation_database_fingerprint(), 'prepared target fingerprint is server-derived');
@@ -718,8 +769,8 @@ where campaign_id = pg_temp.campaign_id();
 insert into net._http_response (
   id, status_code, content_type, headers, content, timed_out, error_msg
 ) values
-  (89901, 401, 'application/json', '{}'::jsonb, pg_temp.auth_failure_body()::text, false, null),
-  (89902, 401, 'application/json', '{}'::jsonb, pg_temp.auth_failure_body()::text, false, null);
+  (89901, 401, 'application/json', '{"cache-control":"no-store"}'::jsonb, pg_temp.auth_failure_body()::text, false, null),
+  (89902, 401, 'application/json', '{"cache-control":"no-store"}'::jsonb, pg_temp.auth_failure_body()::text, false, null);
 select lives_ok(
   $$select private.verify_activation_auth_failure_probes(pg_temp.campaign_id())$$,
   'both exact 401 response fixtures reconcile through the durable probe identities'
@@ -777,6 +828,19 @@ select lives_ok(
   )$$,
   'terminal-reason mismatch is rejected and rolled back'
 );
+select lives_ok(
+  $$select pg_temp.assert_invalid_auth_response(
+    90005, pg_temp.auth_noop_body(), 200, false, null, '{}'::jsonb
+  )$$,
+  'auth response without no-store is rejected before durable evidence'
+);
+select lives_ok(
+  $$select pg_temp.assert_invalid_auth_response(
+    90006, pg_temp.auth_noop_body(), 200, false, null,
+    '{"cache-control":"no-store"}'::jsonb, 'text/plain'
+  )$$,
+  'auth response without exact JSON content type is rejected before durable evidence'
+);
 update private.activation_auth_noop_requests
 set pg_net_request_id = 90010, status = 'transport_terminal',
     terminal_at = statement_timestamp()
@@ -784,7 +848,7 @@ where campaign_id = pg_temp.campaign_id();
 insert into net._http_response (
   id, status_code, content_type, headers, content, timed_out, error_msg
 ) values (
-  90010, 200, 'application/json', '{}'::jsonb,
+  90010, 200, 'application/json', '{"cache-control":"no-store"}'::jsonb,
   pg_temp.auth_noop_body()::text, false, null
 );
 select lives_ok(
@@ -799,6 +863,8 @@ select is((
   select count(*) from private.activation_http_responses
   where campaign_id = pg_temp.campaign_id() and mode = 'auth_noop'
     and schema_valid and counters = pg_temp.zero_counters()
+    and response_content_type = 'application/json'
+    and cache_control_no_store
 ), 1::bigint, 'auth no-op verifier persists exactly the parsed zero counters');
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auth_noop_verified', 'auth verification advances through the guarded transition');
 
@@ -979,45 +1045,77 @@ select throws_ok(
 );
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'runtime_deployment_verified', 'baseline remains blocked until proof and actual Runtime configuration are both durable');
 
-savepoint market_side_effect_guard;
-update public.market_quotes set id = id where false;
-select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auto_stopped', 'market-data mutation trips the DB-first kill even with zero affected rows');
-rollback to savepoint market_side_effect_guard;
-savepoint compensated_side_effect_guard;
-insert into public.market_quotes
-select * from public.market_quotes where false;
-delete from public.market_quotes where false;
-select is(
-  (select state from private.no_ai_shadow_dry_runs
-    where id = pg_temp.campaign_id()),
-  'auto_stopped',
-  'an insert-delete compensation attempt trips the DB-first kill'
+create temporary table forbidden_row_before as
+select 'market_quotes'::text as relation_name, id, content_hash::text as value
+from public.market_quotes order by id limit 1;
+insert into forbidden_row_before
+select 'portfolio_snapshots', id, valuation_inputs::text from public.portfolio_snapshots order by id limit 1;
+insert into forbidden_row_before
+select 'risk_events', id, details::text from public.risk_events order by id limit 1;
+insert into forbidden_row_before
+select 'simulator_runs', id, metadata::text from public.simulator_runs order by id limit 1;
+insert into forbidden_row_before
+select 'trade_outcomes', id, execution_outcome::text from public.trade_outcomes order by id limit 1;
+insert into forbidden_row_before
+select 'agent_decisions', id, structured_output::text from public.agent_decisions order by id limit 1;
+insert into forbidden_row_before
+select 'experiments', id, objective from public.experiments order by id limit 1;
+select is((select count(*) from forbidden_row_before), 7::bigint,
+  'actual forbidden-row fixtures exist for every adversarial class');
+select throws_ok(
+  $$update public.market_quotes set content_hash = repeat('0', 64)
+    where id = (select id from forbidden_row_before where relation_name = 'market_quotes')$$,
+  '55000', 'Activation forbids mutation of public.market_quotes',
+  'actual market-data mutation is prevented before DML'
 );
-rollback to savepoint compensated_side_effect_guard;
-savepoint portfolio_side_effect_guard;
-update public.portfolio_snapshots set id = id where false;
-select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auto_stopped', 'portfolio mutation trips the DB-first kill');
-rollback to savepoint portfolio_side_effect_guard;
-savepoint risk_side_effect_guard;
-update public.risk_events set id = id where false;
-select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auto_stopped', 'risk mutation trips the DB-first kill');
-rollback to savepoint risk_side_effect_guard;
-savepoint simulator_side_effect_guard;
-update public.simulator_runs set id = id where false;
-select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auto_stopped', 'simulator mutation trips the DB-first kill');
-rollback to savepoint simulator_side_effect_guard;
-savepoint trade_outcome_side_effect_guard;
-update public.trade_outcomes set id = id where false;
-select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auto_stopped', 'trade-outcome mutation trips the DB-first kill');
-rollback to savepoint trade_outcome_side_effect_guard;
-savepoint decision_side_effect_guard;
-update public.agent_decisions set id = id where false;
-select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auto_stopped', 'decision-evidence mutation trips the DB-first kill');
-rollback to savepoint decision_side_effect_guard;
-savepoint experiment_side_effect_guard;
-update public.experiments set id = id where false;
-select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auto_stopped', 'experiment mutation trips the DB-first kill');
-rollback to savepoint experiment_side_effect_guard;
+select throws_ok(
+  $$update public.portfolio_snapshots set valuation_inputs = valuation_inputs || '{"tamper":true}'::jsonb
+    where id = (select id from forbidden_row_before where relation_name = 'portfolio_snapshots')$$,
+  '55000', 'Activation forbids mutation of public.portfolio_snapshots', 'portfolio mutation is prevented'
+);
+select throws_ok(
+  $$update public.risk_events set details = details || '{"tamper":true}'::jsonb
+    where id = (select id from forbidden_row_before where relation_name = 'risk_events')$$,
+  '55000', 'Activation forbids mutation of public.risk_events', 'risk mutation is prevented'
+);
+select throws_ok(
+  $$update public.simulator_runs set metadata = metadata || '{"tamper":true}'::jsonb
+    where id = (select id from forbidden_row_before where relation_name = 'simulator_runs')$$,
+  '55000', 'Activation forbids mutation of public.simulator_runs', 'simulator mutation is prevented'
+);
+select throws_ok(
+  $$update public.trade_outcomes set execution_outcome = execution_outcome || '{"tamper":true}'::jsonb
+    where id = (select id from forbidden_row_before where relation_name = 'trade_outcomes')$$,
+  '55000', 'Activation forbids mutation of public.trade_outcomes', 'trade-outcome mutation is prevented'
+);
+select throws_ok(
+  $$update public.agent_decisions set structured_output = structured_output || '{"tamper":true}'::jsonb
+    where id = (select id from forbidden_row_before where relation_name = 'agent_decisions')$$,
+  '55000', 'Activation forbids mutation of public.agent_decisions', 'decision-evidence mutation is prevented'
+);
+select throws_ok(
+  $$update public.experiments set objective = objective || ' tamper'
+    where id = (select id from forbidden_row_before where relation_name = 'experiments')$$,
+  '55000', 'Activation forbids mutation of public.experiments', 'experiment mutation is prevented'
+);
+select throws_ok($$insert into public.market_quotes select * from public.market_quotes limit 1$$,
+  '55000', 'Activation forbids mutation of public.market_quotes', 'insert compensation cannot start');
+select throws_ok($$delete from public.market_quotes where id = (select id from forbidden_row_before where relation_name = 'market_quotes')$$,
+  '55000', 'Activation forbids mutation of public.market_quotes', 'delete compensation cannot start');
+select is((
+  select count(*) from forbidden_row_before as expected
+  join lateral (
+    select content_hash::text as value from public.market_quotes where expected.relation_name = 'market_quotes' and id = expected.id
+    union all select valuation_inputs::text from public.portfolio_snapshots where expected.relation_name = 'portfolio_snapshots' and id = expected.id
+    union all select details::text from public.risk_events where expected.relation_name = 'risk_events' and id = expected.id
+    union all select metadata::text from public.simulator_runs where expected.relation_name = 'simulator_runs' and id = expected.id
+    union all select execution_outcome::text from public.trade_outcomes where expected.relation_name = 'trade_outcomes' and id = expected.id
+    union all select structured_output::text from public.agent_decisions where expected.relation_name = 'agent_decisions' and id = expected.id
+    union all select objective from public.experiments where expected.relation_name = 'experiments' and id = expected.id
+  ) as actual on actual.value = expected.value
+), 7::bigint, 'all actual forbidden rows remain byte-equivalent');
+select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()),
+  'runtime_deployment_verified', 'rejected forbidden DML cannot alter campaign state');
 
 select lives_ok(
   $$select private.freeze_activation_baseline(
@@ -1177,7 +1275,7 @@ select is((select count(*) from private.no_ai_shadow_dry_run_events where dry_ru
 insert into net._http_response (
   id, status_code, content_type, headers, content, timed_out, error_msg
 )
-select event.pg_net_request_id, 200, 'application/json', '{}'::jsonb,
+select event.pg_net_request_id, 200, 'application/json', '{"cache-control":"no-store"}'::jsonb,
   jsonb_build_object(
     'schema_version', 3,
     'mode', 'dry_run',
@@ -1214,7 +1312,7 @@ select is(
   104,
   'reconciler parses and persists all 104 exact local pg_net responses'
 );
-select is((select count(*) from private.activation_http_responses where campaign_id = pg_temp.campaign_id() and mode = 'dry_run' and schema_valid), 104::bigint, '104 sanitized exact responses persist independently of pg_net TTL');
+select is((select count(*) from private.activation_http_responses where campaign_id = pg_temp.campaign_id() and mode = 'dry_run' and schema_valid and response_content_type = 'application/json' and cache_control_no_store), 104::bigint, '104 sanitized exact JSON no-store responses persist independently of pg_net TTL');
 select is((select count(*) from private.no_ai_shadow_dry_run_events where dry_run_id = pg_temp.campaign_id() and model_call_count = 0 and budget_reservation_count = 0 and order_count = 0 and fill_count = 0 and ledger_entry_count = 0), 104::bigint, 'actual parsed zero counters are copied into every event');
 select is((
   select count(*) from private.activation_http_responses
@@ -1234,6 +1332,9 @@ select throws_ok(
   'a paid Responses claim is impossible before immutable passed terminal evidence'
 );
 
+select is((select count(*) from private.no_ai_shadow_dry_runs
+  where state not in ('passed', 'failed', 'inconclusive', 'aborted')), 2::bigint,
+  'two lifecycle-created nonterminal campaigns exist before break-glass');
 select lives_ok($$select private.emergency_kill_activation_controls(pg_temp.campaign_id())$$, 'phase one emergency kill commits only database gates');
 select lives_ok($$select private.emergency_kill_activation_controls(pg_temp.campaign_id())$$, 'repeated emergency kill is idempotent');
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auto_stopped', 'emergency kill reaches server-side stopped state');
@@ -1242,6 +1343,12 @@ select is((select count(*) from private.application_settings where owner_id = (s
   'paid_model_calls_enabled', 'openai_canary_enabled', 'openai_web_search_enabled',
   'sol_challenger_enabled', 'sol_live_execution_enabled', 'real_broker_enabled'
 ) and value = 'false'::jsonb), 9::bigint, 'all nine dangerous controls are false after phase one');
+select lives_ok($$select private.transition_no_ai_shadow_dry_run(
+  '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d299', 'prepared', 'aborted', 'owner',
+  repeat('a', 40), 'activation-readiness-v2',
+  '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d296',
+  '{"fault_fixture_cleanup":true}'::jsonb
+)$$, 'the state-drift Campaign closes through the reviewed transition');
 select throws_ok(
   $$select private.finalize_activation_campaign(
     pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
@@ -1349,6 +1456,25 @@ select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.ca
 select is((select terminal_status from private.activation_terminal_evidence where campaign_id = pg_temp.campaign_id()), 'passed', 'terminal evidence records passed before job removal');
 select is((select complete_response_count from private.activation_terminal_evidence where campaign_id = pg_temp.campaign_id()), 104, 'finalizer uses all 104 persisted responses');
 select is(private.dispatch_no_ai_shadow_dry_run_event('reconciler', statement_timestamp()), null::bigint, 'duplicate terminal tick is idempotent');
+update private.application_settings
+set value = 'true'::jsonb, version = version + 1
+where owner_id = (
+    select owner_id from private.no_ai_shadow_dry_runs
+    where id = pg_temp.campaign_id()
+  )
+  and setting_key = 'agent_enabled';
+select lives_ok(
+  $$select private.emergency_kill_activation_controls(pg_temp.campaign_id())$$,
+  'DB-first kill repairs dangerous control drift even after terminal state'
+);
+select is((
+  select value from private.application_settings
+  where owner_id = (
+      select owner_id from private.no_ai_shadow_dry_runs
+      where id = pg_temp.campaign_id()
+    )
+    and setting_key = 'agent_enabled'
+), 'false'::jsonb, 'terminal state drift cannot prevent the emergency gate from being restored');
 select cron.alter_job(
   (select jobid from activation_jobs where job_role = 'reconciler'),
   command := 'select 1;', active := false

@@ -39,6 +39,8 @@ const serverEnvironmentSchema = z
     REAL_BROKER_ENABLED: booleanString,
     MARKET_DATA_PROVIDER: z.enum(['mock', 'alpaca']).default('mock'),
     NEWS_PROVIDER: z.enum(['mock', 'alpaca', 'public']).default('mock'),
+    DATA_MODE: z.literal('mock').default('mock'),
+    EXECUTION_MODE: z.literal('paper').default('paper'),
     EMBEDDING_PROVIDER: z.enum(['mock', 'supabase']).default('mock'),
     APP_BASE_URL: z.url().default('http://localhost:3000'),
     AI_LIFETIME_HARD_LIMIT_USD: decimalCurrency.default('50.00'),
