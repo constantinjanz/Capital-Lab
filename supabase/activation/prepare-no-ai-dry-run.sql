@@ -14,7 +14,7 @@ select private.prepare_no_ai_shadow_dry_run_v2(
 ) as result \gset
 
 select jsonb_build_object(
-  'schema_version', 3,
+  'schema_version', 4,
   'phase', 'prepare',
   'campaign_id', campaign.id,
   'persisted_state', campaign.state,

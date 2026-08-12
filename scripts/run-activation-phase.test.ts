@@ -8,11 +8,13 @@ import {
 
 const projectRef = 'qrnuyibntcxwffrxmrvn'
 const projectIdentity = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   vercelTeamId: 'team_yqndKHk6nfWGlte1UVLTJOHG',
   vercelProjectId: 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR',
   supabaseProjectRef: projectRef,
   schedulerPath: '/api/internal/scheduler',
+  runtimeConfigPath: '/api/internal/scheduler',
+  allowedDeploymentHostSuffixes: ['.vercel.app'],
   allowedProductionHosts: [
     'capital-lab-constantinjanz-7876s-projects.vercel.app',
   ],

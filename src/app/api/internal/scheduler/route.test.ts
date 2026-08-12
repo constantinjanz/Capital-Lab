@@ -14,9 +14,11 @@ const expectedProjectId = 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR'
 const expectedCommitSha = 'a'.repeat(40)
 const identity = {
   environment: 'production',
+  targetEnvironment: 'production',
   deploymentId: authDeploymentId,
   projectId: expectedProjectId,
   commitSha: expectedCommitSha,
+  deploymentUrl: 'capital-auth-disabled.example.vercel.app',
 }
 const safeEnvironment = {
   SCHEDULER_SHARED_SECRET: 's'.repeat(48),
@@ -60,6 +62,19 @@ const dryRunBody = {
   cycle_id: '00000000-0000-4000-8000-000000000008',
   job: 'market_dispatcher',
   slot_number: 0,
+  expected_deployment_id: runtimeDeploymentId,
+  expected_project_id: expectedProjectId,
+  expected_commit_sha: expectedCommitSha,
+} as const
+
+const runtimeConfigBody = {
+  schema_version: 4,
+  mode: 'runtime_config_noop',
+  deployment_role: 'no_ai_runtime_enabled',
+  campaign_id: '00000000-0000-4000-8000-000000000001',
+  correlation_id: '00000000-0000-4000-8000-000000000009',
+  nonce: '00000000-0000-4000-8000-000000000010',
+  request_id: '00000000-0000-4000-8000-000000000011',
   expected_deployment_id: runtimeDeploymentId,
   expected_project_id: expectedProjectId,
   expected_commit_sha: expectedCommitSha,
@@ -109,6 +124,9 @@ function dependencies({
     deploymentIdentity: () => ({
       ...identity,
       deploymentId: runtime ? runtimeDeploymentId : authDeploymentId,
+      deploymentUrl: runtime
+        ? 'capital-runtime-enabled.example.vercel.app'
+        : 'capital-auth-disabled.example.vercel.app',
     }),
     now: () => new Date('2026-08-10T14:15:00.000Z'),
     dispatch: resolvedDispatch,
@@ -166,6 +184,97 @@ describe('protected Supabase scheduler route', () => {
       agent_disabled: true,
       counters: ZERO_SCHEDULER_EFFECTS,
     })
+    expect(deps.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('attests the actual enabled no-AI Runtime deployment without dispatching', async () => {
+    const deps = dependencies({ runtime: true })
+    const result = await handleSchedulerPost(request(runtimeConfigBody), deps)
+
+    expect(result.status).toBe(200)
+    expect(await result.json()).toEqual({
+      schema_version: 4,
+      mode: 'runtime_config_noop',
+      deployment_role: 'no_ai_runtime_enabled',
+      campaign_id: runtimeConfigBody.campaign_id,
+      correlation_id: runtimeConfigBody.correlation_id,
+      nonce: runtimeConfigBody.nonce,
+      request_id: runtimeConfigBody.request_id,
+      observed_at: '2026-08-10T14:15:00.000Z',
+      vercel_environment: 'production',
+      vercel_target_environment: 'production',
+      deployment_id: runtimeDeploymentId,
+      project_id: expectedProjectId,
+      commit_sha: expectedCommitSha,
+      deployment_url: 'https://capital-runtime-enabled.example.vercel.app',
+      status: 'runtime_config_observed',
+      terminal_reason: 'runtime_config_attested',
+      scheduler_disabled: false,
+      agent_disabled: true,
+      runtime: {
+        scheduler_enabled: true,
+        scheduler_provider: 'supabase',
+        agent_enabled: false,
+        agent_execution_mode: 'mock',
+        autonomous_paper_execution_enabled: false,
+        paid_model_calls_enabled: false,
+        openai_canary_enabled: false,
+        openai_web_search_enabled: false,
+        sol_enabled: false,
+        sol_challenger_enabled: false,
+        sol_live_execution_enabled: false,
+        real_broker_enabled: false,
+        market_data_provider: 'mock',
+        news_provider: 'mock',
+        openai_api_key_present: false,
+        data_mode: 'mock',
+        execution_mode: 'paper',
+      },
+      counters: ZERO_SCHEDULER_EFFECTS,
+    })
+    expect(deps.dispatch).not.toHaveBeenCalled()
+    expect(result.headers.get('cache-control')).toBe('no-store')
+  })
+
+  it.each([
+    [
+      'desired role cannot override observed scheduler=false',
+      { SCHEDULER_ENABLED: false },
+      {},
+    ],
+    ['agent flag', { AGENT_ENABLED: true }, {}],
+    ['paid models', { PAID_MODEL_CALLS_ENABLED: true }, {}],
+    ['OpenAI key presence', { OPENAI_API_KEY: 'fixture-only-never-used' }, {}],
+    ['wrong environment', {}, { environment: 'preview' }],
+    ['wrong target environment', {}, { targetEnvironment: 'preview' }],
+    ['wrong deployment', {}, { deploymentId: authDeploymentId }],
+    ['wrong project', {}, { projectId: 'prj_00000000000000000000' }],
+    ['wrong commit', {}, { commitSha: 'b'.repeat(40) }],
+    ['ambiguous deployment URL', {}, { deploymentUrl: 'evil.example:443' }],
+  ])(
+    'fails the Runtime configuration attestation for %s',
+    async (_label, environmentDrift, identityDrift) => {
+      const base = dependencies({ runtime: true })
+      const deps = {
+        ...base,
+        environment: () => ({ ...base.environment(), ...environmentDrift }),
+        deploymentIdentity: () => ({
+          ...base.deploymentIdentity(),
+          ...identityDrift,
+        }),
+      }
+      const result = await handleSchedulerPost(request(runtimeConfigBody), deps)
+
+      expect([409]).toContain(result.status)
+      expect(deps.dispatch).not.toHaveBeenCalled()
+    },
+  )
+
+  it('rejects caller-asserted Runtime flags as an extra request field', async () => {
+    const deps = dependencies({ runtime: true })
+    const body = { ...runtimeConfigBody, expected_scheduler_enabled: true }
+    const result = await handleSchedulerPost(request(body), deps)
+    expect(result.status).toBe(400)
     expect(deps.dispatch).not.toHaveBeenCalled()
   })
 

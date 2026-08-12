@@ -9,11 +9,36 @@ const SHA256 = /^[0-9a-f]{64}$/
 
 export const BACKUP_ARTIFACT_KEYS = Object.freeze([
   'roles',
+  'authSchema',
+  'authData',
   'schema',
   'data',
   'historySchema',
   'historyData',
 ])
+
+export function buildAuthEvidenceSql() {
+  return `select jsonb_build_object(
+    'schemaVersion', 1,
+    'userCount', (select count(*)::text from auth.users),
+    'mappedApplicationOwnerCount', (
+      select count(*)::text from public.app_users as app_user
+      join auth.users as auth_user on auth_user.id = app_user.user_id
+    ),
+    'relationCounts', (
+      select coalesce(jsonb_object_agg(relation_name, row_count order by relation_name), '{}'::jsonb)
+      from (
+        select table_name as relation_name,
+          (xpath('/row/count/text()', query_to_xml(
+            format('select count(*) as count from auth.%I', table_name),
+            false, true, ''
+          )))[1]::text as row_count
+        from information_schema.tables
+        where table_schema = 'auth' and table_type = 'BASE TABLE'
+      ) as counts
+    )
+  );\n`
+}
 
 export function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
@@ -34,6 +59,7 @@ export function buildServerIdentitySql() {
   return `select jsonb_build_object(
     'databaseIdentity', database.oid::text || ':' || database.datname || ':'
       || current_setting('server_version_num') || ':' || control.system_identifier::text,
+    'databaseRole', current_user,
     'serverIdentity', current_setting('server_version_num') || ':'
       || control.system_identifier::text
   )
@@ -206,9 +232,9 @@ export async function loadCriticalRelationContract(filename, expectedKind) {
     throw new Error('Critical-relation contract must be canonical JSON')
   }
   if (
-    contract.schemaVersion !== 3 ||
+    contract.schemaVersion !== 4 ||
     contract.contractKind !== expectedKind ||
-    contract.schemaFingerprintVersion !== 'capital-lab-schema-fingerprint-v1' ||
+    contract.schemaFingerprintVersion !== 'capital-lab-schema-fingerprint-v2' ||
     !Array.isArray(contract.relations) ||
     !Array.isArray(contract.migrations) ||
     !Array.isArray(contract.nonCriticalAllowlist) ||
@@ -252,6 +278,28 @@ export async function loadCriticalRelationContract(filename, expectedKind) {
     throw new Error('Critical-relation migration mapping is invalid')
   }
   return { contract, sha256: sha256(bytes) }
+}
+
+export async function loadSchemaGolden(
+  filename,
+  expectedKind,
+  expectedRelationContractSha256,
+) {
+  const bytes = canonicalRepositoryTextBytes(await readFile(filename))
+  const golden = JSON.parse(bytes.toString('utf8'))
+  if (
+    bytes.toString('utf8') !== `${canonicalJson(golden)}\n` ||
+    golden.schemaVersion !== 1 ||
+    golden.contractKind !== expectedKind ||
+    golden.schemaFingerprintVersion !== 'capital-lab-schema-fingerprint-v2' ||
+    golden.relationContractSha256 !== expectedRelationContractSha256 ||
+    !SHA256.test(golden.schemaFingerprintSha256 ?? '') ||
+    !SHA256.test(golden.relationSetSha256 ?? '') ||
+    !SHA256.test(golden.migrationHistorySha256 ?? '')
+  ) {
+    throw new Error('Committed schema golden is invalid or stale')
+  }
+  return { golden, sha256: sha256(bytes) }
 }
 
 export function criticalRelationSchemas(contract) {
@@ -329,8 +377,27 @@ function relationSql(spec) {
   from ${qualified} as source_row`
 }
 
-function schemaFingerprintSql() {
+export function buildSchemaFingerprintExpression() {
   return `select encode(extensions.digest(convert_to(jsonb_build_object(
+    'schemas', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', namespace.nspname, 'owner', owner.rolname,
+      'acl', namespace.nspacl
+    ) order by namespace.nspname), '[]'::jsonb)
+    from pg_catalog.pg_namespace as namespace
+    join pg_catalog.pg_roles as owner on owner.oid = namespace.nspowner
+    where namespace.nspname in ('public','private')),
+    'relations', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', namespace.nspname, 'name', relation.relname,
+      'kind', relation.relkind, 'persistence', relation.relpersistence,
+      'owner', owner.rolname, 'accessMethod', access_method.amname,
+      'acl', relation.relacl
+    ) order by namespace.nspname, relation.relname), '[]'::jsonb)
+    from pg_catalog.pg_class as relation
+    join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+    join pg_catalog.pg_roles as owner on owner.oid = relation.relowner
+    left join pg_catalog.pg_am as access_method on access_method.oid = relation.relam
+    where namespace.nspname in ('public','private')
+      and relation.relkind in ('r','p','v','m','S')),
     'columns', (select coalesce(jsonb_agg(jsonb_build_object(
       'schema', namespace.nspname, 'relation', relation.relname,
       'position', attribute.attnum, 'name', attribute.attname,
@@ -413,7 +480,90 @@ function schemaFingerprintSql() {
     ) order by namespace.nspname, relation.relname), '[]'::jsonb)
     from pg_catalog.pg_class as relation
     join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
-    where namespace.nspname in ('public','private') and relation.relkind in ('v','m'))
+    where namespace.nspname in ('public','private') and relation.relkind in ('v','m')),
+    'types', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', namespace.nspname, 'name', type_record.typname,
+      'kind', type_record.typtype, 'category', type_record.typcategory,
+      'notNull', type_record.typnotnull,
+      'baseType', case when type_record.typbasetype = 0 then null
+        else type_record.typbasetype::regtype::text end,
+      'constraint', pg_catalog.pg_get_constraintdef(constraint_record.oid, true),
+      'enumValues', (select jsonb_agg(enum_record.enumlabel order by enum_record.enumsortorder)
+        from pg_catalog.pg_enum as enum_record where enum_record.enumtypid = type_record.oid)
+    ) order by namespace.nspname, type_record.typname), '[]'::jsonb)
+    from pg_catalog.pg_type as type_record
+    join pg_catalog.pg_namespace as namespace on namespace.oid = type_record.typnamespace
+    left join pg_catalog.pg_constraint as constraint_record
+      on constraint_record.contypid = type_record.oid
+    where namespace.nspname in ('public','private')
+      and type_record.typtype in ('d','e')),
+    'sequences', (select coalesce(jsonb_agg(jsonb_build_object(
+      'schema', schemaname, 'name', sequencename, 'owner', sequenceowner,
+      'type', data_type, 'start', start_value::text, 'minimum', min_value::text,
+      'maximum', max_value::text, 'increment', increment_by::text,
+      'cycle', cycle, 'cache', cache_size::text
+    ) order by schemaname, sequencename), '[]'::jsonb)
+    from pg_catalog.pg_sequences where schemaname in ('public','private')),
+    'defaultPrivileges', (select coalesce(jsonb_agg(jsonb_build_object(
+      'owner', owner.rolname, 'schema', namespace.nspname,
+      'objectType', default_acl.defaclobjtype, 'acl', default_acl.defaclacl
+    ) order by owner.rolname, namespace.nspname, default_acl.defaclobjtype), '[]'::jsonb)
+    from pg_catalog.pg_default_acl as default_acl
+    join pg_catalog.pg_roles as owner on owner.oid = default_acl.defaclrole
+    left join pg_catalog.pg_namespace as namespace on namespace.oid = default_acl.defaclnamespace
+    where namespace.nspname in ('public','private') or namespace.nspname is null),
+    'extensions', (select coalesce(jsonb_agg(jsonb_build_object(
+      'name', extension.extname, 'schema', namespace.nspname,
+      'version', extension.extversion, 'relocatable', extension.extrelocatable
+    ) order by extension.extname), '[]'::jsonb)
+    from pg_catalog.pg_extension as extension
+    join pg_catalog.pg_namespace as namespace on namespace.oid = extension.extnamespace),
+    'authDependencies', jsonb_build_object(
+      'relations', (select coalesce(jsonb_agg(jsonb_build_object(
+        'name', relation.relname, 'owner', owner.rolname, 'acl', relation.relacl,
+        'rlsEnabled', relation.relrowsecurity, 'rlsForced', relation.relforcerowsecurity
+      ) order by relation.relname), '[]'::jsonb)
+      from pg_catalog.pg_class as relation
+      join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+      join pg_catalog.pg_roles as owner on owner.oid = relation.relowner
+      where namespace.nspname = 'auth' and relation.relname in ('users','identities')
+        and relation.relkind in ('r','p')),
+      'columns', (select coalesce(jsonb_agg(jsonb_build_object(
+        'relation', relation.relname, 'position', attribute.attnum,
+        'name', attribute.attname,
+        'type', pg_catalog.format_type(attribute.atttypid, attribute.atttypmod),
+        'notNull', attribute.attnotnull, 'identity', attribute.attidentity,
+        'generated', attribute.attgenerated,
+        'default', pg_catalog.pg_get_expr(default_value.adbin, default_value.adrelid)
+      ) order by relation.relname, attribute.attnum), '[]'::jsonb)
+      from pg_catalog.pg_class as relation
+      join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+      join pg_catalog.pg_attribute as attribute on attribute.attrelid = relation.oid
+      left join pg_catalog.pg_attrdef as default_value
+        on default_value.adrelid = relation.oid and default_value.adnum = attribute.attnum
+      where namespace.nspname = 'auth' and relation.relname in ('users','identities')
+        and attribute.attnum > 0 and not attribute.attisdropped),
+      'constraints', (select coalesce(jsonb_agg(jsonb_build_object(
+        'relation', relation.relname, 'name', constraint_record.conname,
+        'type', constraint_record.contype,
+        'definition', pg_catalog.pg_get_constraintdef(constraint_record.oid, true)
+      ) order by relation.relname, constraint_record.conname), '[]'::jsonb)
+      from pg_catalog.pg_constraint as constraint_record
+      join pg_catalog.pg_class as relation on relation.oid = constraint_record.conrelid
+      join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+      where namespace.nspname = 'auth' and relation.relname in ('users','identities')),
+      'indexes', (select coalesce(jsonb_agg(jsonb_build_object(
+        'relation', tablename, 'name', indexname, 'definition', indexdef
+      ) order by tablename, indexname), '[]'::jsonb)
+      from pg_catalog.pg_indexes
+      where schemaname = 'auth' and tablename in ('users','identities')),
+      'policies', (select coalesce(jsonb_agg(jsonb_build_object(
+        'relation', tablename, 'name', policyname, 'permissive', permissive,
+        'roles', roles, 'command', cmd, 'using', qual, 'check', with_check
+      ) order by tablename, policyname), '[]'::jsonb)
+      from pg_catalog.pg_policies
+      where schemaname = 'auth' and tablename in ('users','identities'))
+    )
   )::text, 'UTF8'), 'sha256'), 'hex')`
 }
 
@@ -438,9 +588,16 @@ select jsonb_build_object(
     select jsonb_agg(jsonb_build_object('version', version, 'name', name) order by version)
     from supabase_migrations.schema_migrations
   ), '[]'::jsonb),
+  'migrationHistorySha256', (
+    select encode(extensions.digest(convert_to(coalesce(string_agg(
+      jsonb_build_object('version', version, 'name', name)::text,
+      E'\\n' order by version
+    ), ''), 'UTF8'), 'sha256'), 'hex')
+    from supabase_migrations.schema_migrations
+  ),
   'relationSetSha256', encode(extensions.digest(convert_to(
     '${relationSet}', 'UTF8'), 'sha256'), 'hex'),
-  'schemaFingerprintSha256', (${schemaFingerprintSql()}),
+  'schemaFingerprintSha256', (${buildSchemaFingerprintExpression()}),
   'catalogRelations', (
     select coalesce(jsonb_agg(
       namespace.nspname || '.' || relation.relname
@@ -455,6 +612,34 @@ select jsonb_build_object(
     from (${union}) as relation_evidence)
 ) as evidence;
 `
+}
+
+export function buildSchemaGoldenEvidenceSql(contract) {
+  const relationSet = contract.relations.map((spec) => spec.relation).join('\n')
+  return `\\set ON_ERROR_STOP on
+select jsonb_build_object(
+  'appliedMigrations', coalesce((
+    select jsonb_agg(jsonb_build_object('version', version, 'name', name) order by version)
+    from supabase_migrations.schema_migrations
+  ), '[]'::jsonb),
+  'catalogRelations', (
+    select coalesce(jsonb_agg(namespace.nspname || '.' || relation.relname
+      order by namespace.nspname, relation.relname), '[]'::jsonb)
+    from pg_catalog.pg_class as relation
+    join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+    where namespace.nspname in ('public','private') and relation.relkind in ('r','p')
+  ),
+  'migrationHistorySha256', (
+    select encode(extensions.digest(convert_to(coalesce(string_agg(
+      jsonb_build_object('version', version, 'name', name)::text,
+      E'\\n' order by version
+    ), ''), 'UTF8'), 'sha256'), 'hex')
+    from supabase_migrations.schema_migrations
+  ),
+  'relationSetSha256', encode(extensions.digest(convert_to(
+    '${relationSet}', 'UTF8'), 'sha256'), 'hex'),
+  'schemaFingerprintSha256', (${buildSchemaFingerprintExpression()})
+) as evidence;\n`
 }
 
 export function assertContractKeys(contract, evidence) {
@@ -508,6 +693,14 @@ export function assertBackupManifest(manifest, expected) {
       ),
     )
   const checks = {
+    auth_evidence:
+      manifest.authEvidence?.schemaVersion === 1 &&
+      /^\d+$/.test(manifest.authEvidence?.userCount ?? '') &&
+      /^\d+$/.test(manifest.authEvidence?.mappedApplicationOwnerCount ?? '') &&
+      manifest.authEvidence?.relationCounts &&
+      Object.values(manifest.authEvidence.relationCounts).every((value) =>
+        /^\d+$/.test(value),
+      ),
     applied_migrations: appliedMigrationsValid,
     artifact_metadata: artifactsValid,
     created_at: !Number.isNaN(Date.parse(manifest.createdAt)),
@@ -532,10 +725,14 @@ export function assertBackupManifest(manifest, expected) {
       SHA256.test(manifest.restorePreludeSha256 ?? '') &&
       manifest.restorePreludeSha256 === expected.restorePreludeSha256,
     schema_contract:
-      manifest.schemaVersion === 5 &&
+      manifest.schemaVersion === 6 &&
       manifest.contractKind === expected.contractKind &&
       manifest.schemaContractVersion ===
-        `capital-lab-${expected.contractKind}-backup-v5`,
+        `capital-lab-${expected.contractKind}-backup-v6`,
+    schema_golden:
+      SHA256.test(manifest.schemaGoldenSha256 ?? '') &&
+      manifest.schemaGoldenSha256 === expected.schemaGoldenSha256 &&
+      manifest.schemaFingerprintSha256 === expected.schemaFingerprintSha256,
     schema_fingerprint:
       SHA256.test(manifest.schemaFingerprintSha256 ?? '') &&
       manifest.schemaFingerprintSha256 ===
@@ -551,6 +748,18 @@ export function assertBackupManifest(manifest, expected) {
     source_schema_fingerprint: SHA256.test(
       manifest.source?.schemaFingerprintSha256 ?? '',
     ),
+    source_migration_history: SHA256.test(
+      manifest.source?.migrationHistorySha256 ?? '',
+    ),
+    snapshot_policy:
+      manifest.snapshotPolicy
+        ?.applicationAuthAndHistoryShareExportedSnapshot === true &&
+      manifest.snapshotPolicy?.isolation === 'repeatable read read only' &&
+      manifest.snapshotPolicy?.rolePolicyComparedOutsideSnapshot === true &&
+      manifest.snapshotPolicy?.sourceStateReverifiedAfterExport === true &&
+      [null, 'application-setting-v1'].includes(
+        manifest.snapshotPolicy?.localRaceFixture,
+      ),
     default_acl_policy:
       manifest.defaultAclPolicy?.applicationOwner === 'postgres' &&
       Number.isSafeInteger(manifest.defaultAclPolicy?.applicationEntryCount) &&
@@ -593,6 +802,8 @@ export function assertRestoredEvidence(manifest, actualEvidence) {
       canonicalJson(manifest.relations) ||
     canonicalJson(actualEvidence.appliedMigrations) !==
       canonicalJson(manifest.source.appliedMigrations) ||
+    actualEvidence.migrationHistorySha256 !==
+      manifest.source.migrationHistorySha256 ||
     actualEvidence.schemaFingerprintSha256 !==
       manifest.schemaFingerprintSha256 ||
     actualEvidence.relationSetSha256 !== manifest.relationSetSha256 ||
@@ -600,6 +811,16 @@ export function assertRestoredEvidence(manifest, actualEvidence) {
   ) {
     throw new Error(
       'Restored full-row, column, migration, or relation evidence differs',
+    )
+  }
+}
+
+export function assertRestoredAuthEvidence(manifest, actualAuthEvidence) {
+  if (
+    canonicalJson(actualAuthEvidence) !== canonicalJson(manifest.authEvidence)
+  ) {
+    throw new Error(
+      'Restored Auth relation-count or owner-mapping evidence differs',
     )
   }
 }

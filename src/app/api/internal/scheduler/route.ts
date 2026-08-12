@@ -36,6 +36,15 @@ const authNoopRequestSchema = z
     nonce: uuid,
   })
   .strict()
+const runtimeConfigNoopRequestSchema = z
+  .object({
+    ...identityFields,
+    schema_version: z.literal(4),
+    mode: z.literal('runtime_config_noop'),
+    deployment_role: z.literal('no_ai_runtime_enabled'),
+    nonce: uuid,
+  })
+  .strict()
 const dryRunRequestSchema = z
   .object({
     ...identityFields,
@@ -49,11 +58,12 @@ const dryRunRequestSchema = z
   .strict()
 const requestSchema = z.discriminatedUnion('mode', [
   authNoopRequestSchema,
+  runtimeConfigNoopRequestSchema,
   dryRunRequestSchema,
 ])
 
 const noStoreHeaders = {
-  'Cache-Control': 'no-store, max-age=0',
+  'Cache-Control': 'no-store',
   Pragma: 'no-cache',
 }
 
@@ -78,9 +88,11 @@ export const ZERO_SCHEDULER_EFFECTS = Object.freeze({
 
 type DeploymentIdentity = {
   environment: string | undefined
+  targetEnvironment: string | undefined
   deploymentId: string | undefined
   projectId: string | undefined
   commitSha: string | undefined
+  deploymentUrl: string | undefined
 }
 
 export type SchedulerRouteDependencies = {
@@ -144,9 +156,86 @@ function identityMatches(
 ): boolean {
   return (
     actual.environment === 'production' &&
+    actual.targetEnvironment === 'production' &&
     actual.deploymentId === expected.expected_deployment_id &&
     actual.projectId === expected.expected_project_id &&
     actual.commitSha === expected.expected_commit_sha
+  )
+}
+
+function exactDeploymentOrigin(value: string | undefined): string | null {
+  if (
+    !value ||
+    value.includes('/') ||
+    value.includes('@') ||
+    value.includes(':')
+  ) {
+    return null
+  }
+  try {
+    const parsed = new URL(`https://${value}`)
+    if (
+      parsed.protocol !== 'https:' ||
+      parsed.username ||
+      parsed.password ||
+      parsed.port ||
+      parsed.pathname !== '/' ||
+      parsed.search ||
+      parsed.hash ||
+      !parsed.hostname.endsWith('.vercel.app')
+    ) {
+      return null
+    }
+    return parsed.origin
+  } catch {
+    return null
+  }
+}
+
+export function observedRuntimeConfiguration(environment: ServerEnvironment) {
+  return Object.freeze({
+    scheduler_enabled: environment.SCHEDULER_ENABLED,
+    scheduler_provider: environment.SCHEDULER_PROVIDER,
+    agent_enabled: environment.AGENT_ENABLED,
+    agent_execution_mode: environment.AGENT_EXECUTION_MODE,
+    autonomous_paper_execution_enabled:
+      environment.AUTONOMOUS_PAPER_EXECUTION_ENABLED,
+    paid_model_calls_enabled: environment.PAID_MODEL_CALLS_ENABLED,
+    openai_canary_enabled: environment.OPENAI_CANARY_ENABLED,
+    openai_web_search_enabled: environment.OPENAI_WEB_SEARCH_ENABLED,
+    sol_enabled: environment.SOL_ENABLED,
+    sol_challenger_enabled: environment.SOL_CHALLENGER_ENABLED,
+    sol_live_execution_enabled: environment.SOL_LIVE_EXECUTION_ENABLED,
+    real_broker_enabled: environment.REAL_BROKER_ENABLED,
+    market_data_provider: environment.MARKET_DATA_PROVIDER,
+    news_provider: environment.NEWS_PROVIDER,
+    openai_api_key_present: Boolean(environment.OPENAI_API_KEY),
+    data_mode: 'mock',
+    execution_mode: 'paper',
+  })
+}
+
+function runtimeConfigurationIsExactNoAi(
+  observed: ReturnType<typeof observedRuntimeConfiguration>,
+): boolean {
+  return (
+    observed.scheduler_enabled &&
+    observed.scheduler_provider === 'supabase' &&
+    !observed.agent_enabled &&
+    observed.agent_execution_mode === 'mock' &&
+    !observed.autonomous_paper_execution_enabled &&
+    !observed.paid_model_calls_enabled &&
+    !observed.openai_canary_enabled &&
+    !observed.openai_web_search_enabled &&
+    !observed.sol_enabled &&
+    !observed.sol_challenger_enabled &&
+    !observed.sol_live_execution_enabled &&
+    !observed.real_broker_enabled &&
+    observed.market_data_provider === 'mock' &&
+    observed.news_provider === 'mock' &&
+    !observed.openai_api_key_present &&
+    observed.data_mode === 'mock' &&
+    observed.execution_mode === 'paper'
   )
 }
 
@@ -234,6 +323,44 @@ export async function handleSchedulerPost(
       terminal_reason: 'auth_noop_verified',
       scheduler_disabled: true,
       agent_disabled: true,
+      counters: ZERO_SCHEDULER_EFFECTS,
+    })
+  }
+
+  if (parsed.mode === 'runtime_config_noop') {
+    const runtime = observedRuntimeConfiguration(environment)
+    const deploymentOrigin = exactDeploymentOrigin(identity.deploymentUrl)
+    if (!deploymentOrigin || !runtimeConfigurationIsExactNoAi(runtime)) {
+      return response(
+        {
+          error: 'runtime_config_attestation_failed_closed',
+          scheduler_disabled: !environment.SCHEDULER_ENABLED,
+          agent_disabled: !environment.AGENT_ENABLED,
+          counters: ZERO_SCHEDULER_EFFECTS,
+        },
+        409,
+      )
+    }
+    return response({
+      schema_version: 4,
+      mode: 'runtime_config_noop',
+      deployment_role: parsed.deployment_role,
+      campaign_id: parsed.campaign_id,
+      correlation_id: parsed.correlation_id,
+      nonce: parsed.nonce,
+      request_id: parsed.request_id,
+      observed_at: dependencies.now().toISOString(),
+      vercel_environment: identity.environment,
+      vercel_target_environment: identity.targetEnvironment,
+      deployment_id: identity.deploymentId,
+      project_id: identity.projectId,
+      commit_sha: identity.commitSha,
+      deployment_url: deploymentOrigin,
+      status: 'runtime_config_observed',
+      terminal_reason: 'runtime_config_attested',
+      scheduler_disabled: false,
+      agent_disabled: true,
+      runtime,
       counters: ZERO_SCHEDULER_EFFECTS,
     })
   }
@@ -345,9 +472,11 @@ const productionDependencies: SchedulerRouteDependencies = {
   environment: getServerEnvironment,
   deploymentIdentity: () => ({
     environment: process.env.VERCEL_ENV,
+    targetEnvironment: process.env.VERCEL_TARGET_ENV,
     deploymentId: process.env.VERCEL_DEPLOYMENT_ID,
     projectId: process.env.VERCEL_PROJECT_ID,
     commitSha: process.env.VERCEL_GIT_COMMIT_SHA,
+    deploymentUrl: process.env.VERCEL_URL,
   }),
   now: () => new Date(),
   async dispatch(input) {

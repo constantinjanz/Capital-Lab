@@ -9,12 +9,12 @@ select private.record_activation_deployment_binding(
 );
 
 select jsonb_build_object(
-  'schema_version', 3, 'phase', 'runtime-deployment-verify',
+  'schema_version', 4, 'phase', 'runtime-deployment-verify',
   'persisted_state', campaign.state, 'deployment_role', runtime.deployment_role,
   'deployment_id', runtime.deployment_id,
   'distinct_from_auth', runtime.deployment_id <> auth.deployment_id,
   'evidence_hash', runtime.evidence_hash,
-  'scheduler_enabled', runtime.scheduler_enabled, 'secret_values_returned', false
+  'configuration_attested', false, 'secret_values_returned', false
 )
 from private.no_ai_shadow_dry_runs as campaign
 join private.activation_deployment_bindings as auth

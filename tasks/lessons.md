@@ -1,5 +1,10 @@
 # Lessons
 
+- A deployment control-plane proof establishes identity only; runtime flags must be observed once from the immutable deployment URL and must never be derived from a requested role or echoed client claims.
+- A schema golden is independent evidence only when generated from a fresh seed-free reference cluster. Never derive or refresh it from the source being backed up, the restore target, or Hosted production.
+- A restore-isolation proof must bind distinct server system identifiers plus a run-specific container, database role, random disposable marker, and exact cleanup scope; two databases or aliases on one cluster are not isolation.
+- Auth recovery is incomplete until synthetic users preserve UUID/identity closure, a new login succeeds, and an owner/deny-user Data API test proves RLS after restore.
+- Local infrastructure commands may print ephemeral credentials. Suppress both streams and emit only fixed safe status; redaction tests must cover encoded URLs, JWTs, provider token shapes, headers, cookies, and passwords.
 - When a OneDrive cleanup runs long enough to look interrupted, keep the user informed, resume from the exact verified state, and split further cleanup into bounded operations instead of restarting completed work.
 - Treat owner attestation that a credential was rotated separately from verification that every intended server-side consumer uses the new credential generation. Record the former as `owner_attested`, keep the latter `pending` until names and scopes are proven without viewing secret values, and never request or expose credential values, prefixes, fragments, or hashes as evidence.
 - Never model a Vercel environment-variable transition by mutating one deployment fixture in place. Each environment snapshot is immutable per deployment; bind distinct reviewed deployment IDs append-only and force every later request/response check to use the phase-specific binding.

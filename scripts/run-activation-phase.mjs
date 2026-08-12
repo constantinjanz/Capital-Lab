@@ -5,6 +5,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
+import { verifiedExternalFile } from './lib/safe-artifact-path.mjs'
 import {
   resolvedArguments,
   resolveNativeExecutable,
@@ -335,10 +336,7 @@ async function main() {
   )
   if (!isWithin(gitRoot, contractPath))
     fail('Phase contract escaped the repository')
-  const manifestPath = await realpath(path.resolve(manifestInput))
-  if (isWithin(gitRoot, manifestPath) || samePath(gitRoot, manifestPath)) {
-    fail('Campaign manifest must remain outside the repository')
-  }
+  const manifestPath = await verifiedExternalFile(gitRoot, manifestInput)
   const manifest = await loadCanonicalJson(
     manifestPath,
     expectedManifestHash,
@@ -395,7 +393,7 @@ async function main() {
     'project identity contract checksum',
   )
   if (
-    manifest.schema_version !== 3 ||
+    manifest.schema_version !== 4 ||
     manifest.prepared_commit_sha !== actualCommitSha ||
     manifest.vercel_commit_sha !== actualCommitSha
   ) {
@@ -437,7 +435,7 @@ async function main() {
     true,
   )
   exactKeys(contract, ['phases', 'schema_version'], 'phase contract')
-  if (contract.schema_version !== 3 || !contract.phases?.[phase]) {
+  if (contract.schema_version !== 4 || !contract.phases?.[phase]) {
     fail('Requested phase is not present in the reviewed phase contract')
   }
   exactKeys(
@@ -473,7 +471,12 @@ async function main() {
     )
     const phaseOperation = manifest.phase_operations[phaseName]
     const keys = ['correlation_id', 'operation_id']
-    if (phaseName === 'auth-noop-request') keys.push('nonce', 'request_id')
+    if (
+      phaseName === 'auth-noop-request' ||
+      phaseName === 'runtime-config-request'
+    ) {
+      keys.push('nonce', 'request_id')
+    }
     exactKeys(phaseOperation, keys, `${phaseName} operation`)
     requiredText(phaseOperation.operation_id, UUID, `${phaseName} operation ID`)
     requiredText(
@@ -482,9 +485,12 @@ async function main() {
       `${phaseName} correlation ID`,
     )
     frozenIds.push(phaseOperation.operation_id, phaseOperation.correlation_id)
-    if (phaseName === 'auth-noop-request') {
-      requiredText(phaseOperation.request_id, UUID, 'auth no-op request ID')
-      requiredText(phaseOperation.nonce, UUID, 'auth no-op nonce')
+    if (
+      phaseName === 'auth-noop-request' ||
+      phaseName === 'runtime-config-request'
+    ) {
+      requiredText(phaseOperation.request_id, UUID, `${phaseName} request ID`)
+      requiredText(phaseOperation.nonce, UUID, `${phaseName} nonce`)
       frozenIds.push(phaseOperation.request_id, phaseOperation.nonce)
     }
   }
@@ -511,10 +517,7 @@ async function main() {
 
   let deploymentProof
   if (proofRole) {
-    const proofPath = await realpath(path.resolve(proofInput))
-    if (isWithin(gitRoot, proofPath) || samePath(gitRoot, proofPath)) {
-      fail('Deployment proof must remain outside the repository')
-    }
+    const proofPath = await verifiedExternalFile(gitRoot, proofInput)
     deploymentProof = await loadCanonicalJson(
       proofPath,
       expectedProofHash,
@@ -603,7 +606,7 @@ async function main() {
     result.code === null
   process.stdout.write(
     `${JSON.stringify({
-      schemaVersion: 3,
+      schemaVersion: 4,
       phase,
       campaignId: manifest.campaign_id,
       operationId: operation.operation_id,

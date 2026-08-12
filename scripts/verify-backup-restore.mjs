@@ -6,7 +6,9 @@ import {
   BACKUP_ARTIFACT_KEYS,
   assertBackupManifest,
   assertContractKeys,
+  assertRestoredAuthEvidence,
   assertRestoredEvidence,
+  buildAuthEvidenceSql,
   buildCriticalEvidenceSql,
   buildRolePolicySql,
   buildServerIdentitySql,
@@ -14,11 +16,17 @@ import {
   criticalRelationSchemas,
   fingerprintRolePolicy,
   loadCriticalRelationContract,
+  loadSchemaGolden,
   postgresUrlToLibpqEnv,
   redactedPostgresError,
   roleRestoreRequired,
   sha256,
 } from './critical-backup-contract.mjs'
+import { validateRestoreTargetProof } from './lib/local-supabase-target-proof.mjs'
+import {
+  verifiedDirectChild,
+  verifiedExternalFile,
+} from './lib/safe-artifact-path.mjs'
 import {
   resolvedArguments,
   resolveNativeExecutable,
@@ -26,25 +34,27 @@ import {
 
 const PROCESS_TIMEOUT_MS = 600_000
 const DISPOSABLE_CONFIRMATION = 'seed-free-disposable-database-confirmed'
-const RESTORE_DATABASE = 'capital_lab_restore'
+const RESTORE_DATABASE = 'postgres'
 
 function options() {
   const entries = process.argv.slice(2).map((argument) => {
-    const match = /^--(contract|expected-manifest-sha256|manifest)=(.+)$/u.exec(
-      argument,
-    )
+    const match =
+      /^--(contract|expected-manifest-sha256|expected-target-proof-sha256|manifest|target-proof)=(.+)$/u.exec(
+        argument,
+      )
     if (!match) throw new Error('Restore arguments are invalid')
     return [match[1], match[2]]
   })
   const parsed = Object.fromEntries(entries)
   if (
-    entries.length !== 3 ||
-    new Set(entries.map(([key]) => key)).size !== 3 ||
+    entries.length !== 5 ||
+    new Set(entries.map(([key]) => key)).size !== 5 ||
     !['pre', 'post'].includes(parsed.contract) ||
-    !/^[0-9a-f]{64}$/u.test(parsed['expected-manifest-sha256'] ?? '')
+    !/^[0-9a-f]{64}$/u.test(parsed['expected-manifest-sha256'] ?? '') ||
+    !/^[0-9a-f]{64}$/u.test(parsed['expected-target-proof-sha256'] ?? '')
   ) {
     throw new Error(
-      'Required: --contract=pre|post --manifest=<external> --expected-manifest-sha256=<external-hash>',
+      'Required: --contract=pre|post --manifest=<external> --expected-manifest-sha256=<external-hash> --target-proof=<external> --expected-target-proof-sha256=<external-hash>',
     )
   }
   return parsed
@@ -132,6 +142,33 @@ async function evidence(connectionEnv, sql) {
   return JSON.parse(output.trim())
 }
 
+function inspectRestoreContainer(projectId) {
+  if (!/^capital-lab-restore-[a-z0-9][a-z0-9-]{5,31}$/u.test(projectId ?? '')) {
+    throw new Error('Disposable Supabase stack B project identity is invalid')
+  }
+  const executable = resolveNativeExecutable('docker')
+  const result = spawnSync(
+    executable.command,
+    resolvedArguments(executable, ['inspect', `supabase_db_${projectId}`]),
+    {
+      encoding: 'utf8',
+      shell: false,
+      timeout: 30_000,
+      windowsHide: true,
+    },
+  )
+  if (result.status !== 0 || result.signal || result.error) {
+    throw new Error(
+      'Disposable Supabase stack B container proof is unavailable',
+    )
+  }
+  const parsed = JSON.parse(result.stdout)
+  if (!Array.isArray(parsed) || parsed.length !== 1) {
+    throw new Error('Disposable Supabase stack B container is not unique')
+  }
+  return parsed[0]
+}
+
 async function main() {
   const requested = options()
   if (
@@ -157,11 +194,13 @@ async function main() {
   if (
     restoreConnection.database !== RESTORE_DATABASE ||
     sourceConnection.database !== 'postgres' ||
-    restoreConnection.hostname !== sourceConnection.hostname ||
-    restoreConnection.port !== sourceConnection.port
+    sourceConnection.hostname !== '127.0.0.1' ||
+    sourceConnection.port !== '54322' ||
+    restoreConnection.hostname !== '127.0.0.1' ||
+    restoreConnection.port !== '55322'
   ) {
     throw new Error(
-      'Restore target is not the exact disposable database on the local source instance',
+      'Source A or retained disposable Supabase stack B target is invalid',
     )
   }
   const workspace = await realpath(process.cwd())
@@ -171,7 +210,46 @@ async function main() {
     )
   }
   const commitSha = git(['rev-parse', 'HEAD'], workspace)
-  const manifestPath = await realpath(path.resolve(requested.manifest))
+  const targetProofPath = await verifiedExternalFile(
+    workspace,
+    requested['target-proof'],
+  )
+  const targetProofBytes = await readFile(targetProofPath)
+  if (sha256(targetProofBytes) !== requested['expected-target-proof-sha256']) {
+    throw new Error('Restore-target proof differs from its retained SHA-256')
+  }
+  const untrustedTargetProof = JSON.parse(targetProofBytes.toString('utf8'))
+  const targetIdentity = await evidence(
+    restoreConnection.libpqEnv,
+    buildServerIdentitySql(),
+  )
+  const markerEvidence = await evidence(
+    restoreConnection.libpqEnv,
+    `select jsonb_build_object(
+      'database', current_database(), 'databaseRole', current_user,
+      'runId', marker.run_id, 'disposableMarker', marker.disposable_marker::text
+    ) from capital_lab_restore.run_identity as marker where marker.singleton;`,
+  )
+  const targetProof = validateRestoreTargetProof(
+    targetProofBytes,
+    requested['expected-target-proof-sha256'],
+    inspectRestoreContainer(untrustedTargetProof.projectId),
+    targetIdentity,
+    sha256(canonicalJson(markerEvidence)),
+  )
+  if (
+    targetProof.hostname !== restoreConnection.hostname ||
+    targetProof.port !== restoreConnection.port ||
+    targetProof.database !== restoreConnection.database ||
+    targetProof.runId !== markerEvidence.runId ||
+    targetProof.disposableMarker !== markerEvidence.disposableMarker ||
+    targetProof.databaseRole !== restoreConnection.libpqEnv.PGUSER
+  ) {
+    throw new Error(
+      'Restore URL differs from the retained stack B target proof',
+    )
+  }
+  const manifestPath = await verifiedExternalFile(workspace, requested.manifest)
   const manifestDirectory = path.dirname(manifestPath)
   const manifestBytes = await readFile(manifestPath)
   if (sha256(manifestBytes) !== requested['expected-manifest-sha256']) {
@@ -195,6 +273,19 @@ async function main() {
   )
   const { contract, sha256: relationContractSha256 } =
     await loadCriticalRelationContract(contractPath, contractKind)
+  const goldenPath = path.join(
+    workspace,
+    'supabase',
+    'backup',
+    requested.contract === 'pre'
+      ? 'pre-activation.schema-golden.v2.json'
+      : 'post-activation.schema-golden.v2.json',
+  )
+  const { golden, sha256: schemaGoldenSha256 } = await loadSchemaGolden(
+    goldenPath,
+    contractKind,
+    relationContractSha256,
+  )
   const dataSchemas = criticalRelationSchemas(contract)
   const restorePreludePath = path.join(
     workspace,
@@ -215,6 +306,8 @@ async function main() {
     relationNames: contract.relations.map((spec) => spec.relation),
     relationSetSha256,
     restorePreludeSha256,
+    schemaFingerprintSha256: golden.schemaFingerprintSha256,
+    schemaGoldenSha256,
   })
   const artifactFiles = BACKUP_ARTIFACT_KEYS.map(
     (key) => manifest.artifacts[key].file,
@@ -225,9 +318,10 @@ async function main() {
   const artifacts = {}
   for (const key of BACKUP_ARTIFACT_KEYS) {
     const metadata = manifest.artifacts[key]
-    const artifact = await realpath(path.join(manifestDirectory, metadata.file))
-    if (path.dirname(artifact) !== manifestDirectory)
-      throw new Error('Backup artifact escaped its directory')
+    const artifact = await verifiedDirectChild(
+      manifestDirectory,
+      path.join(manifestDirectory, metadata.file),
+    )
     if (sha256(await readFile(artifact)) !== metadata.sha256)
       throw new Error('Backup artifact checksum mismatch')
     artifacts[key] = artifact
@@ -236,10 +330,29 @@ async function main() {
     sourceConnection.libpqEnv,
     buildServerIdentitySql(),
   )
+  const sourceEvidenceBefore = await evidence(
+    sourceConnection.libpqEnv,
+    buildCriticalEvidenceSql(contract),
+  )
+  const sourceAuthEvidenceBefore = await evidence(
+    sourceConnection.libpqEnv,
+    buildAuthEvidenceSql(),
+  )
+  assertContractKeys(contract, sourceEvidenceBefore)
+  assertRestoredEvidence(manifest, sourceEvidenceBefore)
+  assertRestoredAuthEvidence(manifest, sourceAuthEvidenceBefore)
+  if (
+    targetProof.sourceServerFingerprint !==
+      sha256(sourceIdentity.serverIdentity) ||
+    targetProof.serverFingerprint === sha256(sourceIdentity.serverIdentity)
+  ) {
+    throw new Error('Retained source and target cluster binding changed')
+  }
   const preflight = await evidence(
     restoreConnection.libpqEnv,
     `select jsonb_build_object(
       'userRelations', count(*) filter (where namespace.nspname in ('public','private','supabase_migrations')),
+      'authPresent', pg_catalog.to_regnamespace('auth') is not null,
       'serverIdentity', current_setting('server_version_num') || ':' || max(control.system_identifier)::text,
       'databaseIdentity', max(database.oid)::text || ':' || current_database() || ':'
         || current_setting('server_version_num') || ':' || max(control.system_identifier)::text
@@ -251,12 +364,13 @@ async function main() {
   )
   if (
     preflight.userRelations !== 0 ||
-    sha256(preflight.serverIdentity) !==
+    preflight.authPresent !== false ||
+    sha256(preflight.serverIdentity) ===
       sha256(sourceIdentity.serverIdentity) ||
     sha256(preflight.databaseIdentity) === manifest.source.databaseFingerprint
   ) {
     throw new Error(
-      'Restore target is not an empty disposable database on the source local instance',
+      'Restore target is not an empty disposable database on distinct stack B',
     )
   }
   const targetRolePolicy = fingerprintRolePolicy(
@@ -266,11 +380,16 @@ async function main() {
     roleRestoreRequired(
       manifest.source.rolePolicyFingerprint,
       targetRolePolicy,
-      true,
+      false,
     )
   ) {
     await runPsql(restoreConnection.libpqEnv, ['--file', artifacts.roles])
   }
+  await runPsql(restoreConnection.libpqEnv, [
+    '--single-transaction',
+    '--file',
+    artifacts.authSchema,
+  ])
   await runPsql(restoreConnection.libpqEnv, [
     '--single-transaction',
     '--file',
@@ -280,6 +399,13 @@ async function main() {
     '--single-transaction',
     '--file',
     artifacts.schema,
+  ])
+  await runPsql(restoreConnection.libpqEnv, [
+    '--single-transaction',
+    '--command',
+    'SET session_replication_role = replica',
+    '--file',
+    artifacts.authData,
   ])
   await runPsql(restoreConnection.libpqEnv, [
     '--single-transaction',
@@ -301,11 +427,46 @@ async function main() {
   )
   assertContractKeys(contract, actualEvidence)
   assertRestoredEvidence(manifest, actualEvidence)
+  assertRestoredAuthEvidence(
+    manifest,
+    await evidence(restoreConnection.libpqEnv, buildAuthEvidenceSql()),
+  )
   if (
     actualEvidence.databaseFingerprint === manifest.source.databaseFingerprint
   ) {
     throw new Error(
       'Disposable restore unexpectedly reused the source database identity',
+    )
+  }
+  const sourceIdentityAfter = await evidence(
+    sourceConnection.libpqEnv,
+    buildServerIdentitySql(),
+  )
+  const sourceEvidenceAfter = await evidence(
+    sourceConnection.libpqEnv,
+    buildCriticalEvidenceSql(contract),
+  )
+  const sourceAuthEvidenceAfter = await evidence(
+    sourceConnection.libpqEnv,
+    buildAuthEvidenceSql(),
+  )
+  const markerEvidenceAfter = await evidence(
+    restoreConnection.libpqEnv,
+    `select jsonb_build_object(
+      'database', current_database(), 'databaseRole', current_user,
+      'runId', marker.run_id, 'disposableMarker', marker.disposable_marker::text
+    ) from capital_lab_restore.run_identity as marker where marker.singleton;`,
+  )
+  if (
+    canonicalJson(sourceIdentity) !== canonicalJson(sourceIdentityAfter) ||
+    canonicalJson(sourceEvidenceBefore) !==
+      canonicalJson(sourceEvidenceAfter) ||
+    canonicalJson(sourceAuthEvidenceBefore) !==
+      canonicalJson(sourceAuthEvidenceAfter) ||
+    canonicalJson(markerEvidence) !== canonicalJson(markerEvidenceAfter)
+  ) {
+    throw new Error(
+      'Source identity or disposable target marker changed during restore',
     )
   }
   process.stdout.write(

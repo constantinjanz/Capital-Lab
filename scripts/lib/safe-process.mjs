@@ -8,6 +8,7 @@ import {
 import path from 'node:path'
 
 const ALLOWED_EXECUTABLES = new Set([
+  'docker',
   'git',
   'node',
   'pg_dump',

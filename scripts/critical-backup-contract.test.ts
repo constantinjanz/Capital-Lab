@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import {
   assertBackupManifest,
   assertContractKeys,
+  assertRestoredAuthEvidence,
   assertRestoredEvidence,
   buildRolePolicySql,
   buildServerIdentitySql,
@@ -43,10 +44,18 @@ const migrations = [
 const manifest = {
   artifacts: {
     roles: { file: 'roles.sql', sha256: hashA },
+    authSchema: { file: 'auth-schema.sql', sha256: hashA },
+    authData: { file: 'auth-data.sql', sha256: hashB },
     schema: { file: 'schema.sql', sha256: hashA },
     data: { file: 'data.sql', sha256: hashA },
     historySchema: { file: 'history-schema.sql', sha256: hashB },
     historyData: { file: 'history-data.sql', sha256: hashB },
+  },
+  authEvidence: {
+    schemaVersion: 1,
+    userCount: '2',
+    mappedApplicationOwnerCount: '1',
+    relationCounts: { users: '2', identities: '2' },
   },
   createdAt: '2026-08-10T00:00:00.000Z',
   contractKind: 'post_activation',
@@ -57,20 +66,29 @@ const manifest = {
     platformExcludedEntryCount: 3,
     platformExcludedOwner: 'supabase_admin',
   },
-  schemaVersion: 5,
-  schemaContractVersion: 'capital-lab-post_activation-backup-v5',
+  schemaVersion: 6,
+  schemaContractVersion: 'capital-lab-post_activation-backup-v6',
   schemaFingerprintSha256: hashA,
+  schemaGoldenSha256: hashB,
   gitCommitSha: 'c'.repeat(40),
   relationContractSha256: hashA,
   relationSetSha256: hashB,
   restorePreludeSha256: hashB,
   relations,
   migrations,
+  snapshotPolicy: {
+    applicationAuthAndHistoryShareExportedSnapshot: true,
+    isolation: 'repeatable read read only',
+    localRaceFixture: null,
+    rolePolicyComparedOutsideSnapshot: true,
+    sourceStateReverifiedAfterExport: true,
+  },
   source: {
     appliedMigrations: [{ version: '20260809150417', name: 'activation' }],
     databaseFingerprint: hashB,
     rolePolicyFingerprint: hashA,
     schemaFingerprintSha256: hashA,
+    migrationHistorySha256: hashB,
     serverFingerprint: hashB,
     serverVersion: '170006',
   },
@@ -90,6 +108,8 @@ const expected = {
   relationNames: Object.keys(relations).sort(),
   relationSetSha256: hashB,
   restorePreludeSha256: hashB,
+  schemaFingerprintSha256: hashA,
+  schemaGoldenSha256: hashB,
   migrations,
 }
 
@@ -119,28 +139,19 @@ describe('critical backup contract', () => {
     ).toThrow('DEFAULT ACL owner is not classified')
   })
 
-  it('prepares disposable schemas in the required restore order', () => {
+  it('prepares only the exact separately identified disposable stack B', () => {
     const source = readFileSync(
       new URL('./prepare-seed-free-local-restore-target.mjs', import.meta.url),
       'utf8',
     )
-    const schemaIndex = source.indexOf(
-      'create schema if not exists vault authorization supabase_admin',
+    expect(source).toContain('restoreProjectId(runId)')
+    expect(source).toContain("target.port !== '55322'")
+    expect(source).toContain(
+      'sourceIdentity.serverIdentity === targetIdentity.serverIdentity',
     )
-    const extensionIndex = source.indexOf(
-      'create extension if not exists supabase_vault with schema vault',
-    )
-    const applicationExtensionIndex = source.indexOf(
-      "for (const extension of ['pgcrypto', 'citext', 'vector'])",
-    )
-    const publicDropIndex = source.indexOf("'target_public_schema_drop'")
-    const platformRestoreIndex = source.indexOf("'platform_schema_restore'")
-    expect(schemaIndex).toBeGreaterThan(-1)
-    expect(extensionIndex).toBeGreaterThan(schemaIndex)
-    expect(applicationExtensionIndex).toBeGreaterThan(-1)
-    expect(schemaIndex).toBeGreaterThan(applicationExtensionIndex)
-    expect(publicDropIndex).toBeGreaterThan(-1)
-    expect(platformRestoreIndex).toBeGreaterThan(publicDropIndex)
+    expect(source).toContain('buildRestoreTargetProof')
+    expect(source).toContain('capital_lab_restore.run_identity')
+    expect(source).not.toMatch(/drop database/iu)
   })
 
   it('hashes a secret-free deterministic role policy and server boundary', () => {
@@ -351,6 +362,7 @@ describe('critical backup contract', () => {
       appliedMigrations: manifest.source.appliedMigrations,
       relationSetSha256: manifest.relationSetSha256,
       schemaFingerprintSha256: manifest.schemaFingerprintSha256,
+      migrationHistorySha256: manifest.source.migrationHistorySha256,
     }) as {
       contractKind: string
       relations: Record<string, Record<string, unknown>>
@@ -371,7 +383,20 @@ describe('critical backup contract', () => {
         appliedMigrations: [{ version: '20260809150417', name: 'tampered' }],
         relationSetSha256: manifest.relationSetSha256,
         schemaFingerprintSha256: manifest.schemaFingerprintSha256,
+        migrationHistorySha256: manifest.source.migrationHistorySha256,
       }),
     ).toThrow(/differs/)
+  })
+
+  it('rejects Auth count or mapped-owner closure drift without exposing Auth rows', () => {
+    expect(() =>
+      assertRestoredAuthEvidence(manifest, manifest.authEvidence),
+    ).not.toThrow()
+    expect(() =>
+      assertRestoredAuthEvidence(manifest, {
+        ...manifest.authEvidence,
+        userCount: '1',
+      }),
+    ).toThrow(/Auth relation-count or owner-mapping evidence differs/)
   })
 })

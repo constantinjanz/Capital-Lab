@@ -1,5 +1,73 @@
 # Capital Lab implementation plan
 
+## Fourth activation-readiness remediation — Draft PR #21
+
+Starting at the independently verified Draft-PR head
+`3015f864f26e2d547f43e1f47a8adfe6a1200bf8`, this repository-only pass closes
+the remaining circular safety proofs. It must attest the actual runtime
+configuration of two distinct immutable Vercel Production deployments, preserve
+the complete supported Supabase Auth dependency closure, compare source and
+restored databases to independent pre/post schema goldens, and prove restoration
+between two genuinely separate local clusters. It also closes break-glass
+dependency integrity, row/column-bounded mutation evidence, destructive-target
+identity, MVCC snapshot consistency, filesystem realpath containment, and
+secret-safe subprocess output.
+
+The shared checkout contains unrelated user work and is out of scope. All work
+occurs in the clean detached worktree at the exact PR head. Hosted migrations,
+migration repair, extension/Vault/Cron changes, scheduler or attestation
+requests, Production deployment/environment changes, OpenAI/provider/broker
+calls, and trading effects are prohibited. Local fixtures may prove only that
+the code paths are prepared; every Production attestation and activation gate
+remains pending. The maximum outcome is fourth independent read-only review.
+
+### Fourth-remediation phases and acceptance criteria
+
+1. **Preflight and source evidence.** Derive Git/PR/worktree state; preserve all
+   unrelated dirt; read current Supabase/Vercel primary documentation; record
+   only safe Hosted catalog, migration, RLS, relation-count, and disabled-control
+   observations. Stop on any start-state or Hosted safety drift.
+2. **Runtime configuration attestation.** Add mandatory
+   `runtime_identity_verified` → `runtime_config_attestation_requested` →
+   `runtime_config_verified` → `runtime_deployment_verified` states. A one-shot
+   authenticated `runtime_config_noop` reads centralized server runtime state,
+   binds immutable deployment identity, returns an exact no-store/zero-effect
+   schema, and cannot be replaced after an unknown outcome. No live request is
+   sent in this pass.
+3. **Auth and independent database contracts.** Add versioned pre/post schema
+   goldens produced only from fresh seed-free migration reference clusters;
+   verify source before export and target after restore against those goldens.
+   Export/restore the supported Auth closure so UUIDs, identities, owner linkage,
+   new login, JWT-backed Data API RLS, and orphan prevention are executable in a
+   synthetic two-user test.
+4. **True dual-cluster and snapshot proof.** Require distinct Postgres system
+   identifiers, run-owned source/target stacks, target markers, loopback-only
+   destructive authority, source read-only observation, and one compatible MVCC
+   snapshot for application data, Auth, history, counts, and hashes. Abort and
+   remove incomplete artifacts on any mixed or unverifiable outcome.
+5. **Adjacent P1 closure.** Verify every break-glass transitive dependency as a
+   committed non-link Git blob before database/network access; constrain allowed
+   side effects by table, operation, row identity, columns, transitions, and
+   cardinality; revalidate realpaths/parents; redact stdout and stderr; prove
+   retry-safe terminal identities and destructive-target non-execution.
+6. **Independent adversarial review.** After implementation, three independent
+   reviewers cover Runtime/Vercel/State Machine, Backup/Auth/Schema/Snapshot, and
+   Break-glass/Filesystem/Side-effects/Credentials. The primary engineer reads
+   and validates every relevant file and claim and resolves all accepted P0/P1
+   findings before handoff.
+7. **Exact-head verification and publication.** Run every required Node 24,
+   Vitest, Playwright, credential-history, Supabase CLI 2.113.0, pgTAP,
+   rollback, dual-cluster pre/post restore, Auth/RLS, golden drift, concurrency,
+   filesystem, redaction, checksum, and Git gate. Regenerate checksums only from
+   final bytes, commit/push only the scoped branch, keep PR #21 Draft/unmerged,
+   wait for exact-head green CI/Preview metadata, and publish an honest report.
+
+Acceptance: no security decision is released by comparing two values derived
+from the same mutable source; every positive local result includes independent
+expected state and fault injection. No Production-facing request or mutation
+occurs, and incomplete P0 proof yields `BLOCKED — CODE-LEVEL ACCEPTANCE CRITERIA
+NOT MET`.
+
 ## Third activation-readiness remediation — Draft PR #21
 
 Starting at `e705f67db819be13c99f759e07186c63f114b831`, this repository-only

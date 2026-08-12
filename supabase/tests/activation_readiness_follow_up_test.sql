@@ -54,13 +54,12 @@ $$;
 
 create function pg_temp.deployment_proof(
   p_role text,
-  p_deployment_id text,
-  p_scheduler_enabled boolean
+  p_deployment_id text
 )
 returns jsonb language sql stable as $$
   with immutable as (
     select jsonb_build_object(
-      'schemaVersion', 1, 'role', p_role,
+      'schemaVersion', 2, 'role', p_role,
       'vercelTeamId', 'team_yqndKHk6nfWGlte1UVLTJOHG',
       'vercelProjectId', 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR',
       'supabaseProjectRef', 'qrnuyibntcxwffrxmrvn',
@@ -69,9 +68,21 @@ returns jsonb language sql stable as $$
       'readyState', 'READY',
       'productionOrigin', 'https://capital-lab-constantinjanz-7876s-projects.vercel.app',
       'productionHost', 'capital-lab-constantinjanz-7876s-projects.vercel.app',
+      'immutableDeploymentOrigin', case p_role
+        when 'auth_disabled' then 'https://capital-auth-immutable.vercel.app'
+        else 'https://capital-runtime-immutable.vercel.app'
+      end,
+      'immutableDeploymentHost', case p_role
+        when 'auth_disabled' then 'capital-auth-immutable.vercel.app'
+        else 'capital-runtime-immutable.vercel.app'
+      end,
       'schedulerPath', '/api/internal/scheduler',
       'schedulerUrl', 'https://capital-lab-constantinjanz-7876s-projects.vercel.app/api/internal/scheduler',
-      'schedulerEnabled', p_scheduler_enabled
+      'runtimeConfigPath', '/api/internal/scheduler',
+      'runtimeConfigUrl', case p_role
+        when 'auth_disabled' then 'https://capital-auth-immutable.vercel.app/api/internal/scheduler'
+        else 'https://capital-runtime-immutable.vercel.app/api/internal/scheduler'
+      end
     ) as body
   )
   select body || jsonb_build_object(
@@ -81,11 +92,102 @@ returns jsonb language sql stable as $$
       body ->> 'supabaseProjectRef', body ->> 'deploymentId', body ->> 'commitSha',
       body ->> 'environment', body ->> 'target', body ->> 'readyState',
       body ->> 'productionOrigin', body ->> 'productionHost',
+      body ->> 'immutableDeploymentOrigin', body ->> 'immutableDeploymentHost',
       body ->> 'schedulerPath', body ->> 'schedulerUrl',
-      body ->> 'schedulerEnabled'
+      body ->> 'runtimeConfigPath', body ->> 'runtimeConfigUrl'
     ), 'UTF8'), 'sha256'), 'hex'),
     'verifiedAt', statement_timestamp()
   ) from immutable;
+$$;
+
+create function pg_temp.runtime_config_body()
+returns jsonb language sql stable as $$
+  select jsonb_build_object(
+    'schema_version', 4,
+    'mode', 'runtime_config_noop',
+    'deployment_role', 'no_ai_runtime_enabled',
+    'campaign_id', pg_temp.campaign_id(),
+    'correlation_id', '34000000-0000-4000-8000-000000000004'::uuid,
+    'nonce', '34000000-0000-4000-8000-000000000002'::uuid,
+    'request_id', '34000000-0000-4000-8000-000000000001'::uuid,
+    'observed_at', statement_timestamp(),
+    'vercel_environment', 'production',
+    'vercel_target_environment', 'production',
+    'deployment_id', 'dpl_22345678901234567890',
+    'project_id', 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR',
+    'commit_sha', repeat('a', 40),
+    'deployment_url', 'https://capital-runtime-immutable.vercel.app',
+    'status', 'runtime_config_observed',
+    'terminal_reason', 'runtime_config_attested',
+    'scheduler_disabled', false,
+    'agent_disabled', true,
+    'runtime', jsonb_build_object(
+      'scheduler_enabled', true,
+      'scheduler_provider', 'supabase',
+      'agent_enabled', false,
+      'agent_execution_mode', 'mock',
+      'autonomous_paper_execution_enabled', false,
+      'paid_model_calls_enabled', false,
+      'openai_canary_enabled', false,
+      'openai_web_search_enabled', false,
+      'sol_enabled', false,
+      'sol_challenger_enabled', false,
+      'sol_live_execution_enabled', false,
+      'real_broker_enabled', false,
+      'market_data_provider', 'mock',
+      'news_provider', 'mock',
+      'openai_api_key_present', false,
+      'data_mode', 'mock',
+      'execution_mode', 'paper'
+    ),
+    'counters', pg_temp.zero_counters()
+  );
+$$;
+
+create function pg_temp.assert_invalid_runtime_config_response(
+  p_transport_id bigint,
+  p_body jsonb,
+  p_status integer default 200,
+  p_timed_out boolean default false,
+  p_error text default null,
+  p_headers jsonb default '{"cache-control":"no-store"}'::jsonb
+)
+returns void language plpgsql as $$
+begin
+  begin
+    update private.activation_runtime_config_requests
+    set pg_net_request_id = p_transport_id, status = 'submitted',
+        submitted_at = statement_timestamp()
+    where campaign_id = pg_temp.campaign_id();
+    insert into net._http_response (
+      id, status_code, content_type, headers, content, timed_out, error_msg
+    ) values (
+      p_transport_id, p_status, 'application/json', p_headers,
+      p_body::text, p_timed_out, p_error
+    );
+    perform private.capture_activation_runtime_config_response(pg_temp.campaign_id());
+    if not exists (
+      select 1 from private.activation_runtime_config_evidence
+      where pg_net_request_id = p_transport_id and not schema_valid
+    ) then
+      raise exception using errcode = 'P0001', message = 'invalid runtime response was not durably classified';
+    end if;
+    perform private.verify_activation_runtime_config_attestation(
+      pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
+      repeat('b', 64), repeat('c', 64), private.activation_database_fingerprint(),
+      '34000000-0000-4000-8000-000000000004'
+    );
+    raise exception using errcode = 'P0001', message = 'invalid runtime response was accepted';
+  exception when sqlstate '55000' then
+    null;
+  end;
+  if exists (
+    select 1 from private.activation_runtime_config_evidence
+    where pg_net_request_id = p_transport_id
+  ) then
+    raise exception using errcode = 'P0001', message = 'runtime fixture rollback did not restore the original request';
+  end if;
+end;
 $$;
 
 create function pg_temp.assert_invalid_auth_response(
@@ -137,12 +239,12 @@ create function pg_temp.campaign_manifest()
 returns jsonb language sql stable as $$
   select jsonb_build_object(
     'campaign_id', pg_temp.campaign_id(),
-    'schema_version', 3,
+    'schema_version', 4,
     'config_version', 'activation-readiness-v2',
     'prepared_commit_sha', repeat('a', 40),
     'phase_contract_sha256', repeat('c', 64),
     'relation_contract_sha256', private.activation_relation_contract_hash(),
-    'project_identity_contract_sha256', 'd6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634',
+    'project_identity_contract_sha256', '92262e62546224e4cd1b501f2f55f64692d1b757b703dd22ee1dafbd02ea493a',
     'vercel_team_id', 'team_yqndKHk6nfWGlte1UVLTJOHG',
     'vercel_project_id', 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR',
     'supabase_project_ref', 'qrnuyibntcxwffrxmrvn',
@@ -175,6 +277,9 @@ select has_table('private', 'activation_relation_snapshots', 'full-row side-effe
 select has_table('private', 'activation_control_snapshots', 'control snapshots persist');
 select has_table('private', 'activation_terminal_evidence', 'terminal evidence persists');
 select has_table('private', 'activation_deployment_bindings', 'immutable Vercel deployment proofs persist');
+select has_table('private', 'activation_runtime_config_requests', 'one-shot Runtime configuration requests persist');
+select has_table('private', 'activation_runtime_config_evidence', 'sanitized Runtime configuration evidence persists');
+select has_table('private', 'activation_expected_mutation_rules', 'row- and column-bounded expected mutation rules persist');
 select has_table('private', 'activation_relation_classifications', 'schema-wide side-effect classification persists');
 select has_table('private', 'activation_terminal_operations', 'retry-safe terminal operation identities persist');
 select has_function('private', 'emergency_kill_activation_controls', array['uuid'], 'DB-first kill exists');
@@ -198,6 +303,8 @@ select ok(not has_table_privilege('authenticated', 'private.activation_http_resp
 select ok(not has_table_privilege('service_role', 'private.activation_job_spec_versions', 'UPDATE'), 'service role cannot rewrite Cron identities');
 select ok(not has_table_privilege('service_role', 'private.activation_deployment_bindings', 'TRUNCATE'), 'service role cannot truncate deployment proofs');
 select ok(not has_table_privilege('service_role', 'private.activation_terminal_operations', 'DELETE'), 'service role cannot delete terminal operation evidence');
+select ok(not has_table_privilege('service_role', 'private.activation_runtime_config_evidence', 'TRUNCATE'), 'service role cannot truncate Runtime evidence');
+select ok(not has_table_privilege('service_role', 'private.activation_expected_mutation_rules', 'UPDATE'), 'service role cannot broaden expected mutation rules');
 select ok(not has_function_privilege('service_role', 'private.transition_no_ai_shadow_dry_run(uuid,text,text,text,text,text,uuid,jsonb)', 'EXECUTE'), 'service role cannot invoke generic transitions');
 select ok(not has_function_privilege('service_role', 'private.record_activation_deployment_binding(uuid,text,jsonb,text,uuid,uuid,text,text,text,text,text)', 'EXECUTE'), 'service role cannot bind a deployment proof directly');
 select ok(not has_function_privilege('service_role', 'private.capture_activation_auth_failure_responses(uuid)', 'EXECUTE'), 'service role cannot forge auth-failure transport reconciliation');
@@ -215,6 +322,18 @@ select ok(exists (
     and contype = 'f' and array_length(conkey, 1) = 2
 ), 'response evidence has a composite owner boundary');
 select lives_ok($$select private.assert_activation_relation_classification_complete()$$, 'every public/private base relation is classified exactly once');
+select lives_ok($$select private.assert_activation_expected_mutation_rules()$$, 'every expected relation has an exact operation, row-scope, state, and update-column rule');
+select is((
+  select update_columns from private.activation_expected_mutation_rules
+  where relation_name = 'public.experiment_controls'
+), array[
+  'scheduler_enabled', 'agent_enabled', 'emergency_paused', 'pause_reason',
+  'state_version', 'updated_at'
+]::text[], 'experiment control mutations are column-bounded');
+select is((
+  select allowed_operations from private.activation_expected_mutation_rules
+  where relation_name = 'private.activation_runtime_config_evidence'
+), array['INSERT']::text[], 'Runtime evidence is insert-only');
 select is((
   select count(*) from private.activation_relation_classifications
 ), (
@@ -298,6 +417,50 @@ select lives_ok(
 );
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'prepared', 'campaign begins prepared');
 select is((select database_fingerprint from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), private.activation_database_fingerprint(), 'prepared target fingerprint is server-derived');
+select throws_ok(
+  $$update private.application_settings
+    set value = 'true'::jsonb
+    where owner_id = (select owner_id from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id())
+      and setting_key = 'scheduler_enabled'$$,
+  '55000', 'activation mutation lacks an exact campaign and operation context',
+  'same-row-count setting mutation without the narrow operation context fails'
+);
+select throws_ok(
+  $$update private.application_settings
+    set is_secret = true
+    where owner_id = (select owner_id from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id())
+      and setting_key = 'scheduler_enabled'$$,
+  '55000', 'activation mutation lacks an exact campaign and operation context',
+  'forbidden setting column fails before mutation'
+);
+select throws_ok(
+  $$insert into public.storage_monitor_snapshots (
+      owner_id, captured_on, database_bytes, limit_bytes,
+      utilization_percent, threshold_state, largest_relations
+    ) values (
+      (select owner_id from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()),
+      current_date, 1, 2, 50, 'normal', '[]'::jsonb
+    )$$,
+  '55000', 'activation mutation lacks an exact campaign and operation context',
+  'unscoped storage evidence insert fails'
+);
+select throws_ok(
+  $$insert into private.audit_log (
+      owner_id, actor_type, actor_id, action, target_type,
+      target_id, correlation_id, metadata
+    ) values (
+      (select owner_id from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()),
+      'system', null, 'activation.unreviewed', 'campaign',
+      pg_temp.campaign_id(), gen_random_uuid(), '{}'::jsonb
+    )$$,
+  '55000', 'activation mutation lacks an exact campaign and operation context',
+  'unreviewed audit side effect fails'
+);
+select throws_ok(
+  $$truncate table public.storage_monitor_snapshots$$,
+  '55000', 'activation mutation lacks an exact campaign and operation context',
+  'bounded evidence rejects truncate during an active campaign'
+);
 select lives_ok(
   $$select private.prepare_no_ai_shadow_dry_run_v2(
     pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
@@ -469,9 +632,9 @@ select throws_ok(
 select lives_ok(
   $$select private.record_activation_deployment_binding(
     pg_temp.campaign_id(), 'auth_disabled',
-    pg_temp.deployment_proof('auth_disabled', 'dpl_12345678901234567890', false),
+    pg_temp.deployment_proof('auth_disabled', 'dpl_12345678901234567890'),
     private.activation_vercel_proof_file_hash(
-      pg_temp.deployment_proof('auth_disabled', 'dpl_12345678901234567890', false)
+      pg_temp.deployment_proof('auth_disabled', 'dpl_12345678901234567890')
     ), '31000000-0000-4000-8000-000000000001',
     '31000000-0000-4000-8000-000000000002', repeat('a', 40),
     'activation-readiness-v2', repeat('b', 64), repeat('c', 64),
@@ -483,7 +646,7 @@ select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.ca
 select throws_ok(
   $$select private.record_activation_deployment_binding(
     pg_temp.campaign_id(), 'auth_disabled',
-    pg_temp.deployment_proof('auth_disabled', 'dpl_12345678901234567890', false),
+    pg_temp.deployment_proof('auth_disabled', 'dpl_12345678901234567890'),
     repeat('f', 64), '31000000-0000-4000-8000-000000000001',
     '31000000-0000-4000-8000-000000000002', repeat('a', 40),
     'activation-readiness-v2', repeat('b', 64), repeat('c', 64),
@@ -495,9 +658,9 @@ select throws_ok(
 select throws_ok(
   $$select private.record_activation_deployment_binding(
     pg_temp.campaign_id(), 'no_ai_runtime_enabled',
-    pg_temp.deployment_proof('no_ai_runtime_enabled', 'dpl_22345678901234567890', true),
+    pg_temp.deployment_proof('no_ai_runtime_enabled', 'dpl_22345678901234567890'),
     private.activation_vercel_proof_file_hash(
-      pg_temp.deployment_proof('no_ai_runtime_enabled', 'dpl_22345678901234567890', true)
+      pg_temp.deployment_proof('no_ai_runtime_enabled', 'dpl_22345678901234567890')
     ), '31000000-0000-4000-8000-000000000003',
     '31000000-0000-4000-8000-000000000004', repeat('a', 40),
     'activation-readiness-v2', repeat('b', 64), repeat('c', 64),
@@ -609,9 +772,9 @@ select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.ca
 select throws_ok(
   $$select private.record_activation_deployment_binding(
     pg_temp.campaign_id(), 'no_ai_runtime_enabled',
-    pg_temp.deployment_proof('no_ai_runtime_enabled', 'dpl_12345678901234567890', true),
+    pg_temp.deployment_proof('no_ai_runtime_enabled', 'dpl_12345678901234567890'),
     private.activation_vercel_proof_file_hash(
-      pg_temp.deployment_proof('no_ai_runtime_enabled', 'dpl_12345678901234567890', true)
+      pg_temp.deployment_proof('no_ai_runtime_enabled', 'dpl_12345678901234567890')
     ), '33000000-0000-4000-8000-000000000001',
     '33000000-0000-4000-8000-000000000002', repeat('a', 40),
     'activation-readiness-v2', repeat('b', 64), repeat('c', 64),
@@ -622,7 +785,7 @@ select throws_ok(
 );
 create temporary table runtime_deployment_proof as
 select pg_temp.deployment_proof(
-  'no_ai_runtime_enabled', 'dpl_22345678901234567890', true
+  'no_ai_runtime_enabled', 'dpl_22345678901234567890'
 ) as proof;
 select lives_ok(
   $$select private.record_activation_deployment_binding(
@@ -649,7 +812,139 @@ select lives_ok(
   'Runtime deployment binding retry returns the exact durable proof'
 );
 select is((select count(*) from private.activation_deployment_bindings where campaign_id = pg_temp.campaign_id()), 2::bigint, 'Auth and Runtime deployment identities are append-only');
-select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'runtime_deployment_verified', 'baseline is blocked until the Runtime deployment is durably verified');
+select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'runtime_identity_verified', 'the Vercel proof binds identity but cannot attest Runtime configuration');
+select throws_ok(
+  $$select private.freeze_activation_baseline(
+    pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
+    repeat('b', 64), repeat('c', 64), private.activation_database_fingerprint(),
+    '40000000-0000-4000-8000-000000000002'
+  )$$,
+  '55000', 'baseline freeze is unavailable from the persisted state',
+  'baseline freeze fails before the actual Runtime configuration attestation'
+);
+select lives_ok(
+  $$select private.claim_activation_runtime_config_attestation(
+    pg_temp.campaign_id(),
+    '34000000-0000-4000-8000-000000000001',
+    '34000000-0000-4000-8000-000000000002',
+    '34000000-0000-4000-8000-000000000003',
+    '34000000-0000-4000-8000-000000000004', repeat('a', 40),
+    'activation-readiness-v2', repeat('b', 64), repeat('c', 64),
+    private.activation_database_fingerprint()
+  )$$,
+  'the exact immutable Runtime deployment receives one durable attestation identity'
+);
+select throws_ok(
+  $$select private.claim_activation_runtime_config_attestation(
+    pg_temp.campaign_id(),
+    '34000000-0000-4000-8000-000000000011',
+    '34000000-0000-4000-8000-000000000012',
+    '34000000-0000-4000-8000-000000000013',
+    '34000000-0000-4000-8000-000000000014', repeat('a', 40),
+    'activation-readiness-v2', repeat('b', 64), repeat('c', 64),
+    private.activation_database_fingerprint()
+  )$$,
+  '55000', 'runtime configuration request identity is immutable; reconcile the original request',
+  'an unknown Runtime attestation outcome cannot create a replacement request'
+);
+select lives_ok(
+  $$select pg_temp.assert_invalid_runtime_config_response(
+    91001, jsonb_set(pg_temp.runtime_config_body(), '{nonce}', to_jsonb(gen_random_uuid()))
+  )$$,
+  'wrong Runtime nonce fails closed'
+);
+select lives_ok(
+  $$select pg_temp.assert_invalid_runtime_config_response(
+    91002, jsonb_set(pg_temp.runtime_config_body(), '{deployment_id}', '"dpl_32345678901234567890"'::jsonb)
+  )$$,
+  'Runtime response from another deployment fails closed'
+);
+select lives_ok(
+  $$select pg_temp.assert_invalid_runtime_config_response(
+    91003, jsonb_set(pg_temp.runtime_config_body(), '{runtime,agent_enabled}', 'true'::jsonb)
+  )$$,
+  'dangerous Runtime flag fails closed'
+);
+select lives_ok(
+  $$select pg_temp.assert_invalid_runtime_config_response(
+    91004, jsonb_set(pg_temp.runtime_config_body(), '{counters,orders}', '1'::jsonb)
+  )$$,
+  'nonzero Runtime side-effect counter fails closed'
+);
+select lives_ok(
+  $$select pg_temp.assert_invalid_runtime_config_response(
+    91005, pg_temp.runtime_config_body() - 'terminal_reason'
+  )$$,
+  'missing Runtime response field fails closed'
+);
+select lives_ok(
+  $$select pg_temp.assert_invalid_runtime_config_response(
+    91006, pg_temp.runtime_config_body() || jsonb_build_object('caller_expected_flags', true)
+  )$$,
+  'extra caller-asserted Runtime field fails closed'
+);
+select lives_ok(
+  $$select pg_temp.assert_invalid_runtime_config_response(
+    91007, jsonb_set(pg_temp.runtime_config_body(), '{observed_at}', to_jsonb(statement_timestamp() + interval '1 day'))
+  )$$,
+  'caller-controlled future observation time fails closed'
+);
+select lives_ok(
+  $$select pg_temp.assert_invalid_runtime_config_response(
+    91008, pg_temp.runtime_config_body(), 200, false, null, '{}'::jsonb
+  )$$,
+  'Runtime response without exact no-store transport policy fails closed'
+);
+update private.activation_runtime_config_requests
+set pg_net_request_id = 91010, status = 'submitted', submitted_at = statement_timestamp()
+where campaign_id = pg_temp.campaign_id();
+insert into net._http_response (
+  id, status_code, content_type, headers, content, timed_out, error_msg
+) values (
+  91010, 200, 'application/json', '{"cache-control":"no-store"}'::jsonb,
+  pg_temp.runtime_config_body()::text, false, null
+);
+select lives_ok(
+  $$select private.verify_activation_runtime_config_attestation(
+    pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
+    repeat('b', 64), repeat('c', 64), private.activation_database_fingerprint(),
+    '34000000-0000-4000-8000-000000000004'
+  )$$,
+  'only the exact actual Runtime configuration response verifies'
+);
+select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'runtime_config_verified', 'actual Runtime configuration is a distinct durable state');
+select lives_ok(
+  $$select private.finalize_activation_runtime_deployment(
+    pg_temp.campaign_id(),
+    '35000000-0000-4000-8000-000000000001',
+    '35000000-0000-4000-8000-000000000002', repeat('a', 40),
+    'activation-readiness-v2', repeat('b', 64), repeat('c', 64),
+    private.activation_database_fingerprint()
+  )$$,
+  'reviewed operation releases the verified Runtime deployment to baseline freeze'
+);
+select lives_ok(
+  $$select private.finalize_activation_runtime_deployment(
+    pg_temp.campaign_id(),
+    '35000000-0000-4000-8000-000000000001',
+    '35000000-0000-4000-8000-000000000002', repeat('a', 40),
+    'activation-readiness-v2', repeat('b', 64), repeat('c', 64),
+    private.activation_database_fingerprint()
+  )$$,
+  'Runtime finalization retry returns existing evidence for the same operation identity'
+);
+select throws_ok(
+  $$select private.finalize_activation_runtime_deployment(
+    pg_temp.campaign_id(),
+    '35000000-0000-4000-8000-000000000011',
+    '35000000-0000-4000-8000-000000000012', repeat('a', 40),
+    'activation-readiness-v2', repeat('b', 64), repeat('c', 64),
+    private.activation_database_fingerprint()
+  )$$,
+  '55000', 'runtime deployment finalization operation identity drifted',
+  'different finalization identity cannot replay a terminal operation'
+);
+select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'runtime_deployment_verified', 'baseline remains blocked until proof and actual Runtime configuration are both durable');
 
 savepoint market_side_effect_guard;
 update public.market_quotes set id = id where false;
@@ -711,6 +1006,14 @@ select throws_ok(
 select throws_ok(
   $$truncate table private.activation_http_responses$$,
   '55000', 'private.activation_http_responses is append-only', 'transport evidence rejects truncate'
+);
+select throws_ok(
+  $$truncate table private.activation_runtime_config_evidence$$,
+  '55000', 'private.activation_runtime_config_evidence is append-only', 'Runtime attestation evidence rejects truncate'
+);
+select throws_ok(
+  $$truncate table private.activation_expected_mutation_rules$$,
+  '55000', 'private.activation_expected_mutation_rules is append-only', 'expected mutation bounds reject truncate'
 );
 
 select lives_ok(

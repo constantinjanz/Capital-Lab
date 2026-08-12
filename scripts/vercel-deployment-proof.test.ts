@@ -7,12 +7,14 @@ import {
 } from './vercel-deployment-proof.mjs'
 
 const contract = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   vercelTeamId: 'team_yqndKHk6nfWGlte1UVLTJOHG',
   vercelProjectId: 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR',
   supabaseProjectRef: 'qrnuyibntcxwffrxmrvn',
   schedulerPath: '/api/internal/scheduler',
+  runtimeConfigPath: '/api/internal/scheduler',
   allowedProductionHosts: ['capital-lab.example'],
+  allowedDeploymentHostSuffixes: ['.vercel.app'],
 }
 const expected = {
   role: 'auth_disabled',
@@ -28,6 +30,7 @@ const deployment = {
   readyState: 'READY',
   meta: { githubCommitSha: expected.commitSha },
   alias: ['capital-lab.example'],
+  url: 'capital-runtime-immutable.example.vercel.app',
 }
 
 describe('read-only Vercel deployment proof', () => {
@@ -53,6 +56,7 @@ describe('read-only Vercel deployment proof', () => {
     ['Preview deployment', {}, { target: null }],
     ['wrong commit', {}, { meta: { githubCommitSha: 'b'.repeat(40) } }],
     ['deployment drift', {}, { id: 'dpl_00000000000000000000' }],
+    ['untrusted deployment URL', {}, { url: 'attacker.example' }],
   ])('rejects %s', (_label, expectationDrift, deploymentDrift) => {
     expect(() =>
       validateDeploymentMetadata(

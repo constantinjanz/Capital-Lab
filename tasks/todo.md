@@ -2,6 +2,53 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## PR #21 fourth and final activation-readiness remediation (2026-08-12)
+
+Safety status: repository hardening only. No Hosted migration/history repair,
+extension/Vault/Cron mutation, scheduler/auth/runtime-attestation request,
+Production deployment/environment change, provider/model/Canary/broker call, or
+trading effect is authorized. Production gates remain pending even when local
+fixtures pass.
+
+### Preflight and primary-source review
+
+- [x] Derive the exact Draft-PR head `3015f864f26e2d547f43e1f47a8adfe6a1200bf8`, confirm PR #21 remains Draft/open/unmerged, and select the existing clean detached worktree without touching the 21 unrelated shared-checkout changes.
+- [x] Read the current official Supabase Auth migration, CLI backup/restore, migration/reset, RLS/security and changelog guidance plus Vercel system-variable, deployment, alias and REST-API guidance.
+- [x] Verify read-only that Hosted has 32 applied migrations, neither Activation migration, zero Activation relations, no installed `pg_cron`/`pg_net`, and zero true rows among the nine dangerous controls; read no Vault contents and no Auth/user rows.
+- [x] Verify read-only that the connected Vercel project remains Node 24.x and non-live and that the exact starting commit has only a READY `target=null` Preview.
+
+### P0 executable remediation
+
+- [ ] Add actual runtime configuration attestation with the mandatory identity/requested/config-verified/deployment-verified sequence, immutable one-shot request identity, exact no-store schema, centralized runtime reads, two distinct deployment roles, unknown-outcome reconciliation, and hostile fixtures; send no live request.
+- [ ] Add officially supported Auth backup/restore closure and a synthetic two-user, two-isolated-stack login/JWT/Data-API/RLS E2E with exact UUID/identity/owner/orphan checks and Auth/RLS fault injection.
+- [ ] Commit independent pre/post schema goldens generated only from seed-free migration-built reference clusters; normal CI is verify-only and rejects source+target common-mode drift across all required schema objects.
+- [ ] Replace same-cluster two-database restore proof with separate run-owned Source and Target Supabase/Postgres stacks, distinct cluster/system IDs, immutable target marker, source-read-only proof, loopback/Hosted-deny target validation, and run-scoped cleanup.
+- [ ] Enforce one compatible MVCC snapshot across application/Auth/history/count/hash export evidence; concurrency fault injection must observe a complete old or new state and never mixed state or a completed manifest after abort.
+
+### P1 executable remediation
+
+- [ ] Close break-glass integrity over the entrypoint and every transitive helper/SQL/template/config/wrapper using realpath plus exact HEAD Git-blob bytes before database/network access while allowing unrelated dirt.
+- [ ] Replace table-level side-effect exceptions with row/column/operation/transition/cardinality-bounded contracts and adversarial tests for same-count mutation, wrong campaign/column, trigger mutation, insert-delete compensation and unclassified relations.
+- [ ] Require strong source/target cluster identity, run ID, target marker, role/database/fingerprint and source-not-target proof before every destructive process; prove zero spawn on failed validation.
+- [ ] Revalidate backup/artifact realpaths and parents against symlink/junction/case escapes, use restrictive temporary artifacts, redact stdout and stderr, distinguish backup/restore/schema-golden/activation status, and cover encoded URLs/JWT/header/token patterns.
+- [ ] Add a forward-only migration through the pinned Supabase CLI workflow without modifying the 32 Hosted-applied migration bytes; update reset, pgTAP, rollback rehearsal and grants/RLS contracts.
+
+### Independent review, exact-head gates and handoff
+
+- [ ] Run three independent adversarial reviews: Runtime/Vercel/State Machine; Backup/Auth/Schema/Snapshot; Break-glass/Filesystem/Side-effects/Credentials. Reproduce and close every accepted finding.
+- [ ] Run all focused fault-injection tests, then the complete Node 24 application, Windows, mock Playwright, credential-history, Supabase CLI 2.113.0, start/reset/pgTAP, every pending rollback, dual-cluster pre/post restore, synthetic Auth/RLS, golden/MVCC, filesystem/redaction/side-effect/checksum and Git gates on one exact clean commit.
+- [ ] Regenerate final-byte phase/migration/handoff checksums, update the post-build report with implementation/handoff SHAs and exact non-execution evidence, push only the existing branch, keep PR #21 Draft/unmerged, and wait for exact-head green CI plus Preview `target=null` evidence.
+
+### Verification checkpoint 2026-08-12
+
+- [x] Focused runtime, backup/Auth, break-glass, filesystem, redaction and contract suites passed: 12 files / 113 tests.
+- [x] Complete Vitest suite passed: 91 files / 676 tests.
+- [x] Prettier, zero-warning ESLint and strict TypeScript passed after the fourth-remediation implementation changes.
+- [x] PAPER-only safety scan and redacted credential scan passed across the worktree and 100 commits with zero findings.
+- [ ] Local database gates remain unclaimed: this workstation has no Docker-compatible runtime or local PostgreSQL server.
+- [ ] Replace the pre/post schema-golden inputs with outputs generated from a fresh seed-free migration-built local stack; Hosted/source-derived or placeholder goldens are prohibited.
+- [ ] Re-run all exact-head application, browser, database, dual-stack restore and CI gates after the schema goldens and final bytes are complete.
+
 ## PR #21 third activation-readiness remediation (2026-08-11)
 
 Safety status: repository hardening only. No Hosted migration/history repair,

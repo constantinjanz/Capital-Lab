@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { readFile } from 'node:fs/promises'
 
 import {
   classifyEmergencyProcessResult,
+  emergencyDependencyClosure,
   validateEmergencyConfirmation,
   validateEmergencyTarget,
 } from './run-emergency-kill.mjs'
@@ -21,6 +23,21 @@ describe('minimal DB-first emergency runner', () => {
     expect(() =>
       validateEmergencyConfirmation(campaignId, 'EMERGENCY KILL'),
     ).toThrow()
+  })
+
+  it('permits unrelated dirty files while raw-checking the complete transitive closure', async () => {
+    const closure = await emergencyDependencyClosure(process.cwd())
+    expect(closure).toEqual([
+      'scripts/lib/canonical-repository-bytes.mjs',
+      'scripts/lib/safe-process.mjs',
+      'scripts/run-emergency-kill.mjs',
+      'supabase/activation/emergency-kill.sql',
+    ])
+    const source = await readFile('scripts/run-emergency-kill.mjs', 'utf8')
+    expect(source).not.toContain("git(['status'")
+    expect(source).not.toMatch(/campaign manifest|vercel/iu)
+    expect(source).toContain("['show', `HEAD:${relativePath}`]")
+    expect(source).toContain('isSymbolicLink()')
   })
 
   it('accepts only the exact TLS-verified project boundary', () => {

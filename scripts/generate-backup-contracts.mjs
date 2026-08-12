@@ -8,6 +8,7 @@ import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.m
 const PENDING = new Set([
   '20260809150000_post_build_hosting_safety.sql',
   '20260809150417_activation_readiness_follow_up.sql',
+  '20260812092043_fourth_activation_readiness_remediation.sql',
 ])
 
 function canonicalJson(value) {
@@ -155,8 +156,8 @@ async function buildContract(migrationDirectory, kind, files) {
     })),
     nonCriticalAllowlist: [],
     relations: relationsFromMigrations(migrations),
-    schemaFingerprintVersion: 'capital-lab-schema-fingerprint-v1',
-    schemaVersion: 3,
+    schemaFingerprintVersion: 'capital-lab-schema-fingerprint-v2',
+    schemaVersion: 4,
   }
 }
 

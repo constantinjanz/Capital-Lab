@@ -36,6 +36,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node scripts/activation-phase-contract.mjs --verify
       - run: node scripts/generate-backup-contracts.mjs --verify
+      - run: node scripts/verify-schema-golden-contracts.mjs
       - run: node scripts/handoff-checksums.mjs --verify
       - run: node scripts/run-ci-gate.mjs --id format -- pnpm format:check
       - run: node scripts/run-ci-gate.mjs --id lint -- pnpm lint
@@ -93,7 +94,7 @@ jobs:
         with:
           version: 2.113.0
       - run: supabase --version
-      - run: node scripts/run-ci-gate.mjs --id supabase-start -- supabase start
+      - run: node scripts/run-ci-gate.mjs --id supabase-start -- node scripts/run-redacted-subprocess.mjs --id=supabase-start -- supabase start
       - name: Rollback-only migration rehearsal
         env:
           CAPITAL_LAB_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
@@ -104,31 +105,81 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          artifact_root="$(mktemp -d)"
-          hold_root="$(mktemp -d)"
+          artifact_root="$(mktemp -d "${RUNNER_TEMP}/capital-lab-artifacts.XXXXXX")"
+          hold_root="$(mktemp -d "${RUNNER_TEMP}/capital-lab-migrations.XXXXXX")"
+          restore_run_id="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          target_workdir="${RUNNER_TEMP}/capital-lab-restore-${restore_run_id}"
+          disposable_marker="$(node -e "process.stdout.write(require('node:crypto').randomUUID())")"
+          export CAPITAL_LAB_RESTORE_RUN_ID="$restore_run_id"
+          export CAPITAL_LAB_RESTORE_DISPOSABLE_MARKER="$disposable_marker"
+          node scripts/create-local-restore-stack.mjs "--run-id=${restore_run_id}" "--output-dir=${target_workdir}"
+          target_running=false
           restore_pending() {
             for file in "$hold_root"/*.sql; do
               if [ -f "$file" ]; then mv "$file" supabase/migrations/; fi
             done
           }
-          trap restore_pending EXIT
+          cleanup() {
+            restore_pending
+            if [ "$target_running" = true ]; then
+              supabase stop --no-backup --workdir "$target_workdir" >/dev/null 2>&1 || true
+            fi
+            if [[ "$artifact_root" == "$RUNNER_TEMP/"* ]]; then
+              chmod -R u+rwX "$artifact_root" 2>/dev/null || true
+              rm -rf -- "$artifact_root"
+            fi
+            if [[ "$target_workdir" == "$RUNNER_TEMP/"* ]]; then
+              rm -rf -- "$target_workdir"
+            fi
+            if [[ "$hold_root" == "$RUNNER_TEMP/"* ]]; then
+              rm -rf -- "$hold_root"
+            fi
+          }
+          trap cleanup EXIT
           mv supabase/migrations/20260809150000_post_build_hosting_safety.sql "$hold_root"/
           mv supabase/migrations/20260809150417_activation_readiness_follow_up.sql "$hold_root"/
+          mv supabase/migrations/20260812092043_fourth_activation_readiness_remediation.sql "$hold_root"/
           supabase db reset --no-seed
           restore_pending
           export CAPITAL_LAB_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+          node scripts/local-auth-restore-fixture.mjs --mode=prepare "--credentials=${artifact_root}/pre-auth.json"
+          export CAPITAL_LAB_LOCAL_MVCC_RACE='application-setting-v1'
           node scripts/export-critical-tables.mjs --contract=pre "--output-dir=${artifact_root}/pre"
-          export CAPITAL_LAB_LOCAL_DISPOSABLE_CONFIRM='CREATE DISPOSABLE CAPITAL LAB RESTORE DATABASE capital_lab_restore'
-          node scripts/prepare-seed-free-local-restore-target.mjs
-          export CAPITAL_LAB_RESTORE_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:54322/capital_lab_restore'
+          unset CAPITAL_LAB_LOCAL_MVCC_RACE
+          test "$(PGPASSWORD=postgres psql -X --no-psqlrc --tuples-only --no-align -h 127.0.0.1 -p 54322 -U postgres -d postgres -c "select count(*) from private.application_settings where setting_key = 'local_mvcc_race_fixture_v1'")" = '0'
+          node scripts/run-redacted-subprocess.mjs --id=restore-stack-b-pre-start -- supabase start "--workdir=${target_workdir}"
+          target_running=true
+          export CAPITAL_LAB_RESTORE_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55322/postgres'
+          export CAPITAL_LAB_LOCAL_DISPOSABLE_CONFIRM='RESET DISPOSABLE CAPITAL LAB RESTORE STACK B postgres'
+          node scripts/prepare-seed-free-local-restore-target.mjs "--proof=${artifact_root}/pre-target-proof.json"
           export CAPITAL_LAB_RESTORE_CONFIRM_DISPOSABLE='seed-free-disposable-database-confirmed'
           pre_hash="$(sha256sum "${artifact_root}/pre/manifest.json" | cut -d' ' -f1)"
-          node scripts/verify-backup-restore.mjs --contract=pre "--manifest=${artifact_root}/pre/manifest.json" "--expected-manifest-sha256=${pre_hash}"
+          pre_target_hash="$(sha256sum "${artifact_root}/pre-target-proof.json" | cut -d' ' -f1)"
+          node scripts/verify-backup-restore.mjs --contract=pre "--manifest=${artifact_root}/pre/manifest.json" "--expected-manifest-sha256=${pre_hash}" "--target-proof=${artifact_root}/pre-target-proof.json" "--expected-target-proof-sha256=${pre_target_hash}"
+          node scripts/local-auth-restore-fixture.mjs --mode=verify "--credentials=${artifact_root}/pre-auth.json" "--supabase-workdir=${target_workdir}"
+          node scripts/local-auth-restore-fixture.mjs --mode=faults "--credentials=${artifact_root}/pre-auth.json" "--supabase-workdir=${target_workdir}"
+          cp "${artifact_root}/pre/auth-data.sql" "${artifact_root}/pre/auth-data.original"
+          : > "${artifact_root}/pre/auth-data.sql"
+          if node scripts/verify-backup-restore.mjs --contract=pre "--manifest=${artifact_root}/pre/manifest.json" "--expected-manifest-sha256=${pre_hash}" "--target-proof=${artifact_root}/pre-target-proof.json" "--expected-target-proof-sha256=${pre_target_hash}"; then
+            echo 'Missing Auth backup data was not rejected' >&2
+            exit 1
+          fi
+          mv "${artifact_root}/pre/auth-data.original" "${artifact_root}/pre/auth-data.sql"
+          supabase stop --no-backup --workdir "$target_workdir"
+          target_running=false
           supabase db reset --no-seed
+          node scripts/local-auth-restore-fixture.mjs --mode=prepare "--credentials=${artifact_root}/post-auth.json"
+          export CAPITAL_LAB_LOCAL_MVCC_RACE='application-setting-v1'
           node scripts/export-critical-tables.mjs --contract=post "--output-dir=${artifact_root}/post"
-          node scripts/prepare-seed-free-local-restore-target.mjs
+          unset CAPITAL_LAB_LOCAL_MVCC_RACE
+          node scripts/run-redacted-subprocess.mjs --id=restore-stack-b-post-start -- supabase start "--workdir=${target_workdir}"
+          target_running=true
+          node scripts/prepare-seed-free-local-restore-target.mjs "--proof=${artifact_root}/post-target-proof.json"
           post_hash="$(sha256sum "${artifact_root}/post/manifest.json" | cut -d' ' -f1)"
-          node scripts/verify-backup-restore.mjs --contract=post "--manifest=${artifact_root}/post/manifest.json" "--expected-manifest-sha256=${post_hash}"
+          post_target_hash="$(sha256sum "${artifact_root}/post-target-proof.json" | cut -d' ' -f1)"
+          node scripts/verify-backup-restore.mjs --contract=post "--manifest=${artifact_root}/post/manifest.json" "--expected-manifest-sha256=${post_hash}" "--target-proof=${artifact_root}/post-target-proof.json" "--expected-target-proof-sha256=${post_target_hash}"
+          node scripts/local-auth-restore-fixture.mjs --mode=verify "--credentials=${artifact_root}/post-auth.json" "--supabase-workdir=${target_workdir}"
+          node scripts/local-auth-restore-fixture.mjs --mode=faults "--credentials=${artifact_root}/post-auth.json" "--supabase-workdir=${target_workdir}"
       - name: Publish database evidence summary
         if: always()
         run: cat .ci-evidence/*.json >> "$GITHUB_STEP_SUMMARY"
@@ -192,4 +243,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Native Windows subprocess and path gates
-        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/run-activation-phase.test.ts scripts/run-emergency-kill.test.ts scripts/migration-rehearsal-contract.test.ts
+        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/lib/held-files.test.ts scripts/run-activation-phase.test.ts scripts/run-emergency-kill.test.ts scripts/run-redacted-subprocess.test.ts scripts/migration-rehearsal-contract.test.ts scripts/critical-backup-contract.test.ts scripts/local-supabase-target-proof.test.ts
+      - name: Parse every Windows-sensitive subprocess wrapper
+        run: |
+          node --check scripts/export-critical-tables.mjs
+          node --check scripts/prepare-seed-free-local-restore-target.mjs
+          node --check scripts/run-local-rollback-migration-rehearsal.mjs
+          node --check scripts/run-ci-gate.mjs
+          node --check scripts/verify-backup-restore.mjs
+          node --check scripts/local-auth-restore-fixture.mjs
+          node --check scripts/create-local-restore-stack.mjs
+          node --check scripts/run-redacted-subprocess.mjs

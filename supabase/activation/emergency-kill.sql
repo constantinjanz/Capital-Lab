@@ -2,6 +2,17 @@
 -- Vercel, transport, audit-finalization, or unschedule work.
 \set ON_ERROR_STOP on
 begin;
+select exists (
+  select 1 from private.no_ai_shadow_dry_runs
+  where id = :'campaign_id'::uuid
+    and database_fingerprint = private.activation_database_fingerprint()
+) as emergency_target_verified
+\gset
+\if :emergency_target_verified
+\else
+  \echo 'emergency campaign database identity drifted'
+  \quit 1
+\endif
 select private.emergency_kill_activation_controls(:'campaign_id'::uuid);
 commit;
 

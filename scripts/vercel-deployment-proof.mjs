@@ -4,14 +4,15 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
+import { newExternalPath } from './lib/safe-artifact-path.mjs'
 
 const DEPLOYMENT_ID = /^dpl_[A-Za-z0-9]{20,64}$/u
 const GIT_SHA = /^[0-9a-f]{40}$/u
 const VERCEL_ID = /^(?:prj|team)_[A-Za-z0-9]{20,64}$/u
-const ROLES = new Map([
-  ['auth_disabled', false],
-  ['no_ai_runtime_enabled', true],
-  ['shutdown_disabled', false],
+const ROLES = new Set([
+  'auth_disabled',
+  'no_ai_runtime_enabled',
+  'shutdown_disabled',
 ])
 
 export function canonicalJson(value) {
@@ -44,9 +45,12 @@ export function deploymentEvidenceHash(evidence) {
     evidence.readyState,
     evidence.productionOrigin,
     evidence.productionHost,
+    evidence.immutableDeploymentOrigin,
+    evidence.immutableDeploymentHost,
     evidence.schedulerPath,
     evidence.schedulerUrl,
-    evidence.schedulerEnabled,
+    evidence.runtimeConfigPath,
+    evidence.runtimeConfigUrl,
   ]
   return sha256(fields.map(String).join('\u001f'))
 }
@@ -93,6 +97,8 @@ export function validateProjectIdentityContract(contract) {
     contract,
     [
       'allowedProductionHosts',
+      'allowedDeploymentHostSuffixes',
+      'runtimeConfigPath',
       'schemaVersion',
       'schedulerPath',
       'supabaseProjectRef',
@@ -102,11 +108,12 @@ export function validateProjectIdentityContract(contract) {
     'Project identity contract',
   )
   if (
-    contract.schemaVersion !== 1 ||
+    contract.schemaVersion !== 2 ||
     !VERCEL_ID.test(contract.vercelTeamId) ||
     !VERCEL_ID.test(contract.vercelProjectId) ||
     !/^[a-z]{20}$/u.test(contract.supabaseProjectRef) ||
     contract.schedulerPath !== '/api/internal/scheduler' ||
+    contract.runtimeConfigPath !== '/api/internal/scheduler' ||
     !Array.isArray(contract.allowedProductionHosts) ||
     contract.allowedProductionHosts.length === 0 ||
     new Set(contract.allowedProductionHosts).size !==
@@ -115,7 +122,10 @@ export function validateProjectIdentityContract(contract) {
       (host) =>
         typeof host !== 'string' ||
         !/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])$/u.test(host),
-    )
+    ) ||
+    !Array.isArray(contract.allowedDeploymentHostSuffixes) ||
+    canonicalJson(contract.allowedDeploymentHostSuffixes) !==
+      canonicalJson(['.vercel.app'])
   ) {
     throw new Error('Project identity contract is invalid')
   }
@@ -141,6 +151,19 @@ export function validateDeploymentMetadata(contract, expected, deployment) {
     contract.allowedProductionHosts,
   )
   const aliases = Array.isArray(deployment?.alias) ? deployment.alias : []
+  const immutableDeploymentOrigin = canonicalOrigin(
+    `https://${deployment?.url ?? ''}`,
+    [deployment?.url].filter(Boolean),
+  )
+  if (
+    !contract.allowedDeploymentHostSuffixes.some((suffix) =>
+      immutableDeploymentOrigin.hostname.endsWith(suffix),
+    )
+  ) {
+    throw new Error(
+      'Immutable Vercel deployment host is outside reviewed rules',
+    )
+  }
   if (
     deployment?.id !== expected.deploymentId ||
     deployment?.projectId !== contract.vercelProjectId ||
@@ -157,8 +180,9 @@ export function validateDeploymentMetadata(contract, expected, deployment) {
     )
   }
   const schedulerUrl = `${origin.origin}${contract.schedulerPath}`
+  const runtimeConfigUrl = `${immutableDeploymentOrigin.origin}${contract.runtimeConfigPath}`
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     role: expected.role,
     vercelTeamId: contract.vercelTeamId,
     vercelProjectId: contract.vercelProjectId,
@@ -170,9 +194,12 @@ export function validateDeploymentMetadata(contract, expected, deployment) {
     readyState: 'READY',
     productionOrigin: origin.origin,
     productionHost: origin.hostname,
+    immutableDeploymentOrigin: immutableDeploymentOrigin.origin,
+    immutableDeploymentHost: immutableDeploymentOrigin.hostname,
     schedulerPath: contract.schedulerPath,
     schedulerUrl,
-    schedulerEnabled: ROLES.get(expected.role),
+    runtimeConfigPath: contract.runtimeConfigPath,
+    runtimeConfigUrl,
   }
 }
 
@@ -185,6 +212,7 @@ export function validateDeploymentProof(contract, expected, proof) {
     readyState: proof?.readyState,
     meta: { githubCommitSha: proof?.commitSha },
     alias: [proof?.productionHost],
+    url: proof?.immutableDeploymentHost,
   })
   exactKeys(
     proof,
@@ -235,13 +263,7 @@ async function main() {
   if (contractBytes.toString('utf8') !== `${canonicalJson(contract)}\n`) {
     throw new Error('Project identity contract is not canonical JSON')
   }
-  const outputPath = path.resolve(options.output)
-  if (
-    path.relative(repository, outputPath) === '' ||
-    !path.relative(repository, outputPath).startsWith('..')
-  ) {
-    throw new Error('Deployment proof must remain outside the repository')
-  }
+  const outputPath = await newExternalPath(repository, options.output)
   const token = process.env.VERCEL_TOKEN
   if (!token) throw new Error('VERCEL_TOKEN is required and never logged')
   const endpoint = new URL(

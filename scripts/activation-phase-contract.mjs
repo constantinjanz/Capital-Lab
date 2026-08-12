@@ -21,6 +21,9 @@ const PHASE_FILES = Object.freeze({
   'orderly-stop': 'disable-hosted-scheduler.sql',
   prepare: 'prepare-no-ai-dry-run.sql',
   'runtime-deployment-verify': 'verify-runtime-deployment.sql',
+  'runtime-config-request': 'request-runtime-config-attestation.sql',
+  'runtime-config-reconcile': 'verify-runtime-config-attestation.sql',
+  'runtime-deployment-finalize': 'finalize-runtime-deployment.sql',
   'scheduler-infrastructure-preparation':
     'prepare-scheduler-infrastructure.sql',
   'unschedule-terminal-jobs': 'unschedule-terminal-jobs.sql',
@@ -55,7 +58,7 @@ export async function buildActivationPhaseContract(repository) {
       ),
     }
   }
-  return { phases, schema_version: 3 }
+  return { phases, schema_version: 4 }
 }
 
 async function main() {

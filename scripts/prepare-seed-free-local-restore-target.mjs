@@ -1,64 +1,58 @@
 import { spawn, spawnSync } from 'node:child_process'
-import {
-  mkdtemp,
-  readFile,
-  realpath,
-  readdir,
-  rm,
-  stat,
-} from 'node:fs/promises'
-import os from 'node:os'
-import path from 'node:path'
+import { createHash } from 'node:crypto'
+import { chmod, readFile, realpath, writeFile } from 'node:fs/promises'
 
 import {
+  buildServerIdentitySql,
+  canonicalJson,
   postgresUrlToLibpqEnv,
   redactedPostgresError,
+  sha256,
 } from './critical-backup-contract.mjs'
+import {
+  buildRestoreTargetProof,
+  canonicalJson as canonicalProofJson,
+  restoreProjectId,
+} from './lib/local-supabase-target-proof.mjs'
 import {
   resolvedArguments,
   resolveNativeExecutable,
 } from './lib/safe-process.mjs'
-import { withHeldFiles } from './lib/held-files.mjs'
+import { newExternalPath } from './lib/safe-artifact-path.mjs'
 
-const PROCESS_TIMEOUT_MS = 600_000
-const RESTORE_DATABASE = 'capital_lab_restore'
+const PROCESS_TIMEOUT_MS = 300_000
 const DISPOSABLE_CONFIRMATION =
-  'CREATE DISPOSABLE CAPITAL LAB RESTORE DATABASE capital_lab_restore'
-const PLATFORM_ADMIN = 'supabase_admin'
+  'RESET DISPOSABLE CAPITAL LAB RESTORE STACK B postgres'
+
+function options() {
+  if (process.argv.length !== 3) {
+    throw new Error('Required: --proof=<new-external-proof-file>')
+  }
+  const match = /^--proof=(.+)$/u.exec(process.argv[2])
+  if (!match) throw new Error('Restore-target proof argument is invalid')
+  return { proof: match[1] }
+}
 
 function git(args, cwd) {
   const executable = resolveNativeExecutable('git')
   const result = spawnSync(
     executable.command,
     resolvedArguments(executable, args),
-    {
-      cwd,
-      encoding: 'utf8',
-      shell: false,
-      windowsHide: true,
-    },
+    { cwd, encoding: 'utf8', shell: false, windowsHide: true },
   )
-  if (result.status !== 0 || result.signal || result.error)
+  if (result.status !== 0 || result.signal || result.error) {
     throw new Error('Git evidence could not be derived')
+  }
   return result.stdout.trim()
 }
 
-async function exists(filename) {
-  try {
-    await stat(filename)
-    return true
-  } catch (error) {
-    if (error?.code === 'ENOENT') return false
-    throw error
-  }
-}
-
-async function run(name, args, phase, env = process.env, input) {
+async function run(name, args, env, input, capture = false) {
   const executable = resolveNativeExecutable(name)
   return new Promise((resolve, reject) => {
+    let stdout = ''
+    let stderr = ''
     let settled = false
     let timedOut = false
-    let stderr = ''
     const child = spawn(
       executable.command,
       resolvedArguments(executable, args),
@@ -66,9 +60,10 @@ async function run(name, args, phase, env = process.env, input) {
         env,
         shell: false,
         windowsHide: true,
-        stdio: ['pipe', 'ignore', 'pipe'],
+        stdio: ['pipe', capture ? 'pipe' : 'ignore', 'pipe'],
       },
     )
+    child.stdout?.on('data', (chunk) => (stdout += chunk.toString()))
     child.stderr.on('data', (chunk) => (stderr += chunk.toString()))
     const timer = setTimeout(() => {
       timedOut = true
@@ -87,190 +82,209 @@ async function run(name, args, phase, env = process.env, input) {
       if (code !== 0 || signal || timedOut) {
         reject(
           new Error(
-            `Local database preparation failed: ${phase}; redacted database error: ${redactedPostgresError(stderr)}`,
+            `Disposable target preparation failed; redacted error: ${redactedPostgresError(stderr)}`,
           ),
         )
-      } else resolve()
+      } else resolve(stdout)
     })
     child.stdin.end(input)
   })
 }
 
+async function databaseEvidence(connection, sql) {
+  const output = await run(
+    'psql',
+    [
+      '-X',
+      '--no-psqlrc',
+      '--tuples-only',
+      '--no-align',
+      '--set',
+      'ON_ERROR_STOP=1',
+    ],
+    {
+      ...process.env,
+      ...connection.libpqEnv,
+      PGCONNECT_TIMEOUT: '10',
+      PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
+    },
+    sql,
+    true,
+  )
+  return JSON.parse(output.trim())
+}
+
+async function inspectRestoreContainer(runId) {
+  const projectId = restoreProjectId(runId)
+  const output = await run(
+    'docker',
+    ['inspect', `supabase_db_${projectId}`],
+    process.env,
+    undefined,
+    true,
+  )
+  const parsed = JSON.parse(output)
+  if (!Array.isArray(parsed) || parsed.length !== 1) {
+    throw new Error('Disposable Supabase stack B container is not unique')
+  }
+  return parsed[0]
+}
+
 async function main() {
-  if (process.argv.length !== 2)
-    throw new Error(
-      'This local target-preparation command accepts no arguments',
-    )
+  const requested = options()
   if (
     process.env.CAPITAL_LAB_LOCAL_DISPOSABLE_CONFIRM !== DISPOSABLE_CONFIRMATION
   ) {
-    throw new Error('Exact disposable database confirmation is required')
+    throw new Error('Exact disposable stack B confirmation is required')
   }
   const workspace = await realpath(process.cwd())
-  if (git(['status', '--porcelain=v1', '--untracked-files=all'], workspace)) {
-    throw new Error(
-      'Local target preparation requires a completely clean Working Tree',
-    )
-  }
-  const connectionValue = process.env.CAPITAL_LAB_DATABASE_URL
-  if (!connectionValue)
-    throw new Error('CAPITAL_LAB_DATABASE_URL is required and never printed')
-  const source = postgresUrlToLibpqEnv(connectionValue, { localOnly: true })
-  if (source.database !== 'postgres')
-    throw new Error('Local source database must be exactly postgres')
-  const migrations = path.join(workspace, 'supabase', 'migrations')
-  const heldMigrations = path.join(
-    workspace,
-    'supabase',
-    '.migration-restore-hold',
-  )
-  if (await exists(heldMigrations))
-    throw new Error('Migration hold path already exists')
-  const migrationNames = (await readdir(migrations)).sort()
+  const runId = process.env.CAPITAL_LAB_RESTORE_RUN_ID
+  const disposableMarker = process.env.CAPITAL_LAB_RESTORE_DISPOSABLE_MARKER
   if (
-    migrationNames.length === 0 ||
-    migrationNames.some((name) => !/^\d{14}_[a-z0-9_]+\.sql$/u.test(name))
+    !/^[a-z0-9][a-z0-9-]{5,31}$/u.test(runId ?? '') ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+      disposableMarker ?? '',
+    )
   ) {
-    throw new Error('Migration directory contains an unexpected entry')
+    throw new Error('Run-specific disposable target identity is required')
   }
-  await withHeldFiles(
-    migrationNames.map((name) => ({
-      name,
-      source: path.join(migrations, name),
-    })),
-    heldMigrations,
-    async () => {
-      await run('supabase', ['db', 'reset', '--no-seed'], 'baseline_reset')
-    },
-  )
   if (git(['status', '--porcelain=v1', '--untracked-files=all'], workspace)) {
-    throw new Error('Migration files were not restored byte-for-byte')
+    throw new Error('Restore-target preparation requires a clean Working Tree')
   }
-  const commonEnv = {
-    ...process.env,
-    ...source.libpqEnv,
-    PGCONNECT_TIMEOUT: '10',
-    PGDATABASE: 'template1',
-    PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
+  const proofPath = await newExternalPath(workspace, requested.proof)
+  const sourceValue = process.env.CAPITAL_LAB_DATABASE_URL
+  const targetValue = process.env.CAPITAL_LAB_RESTORE_DATABASE_URL
+  if (!sourceValue || !targetValue) {
+    throw new Error(
+      'Source and target database URLs are required and never printed',
+    )
   }
-  const psqlArgs = ['-X', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1']
-  const sql = (statement, phase, env = commonEnv) =>
-    run('psql', [...psqlArgs, '--command', statement], phase, env)
-  await sql(
-    `drop database if exists ${RESTORE_DATABASE} with (force)`,
-    'prior_target_drop',
-  )
-  await sql(
-    `create database ${RESTORE_DATABASE} template template0`,
-    'target_create',
-  )
-  const baselineDirectory = await mkdtemp(
-    path.join(os.tmpdir(), 'capital-lab-platform-baseline-'),
-  )
-  const baselineSchema = path.join(baselineDirectory, 'schema.sql')
-  const baselineData = path.join(baselineDirectory, 'data.sql')
-  const sourceDumpEnv = {
-    ...process.env,
-    ...source.libpqEnv,
-    PGCONNECT_TIMEOUT: '10',
-    PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
+  const source = postgresUrlToLibpqEnv(sourceValue, { localOnly: true })
+  const target = postgresUrlToLibpqEnv(targetValue, { localOnly: true })
+  if (
+    source.hostname !== '127.0.0.1' ||
+    source.port !== '54322' ||
+    source.database !== 'postgres' ||
+    target.hostname !== '127.0.0.1' ||
+    target.port !== '55322' ||
+    target.database !== 'postgres'
+  ) {
+    throw new Error('Source A or disposable target B boundary is invalid')
   }
-  const targetEnv = { ...commonEnv, PGDATABASE: RESTORE_DATABASE }
-  const platformAdminEnv = { ...targetEnv, PGUSER: PLATFORM_ADMIN }
-  try {
-    await sql('drop schema public', 'target_public_schema_drop', targetEnv)
-    await run(
-      'pg_dump',
-      [
-        '--schema-only',
-        '--no-owner',
-        '--schema',
-        'auth',
-        '--schema',
-        'storage',
-        '--file',
-        baselineSchema,
-      ],
-      'platform_schema_dump',
-      sourceDumpEnv,
+  const inspection = await inspectRestoreContainer(runId)
+  const sourceIdentity = await databaseEvidence(
+    source,
+    buildServerIdentitySql(),
+  )
+  const targetIdentity = await databaseEvidence(
+    target,
+    buildServerIdentitySql(),
+  )
+  if (
+    sourceIdentity.serverIdentity === targetIdentity.serverIdentity ||
+    targetIdentity.databaseRole !== 'postgres'
+  ) {
+    throw new Error(
+      'Source A and target B do not have distinct PostgreSQL system identifiers',
     )
-    await run(
-      'pg_dump',
-      [
-        '--data-only',
-        '--no-owner',
-        '--schema',
-        'auth',
-        '--schema',
-        'storage',
-        '--file',
-        baselineData,
-      ],
-      'platform_data_dump',
-      sourceDumpEnv,
-    )
-    await run(
-      'psql',
-      [...psqlArgs, '--single-transaction', '--file', baselineSchema],
-      'platform_schema_restore',
-      platformAdminEnv,
-    )
-    await sql(
-      'create schema if not exists extensions authorization supabase_admin',
-      'platform_extensions_schema',
-      platformAdminEnv,
-    )
-    for (const extension of ['pgcrypto', 'citext', 'vector']) {
-      await sql(
-        `create extension if not exists ${extension} with schema extensions`,
-        `application_${extension}_extension`,
-        platformAdminEnv,
-      )
-    }
-    await sql(
-      'create schema if not exists vault authorization supabase_admin',
-      'platform_vault_schema',
-      platformAdminEnv,
-    )
-    await sql(
-      'create extension if not exists supabase_vault with schema vault',
-      'platform_vault_extension',
-      platformAdminEnv,
-    )
-    await sql(
-      'create publication supabase_realtime',
-      'platform_realtime_publication',
-      targetEnv,
-    )
-    await run(
-      'psql',
-      [
-        ...psqlArgs,
-        '--single-transaction',
-        '--command',
-        'SET session_replication_role = replica',
-        '--file',
-        baselineData,
-      ],
-      'platform_data_restore',
-      platformAdminEnv,
-    )
-  } finally {
-    await rm(baselineDirectory, { recursive: true, force: true })
   }
-  await sql(
-    'drop schema if exists supabase_migrations cascade',
-    'history_clear',
-    targetEnv,
+  const runIdLiteral = runId.replaceAll("'", "''")
+  const markerLiteral = disposableMarker.replaceAll("'", "''")
+  await run(
+    'psql',
+    ['-X', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1'],
+    {
+      ...process.env,
+      ...target.libpqEnv,
+      PGCONNECT_TIMEOUT: '10',
+      PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
+    },
+    `begin;
+create schema capital_lab_restore authorization postgres;
+create table capital_lab_restore.run_identity (
+  singleton boolean primary key default true check (singleton),
+  run_id text not null unique,
+  disposable_marker uuid not null unique,
+  created_at timestamptz not null default statement_timestamp()
+);
+insert into capital_lab_restore.run_identity (run_id, disposable_marker)
+values ('${runIdLiteral}', '${markerLiteral}'::uuid);
+revoke all on schema capital_lab_restore from public;
+revoke all on all tables in schema capital_lab_restore from public, anon, authenticated, service_role;
+commit;
+`,
   )
-  const migrationBytes = await Promise.all(
-    migrationNames.map((name) => readFile(path.join(migrations, name))),
+  const markerEvidence = await databaseEvidence(
+    target,
+    `select jsonb_build_object(
+      'database', current_database(), 'databaseRole', current_user,
+      'runId', marker.run_id, 'disposableMarker', marker.disposable_marker::text
+    ) from capital_lab_restore.run_identity as marker where marker.singleton;`,
   )
-  if (migrationBytes.some((bytes) => bytes.length === 0)) {
-    throw new Error('Migration byte verification failed')
+  if (
+    markerEvidence.runId !== runId ||
+    markerEvidence.disposableMarker !== disposableMarker ||
+    markerEvidence.database !== 'postgres' ||
+    markerEvidence.databaseRole !== 'postgres'
+  ) {
+    throw new Error('Disposable target marker evidence differs')
+  }
+  await run(
+    'psql',
+    ['-X', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1'],
+    {
+      ...process.env,
+      ...target.libpqEnv,
+      PGCONNECT_TIMEOUT: '10',
+      PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
+    },
+    `begin;
+drop schema if exists private cascade;
+drop schema if exists public cascade;
+drop schema if exists supabase_migrations cascade;
+drop schema if exists auth cascade;
+create schema public authorization postgres;
+commit;
+`,
+  )
+  const postResetIdentity = await databaseEvidence(
+    target,
+    buildServerIdentitySql(),
+  )
+  const postResetMarkerEvidence = await databaseEvidence(
+    target,
+    `select jsonb_build_object(
+      'database', current_database(), 'databaseRole', current_user,
+      'runId', marker.run_id, 'disposableMarker', marker.disposable_marker::text
+    ) from capital_lab_restore.run_identity as marker where marker.singleton;`,
+  )
+  if (canonicalJson(targetIdentity) !== canonicalJson(postResetIdentity)) {
+    throw new Error('Target B database identity changed during preparation')
+  }
+  if (
+    canonicalJson(markerEvidence) !== canonicalJson(postResetMarkerEvidence)
+  ) {
+    throw new Error('Disposable target marker changed during preparation')
+  }
+  const proof = buildRestoreTargetProof(
+    inspection,
+    postResetIdentity,
+    {
+      disposableMarker,
+      markerEvidenceSha256: sha256(canonicalJson(markerEvidence)),
+      runId,
+      sourceServerFingerprint: sha256(sourceIdentity.serverIdentity),
+    },
+    new Date().toISOString(),
+  )
+  const bytes = Buffer.from(`${canonicalProofJson(proof)}\n`)
+  await writeFile(proofPath, bytes, { mode: 0o600, flag: 'wx' })
+  await chmod(proofPath, 0o600)
+  if (!(await readFile(proofPath)).equals(bytes)) {
+    throw new Error('Restore-target proof write was not durable')
   }
   process.stdout.write(
-    `${JSON.stringify({ status: 'seed_free_supabase_baseline_created', database: RESTORE_DATABASE, loopbackOnly: true, migrationFilesRestored: migrationNames.length })}\n`,
+    `${JSON.stringify({ status: 'disposable_stack_b_prepared', proofSha256: createHash('sha256').update(bytes).digest('hex') })}\n`,
   )
 }
 

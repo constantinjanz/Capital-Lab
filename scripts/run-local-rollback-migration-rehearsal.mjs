@@ -26,6 +26,7 @@ const PROCESS_TIMEOUT_MS = 600_000
 const MIGRATIONS = Object.freeze([
   '20260809150000_post_build_hosting_safety.sql',
   '20260809150417_activation_readiness_follow_up.sql',
+  '20260812092043_fourth_activation_readiness_remediation.sql',
 ])
 const PROBE_RELATION = 'private.no_ai_shadow_dry_runs'
 

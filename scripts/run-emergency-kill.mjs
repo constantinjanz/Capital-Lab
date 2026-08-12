@@ -1,10 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { readFile, realpath } from 'node:fs/promises'
+import { lstat, readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-
-import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
 
 import {
   resolvedArguments,
@@ -83,22 +81,87 @@ export function validateEmergencyConfirmation(campaignId, confirmation) {
   return expected
 }
 
-async function committedFileMatches(repository, relativePath) {
+async function assertNoLinkComponents(repository, filename) {
+  const relative = path.relative(repository, filename)
+  if (
+    relative === '' ||
+    relative.startsWith('..') ||
+    path.isAbsolute(relative)
+  ) {
+    throw new Error('Emergency dependency escaped the repository')
+  }
+  let current = repository
+  for (const component of relative.split(path.sep)) {
+    current = path.join(current, component)
+    if ((await lstat(current)).isSymbolicLink()) {
+      throw new Error('Emergency dependency contains a symlink or junction')
+    }
+  }
+  const resolved = await realpath(filename)
+  if (path.normalize(resolved) !== path.normalize(filename)) {
+    throw new Error('Emergency dependency canonical path drifted')
+  }
+}
+
+async function committedFileDigest(repository, relativePath) {
+  const absolute = path.join(repository, relativePath)
+  await assertNoLinkComponents(repository, absolute)
   const git = resolveNativeExecutable('git')
-  const result = spawnSync(
+  const tree = spawnSync(
+    git.command,
+    resolvedArguments(git, ['ls-tree', 'HEAD', '--', relativePath]),
+    { cwd: repository, encoding: 'utf8', shell: false, windowsHide: true },
+  )
+  if (
+    tree.status !== 0 ||
+    tree.signal ||
+    tree.error ||
+    !/^100(?:644|755) blob [0-9a-f]{40}\t/u.test(tree.stdout)
+  ) {
+    throw new Error('Emergency dependency is not a committed regular file')
+  }
+  const blob = spawnSync(
     git.command,
     resolvedArguments(git, ['show', `HEAD:${relativePath}`]),
     { cwd: repository, encoding: 'buffer', shell: false, windowsHide: true },
   )
-  if (result.status !== 0 || result.signal || result.error) return false
-  return (
-    digest(canonicalRepositoryTextBytes(result.stdout)) ===
-    digest(
-      canonicalRepositoryTextBytes(
-        await readFile(path.join(repository, relativePath)),
-      ),
+  if (blob.status !== 0 || blob.signal || blob.error) {
+    throw new Error('Emergency dependency Git blob is unavailable')
+  }
+  const committedDigest = digest(blob.stdout)
+  if (committedDigest !== digest(await readFile(absolute))) {
+    throw new Error('Emergency runner dependency differs from committed HEAD')
+  }
+  return committedDigest
+}
+
+export async function emergencyDependencyClosure(repository) {
+  const pending = ['scripts/run-emergency-kill.mjs']
+  const discovered = new Set()
+  while (pending.length > 0) {
+    const relativePath = pending.pop()
+    if (discovered.has(relativePath)) continue
+    discovered.add(relativePath)
+    const source = await readFile(path.join(repository, relativePath), 'utf8')
+    const imports = source.matchAll(
+      /(?:import|export)\s+(?:[^'";]+?\s+from\s+)?['"](\.[^'"]+)['"]/gu,
     )
-  )
+    for (const match of imports) {
+      const resolved = path
+        .relative(
+          repository,
+          path.resolve(
+            path.dirname(path.join(repository, relativePath)),
+            match[1],
+          ),
+        )
+        .replaceAll(path.sep, '/')
+      pending.push(path.extname(resolved) ? resolved : `${resolved}.mjs`)
+    }
+  }
+  discovered.add('scripts/lib/canonical-repository-bytes.mjs')
+  discovered.add('supabase/activation/emergency-kill.sql')
+  return [...discovered].sort()
 }
 
 async function spawnBounded(command, args, options) {
@@ -109,7 +172,7 @@ async function spawnBounded(command, args, options) {
       ...options,
       shell: false,
       windowsHide: true,
-      stdio: ['ignore', 'inherit', 'pipe'],
+      stdio: ['ignore', 'ignore', 'pipe'],
     })
     child.stderr.on('data', () => {})
     const timer = setTimeout(() => {
@@ -142,18 +205,20 @@ async function main() {
     throw new Error('CAPITAL_LAB_DATABASE_URL is required and never printed')
   const connectionMode = validateEmergencyTarget(databaseUrl)
   const repository = await realpath(process.cwd())
-  for (const relativePath of [
-    'scripts/run-emergency-kill.mjs',
-    'scripts/lib/safe-process.mjs',
-    'supabase/activation/emergency-kill.sql',
-  ]) {
-    if (!(await committedFileMatches(repository, relativePath))) {
-      throw new Error('Emergency runner or SQL differs from committed HEAD')
-    }
+  const closure = await emergencyDependencyClosure(repository)
+  const closureDigests = []
+  for (const relativePath of closure) {
+    closureDigests.push(
+      `${relativePath}\u001f${await committedFileDigest(repository, relativePath)}`,
+    )
   }
   const scriptPath = await realpath(
     path.join(repository, 'supabase', 'activation', 'emergency-kill.sql'),
   )
+  const node = resolveNativeExecutable('node')
+  if ((await realpath(process.execPath)) !== node.command) {
+    throw new Error('Emergency runner Node executable identity drifted')
+  }
   const psql = resolveNativeExecutable('psql')
   const result = await spawnBounded(
     psql.command,
@@ -185,6 +250,9 @@ async function main() {
       campaignId,
       projectRef: PROJECT_REF,
       connectionMode,
+      dependencyClosureCount: closure.length,
+      dependencyClosureSha256: digest(closureDigests.join('\n')),
+      runtimeExecutableVerified: true,
       ...processEvidence,
     })}\n`,
   )
