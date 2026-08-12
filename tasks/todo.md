@@ -46,6 +46,11 @@ fixtures pass.
 - [x] Prettier, zero-warning ESLint and strict TypeScript passed after the fourth-remediation implementation changes.
 - [x] PAPER-only safety scan and redacted credential scan passed across the worktree and 100 commits with zero findings.
 - [x] Intermediate exact-head CI `31594018211` passed Windows subprocess, 4/4 mock Playwright flows, Supabase CLI/start, rollback rehearsal and reset; pgTAP narrowed the remaining database work to an ambiguous retry reference plus incorrect counting of immutable expected mutations as forbidden effects. Both are corrected forward-only with explicit expected/forbidden evidence semantics and new assertions; replacement exact-head CI is pending.
+- [x] Exact-head CI `31594950210` passed Windows subprocess, 4/4 mock Playwright flows, Supabase start, rollback rehearsal, reset, and the complete pgTAP suite; application/database then stopped only because the intentionally independent pre/post schema-golden files do not yet exist.
+- [x] Narrow Auth restore data to the supported `auth.users` + `auth.identities` closure, explicitly exclude session/token tables, and keep full Auth schema plus synthetic login/JWT/Owner-RLS proof. The exporter contains no source DML.
+- [x] Move MVCC fault injection to a separate local source connection synchronized after `pg_export_snapshot`; the external writer restores its exact fixture and the exporter rejects any post-export source drift.
+- [x] Forward-only redefine Runtime dry-run dispatch so reviewed expected evidence cannot trigger a kill and the Bearer transport uses the immutable Runtime deployment URL, not the mutable Production alias; the Vault alias remains independently reverified.
+- [x] Revalidate and re-hash external backup, restore-proof, Auth-fixture and Vercel-proof paths after their final use; incomplete-artifact cleanup refuses to recurse into an unverified path.
 - [ ] Local database gates remain unclaimed: this workstation has no Docker-compatible runtime or local PostgreSQL server.
 - [ ] Replace the pre/post schema-golden inputs with outputs generated from a fresh seed-free migration-built local stack; Hosted/source-derived or placeholder goldens are prohibited.
 - [ ] Re-run all exact-head application, browser, database, dual-stack restore and CI gates after the schema goldens and final bytes are complete.

@@ -3,10 +3,17 @@
 Capital Lab has two compact, sorted, versioned disaster-recovery contracts:
 
 - `supabase/backup/pre-activation.v1.json` describes the exact 32-migration
-  baseline before the two pending Activation migrations. It references no
-  Activation relation or helper introduced by those migrations.
-- `supabase/backup/post-activation.v1.json` describes all 34 migrations and the
+  Hosted baseline before any of the three pending Activation/remediation
+  migrations. It references no object introduced by those migrations.
+- `supabase/backup/post-activation.v1.json` describes all 35 migrations and the
   complete post-migration Activation/Canary evidence schema.
+
+Each relation contract is paired with a committed independent
+`*.schema-golden.v2.json`. The goldens are generated only by the explicit
+update command against a fresh seed-free local reference cluster built from
+the reviewed migrations. Normal CI is verify-only. A backup source and its
+restore target are both compared with the same golden, so copying the same
+schema drift into both databases cannot pass.
 
 These generated contracts are the only relation source of truth for the
 exporter, manifest writer, restore verifier, row ordering, full-row hashes,
@@ -46,6 +53,8 @@ still makes the export fail closed. Dirty-path diagnostics contain status and
 path only, with credential-file paths redacted.
 
 - a roles dump;
+- the complete Auth schema definition plus data only for the reviewed
+  `auth.users` and `auth.identities` closure;
 - a schema dump generated from a PostgreSQL custom archive and an explicit TOC;
 - a data dump;
 - a separate migration-history schema dump and migration-history data dump;
@@ -53,7 +62,21 @@ path only, with credential-file paths redacted.
   SHA-256 values, schema/contract versions, exact relation-set hash, safe source
   fingerprint metadata, tool versions, dump hashes, full relation counts,
   complete content hashes, primary-key and column signatures, a password-free role-attribute
-  and role-membership policy fingerprint, and evidence-rule results.
+  and role-membership policy fingerprint, and evidence-rule results. Manifest
+  schema version 7 also freezes the exact Auth data-relation allowlist and the
+  names of every excluded Auth state relation.
+
+Auth recovery deliberately excludes sessions, refresh tokens, MFA state,
+one-time codes, SSO state, audit entries, and every other internal Auth data
+relation. Old sessions and JWTs are not recovery promises. The supported
+contract preserves the user UUID/password record and its identity link; after
+restore, a fresh password login must issue a new JWT. CI creates two synthetic
+users through the local Auth Admin API, maps exactly one to `public.app_users`,
+restores into stack B, proves the owner can read one RLS-protected row and the
+other user reads none, then fault-injects missing user, missing identity,
+orphan owner, empty Auth data, changed UUID, and disabled RLS. Auth-bearing
+temporary files are mode 0600, remain outside the repository, are never
+uploaded, and are removed with the run-owned artifact root.
 
 The data artifact's schema scope is not an independent allowlist. It is derived
 from the critical-relation contract, sorted, and frozen in the manifest. This
@@ -71,47 +94,46 @@ still exactly match the source. The intermediate archive and TOC are mode 0600
 and are removed before a successful export or with the entire incomplete output
 directory after a failure.
 
-Pre- and post-dump evidence must be identical. Any concurrent critical-row or
-schema change aborts the export. No production export is part of an activation
-code-review run unless separately authorized.
+Application data, Auth closure, migration history, relation counts and hashes
+share one exported repeatable-read, read-only PostgreSQL snapshot. Role policy
+is cluster-global and is therefore compared separately before and after. The
+exporter performs no source DML. Its local concurrency test synchronizes with a
+separate fault-injector through canonical run-owned external barrier files: the
+writer commits one synthetic row after the snapshot, the dumps remain on the
+old snapshot, and the writer removes the row before post-export evidence. A
+mixed state, timeout, failed cleanup or missing barrier prevents a successful
+manifest. No Production export is part of this remediation.
 
 ## Seed-free disposable target
 
-Use a fully disposable local Supabase stack on loopback. A plain `template0`
-database is not a valid target because official Supabase dumps assume the
-managed Auth, Storage, extension, and Vault baseline of a freshly provisioned
-project. The target must contain that platform baseline plus the exact empty
-`supabase_realtime` publication, no project migration, no seed, no user
-relation, and a database OID/name fingerprint distinct from the exported
-source.
+Use two fully separate, run-owned local Supabase stacks on loopback: source A
+uses database/API ports 54322/54321, while target B uses 55322/55321 and its own
+project ID, Postgres container, volume and server system identifier. Two
+databases or hostname aliases on one server are rejected. The target proof
+binds the exact run ID, random disposable marker, container identity, database,
+role, port, server fingerprint and a different retained source fingerprint
+before any reset/restore subprocess is allowed.
 
-The CI sequence exports first, temporarily holds the exact project migration
-files, runs pinned `supabase db reset --no-seed`, restores every migration file,
-and uses the pinned Supabase CLI to create a short-lived logical schema dump of
-the allowlisted `auth,storage,extensions,vault` platform baseline plus an
-`auth,storage`-only data dump outside the repository. It restores the baseline
-into a new `template0` database, installs local `supabase_vault` without a
-version pin through `CREATE EXTENSION IF NOT EXISTS`, creates the local empty
-`supabase_realtime` publication expected by an official schema dump, installs
-the baseline `pgcrypto`, `citext`, and `vector` extensions without version pins,
-removes the target's empty migration-history schema, and securely discards the
-temporary baseline artifacts before verification. The helper derives the paths itself,
-accepts no arguments, uses `shell:false`, and refuses a dirty tree. Run it only
-in a disposable local stack because rebuilding the local source database is
-destructive. Only the allowlisted managed baseline is restored as the fixed
-local `supabase_admin`, preserving its role/owner statements; the Capital Lab
-restore and evidence queries continue to use the parsed operator:
+CI creates B from the checked-in target-stack template, starts it separately,
+and prepares only its exact `postgres` database after validating both server
+identities and the run marker. The preparation command requires the exact
+disposable confirmation phrase and writes a canonical proof outside the
+repository. No broad Docker prune, unresolved database name, Hosted hostname,
+project ref or same-cluster target is accepted. Cleanup is limited to the exact
+run paths and stack-B workdir and fails the gate if cleanup itself fails.
 
 ```powershell
 $env:CAPITAL_LAB_DATABASE_URL = '<loopback-source-url>'
 try {
-  node scripts/prepare-seed-free-local-restore-target.mjs
+  node scripts/prepare-seed-free-local-restore-target.mjs --proof=D:\Capital-Lab-Backups\target-proof.json
   $env:CAPITAL_LAB_RESTORE_DATABASE_URL = '<loopback-restore-url>'
   $env:CAPITAL_LAB_RESTORE_CONFIRM_DISPOSABLE = 'seed-free-disposable-database-confirmed'
   $manifest = 'D:\Capital-Lab-Backups\pre\manifest.json'
   $expectedHash = '<externally-retained-manifest-sha256>'
   node scripts/verify-backup-restore.mjs --contract=pre `
-    --manifest=$manifest --expected-manifest-sha256=$expectedHash
+    --manifest=$manifest --expected-manifest-sha256=$expectedHash `
+    --target-proof=D:\Capital-Lab-Backups\target-proof.json `
+    --expected-target-proof-sha256='<externally-retained-target-proof-sha256>'
 } finally {
   Remove-Item Env:\CAPITAL_LAB_DATABASE_URL -ErrorAction SilentlyContinue
   Remove-Item Env:\CAPITAL_LAB_RESTORE_DATABASE_URL -ErrorAction SilentlyContinue
@@ -136,12 +158,16 @@ order:
    when they differ, the roles artifact is replayed only on a distinct server
    and reverified, while a same-server mismatch fails rather than mutating
    cluster-global state;
-2. the checksummed validation-only target Prelude;
-3. schema;
-4. data in the same transaction after
+2. the complete Auth schema;
+3. the checksummed validation-only target Prelude;
+4. application schema;
+5. reviewed Auth user/identity data in one transaction after
    `SET session_replication_role = replica`;
-5. the separately dumped `supabase_migrations` schema and rows;
-6. independently regenerated relation/column evidence.
+6. application data in one transaction after
+   `SET session_replication_role = replica`;
+7. the separately dumped `supabase_migrations` schema and rows;
+8. independently regenerated Golden schema, relation/column, Auth closure,
+   owner/FK and source-unchanged evidence.
 
 Every `psql` invocation uses `-X`, `ON_ERROR_STOP=1`, explicit transaction
 boundaries where the dump format permits them, and bounded process time. A
@@ -151,11 +177,11 @@ the verifier never manufactures missing evidence.
 
 ## Local rollback-only migration rehearsal
 
-The database CI also proves the two PR migrations without retaining them. On a
+The database CI proves every pending PR migration without retaining it. On a
 clean checkout and loopback-only disposable Supabase stack,
 `pnpm migration:rehearse:local` temporarily holds exactly the two allowlisted
-PR migration files, runs `supabase db reset --no-seed`, restores their bytes,
-requires exactly one outer `BEGIN`/`COMMIT` pair per file, applies both bodies
+pending migration file, runs `supabase db reset --no-seed`, restores its bytes,
+requires exactly one outer `BEGIN`/`COMMIT` pair per file, applies every body
 inside one bounded `psql -X --no-psqlrc` transaction, verifies the activation
 probe relation, rolls back, and verifies the relation is absent. Git HEAD,
 complete dirty-tree state, and migration hashes are checked before and after.

@@ -470,8 +470,38 @@ async function main() {
       'Source identity or disposable target marker changed during restore',
     )
   }
+  const targetProofPathAfter = await verifiedExternalFile(
+    workspace,
+    requested['target-proof'],
+  )
+  const manifestPathAfter = await verifiedExternalFile(
+    workspace,
+    requested.manifest,
+  )
+  if (
+    targetProofPathAfter !== targetProofPath ||
+    manifestPathAfter !== manifestPath ||
+    sha256(await readFile(targetProofPathAfter)) !==
+      requested['expected-target-proof-sha256'] ||
+    sha256(await readFile(manifestPathAfter)) !==
+      requested['expected-manifest-sha256']
+  ) {
+    throw new Error('Backup or target-proof identity changed during restore')
+  }
+  for (const key of BACKUP_ARTIFACT_KEYS) {
+    const artifactAfter = await verifiedDirectChild(
+      manifestDirectory,
+      path.join(manifestDirectory, manifest.artifacts[key].file),
+    )
+    if (
+      artifactAfter !== artifacts[key] ||
+      sha256(await readFile(artifactAfter)) !== manifest.artifacts[key].sha256
+    ) {
+      throw new Error('Backup artifact identity changed during restore')
+    }
+  }
   process.stdout.write(
-    `${JSON.stringify({ status: 'seed_free_disposable_restore_verified', contractKind, relationCount: contract.relations.length, manifestSha256: requested['expected-manifest-sha256'] })}\n`,
+    `${JSON.stringify({ status: 'backup_restored', contractKind, relationCount: contract.relations.length, manifestSha256: requested['expected-manifest-sha256'], schemaMatchesGolden: true, activationEligible: false, authUserIdentityClosureVerified: true, sourceUnchanged: true })}\n`,
   )
 }
 

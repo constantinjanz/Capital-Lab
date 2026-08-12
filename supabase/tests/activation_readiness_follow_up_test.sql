@@ -1027,6 +1027,25 @@ select lives_ok(
 );
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'armed', 'arm transition is persisted');
 select lives_ok($$select private.assert_activation_job_specs(pg_temp.campaign_id(), true)$$, 'armed jobs still match the persisted full definitions');
+select is(
+  private.dispatch_no_ai_shadow_dry_run_event(
+    'market_dispatcher', statement_timestamp()
+  ),
+  null::bigint,
+  'an early scheduler tick records allowed evidence without sending a request'
+);
+select is(
+  (select state from private.no_ai_shadow_dry_runs
+    where id = pg_temp.campaign_id()),
+  'armed',
+  'expected scheduler-envelope evidence cannot trigger an emergency stop'
+);
+select is(
+  (select count(*) from private.activation_mutation_evidence
+    where campaign_id = pg_temp.campaign_id() and not expected_mutation),
+  0::bigint,
+  'the no-request scheduler tick creates no forbidden mutation evidence'
+);
 
 select set_config('capital_lab.internal_event_write', 'on', true);
 with numbered as (

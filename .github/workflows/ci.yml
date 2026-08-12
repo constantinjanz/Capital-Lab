@@ -165,6 +165,27 @@ jobs:
             exit "$cleanup_failed"
           }
           trap cleanup EXIT
+          run_mvcc_export() {
+            local contract="$1"
+            local output="$2"
+            local control="$3"
+            local race_id="run-${contract}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            local export_status=0
+            local writer_status=0
+            mkdir --mode=700 -- "$control"
+            export CAPITAL_LAB_LOCAL_MVCC_RACE_CONTROL="$control"
+            export CAPITAL_LAB_LOCAL_MVCC_RACE_ID="$race_id"
+            node scripts/run-local-mvcc-race-writer.mjs &
+            local writer_pid=$!
+            node scripts/export-critical-tables.mjs "--contract=${contract}" "--output-dir=${output}" || export_status=$?
+            wait "$writer_pid" || writer_status=$?
+            unset CAPITAL_LAB_LOCAL_MVCC_RACE_CONTROL
+            unset CAPITAL_LAB_LOCAL_MVCC_RACE_ID
+            if [ "$export_status" -ne 0 ] || [ "$writer_status" -ne 0 ]; then
+              echo 'MVCC export fault-injection gate failed closed' >&2
+              return 1
+            fi
+          }
           mv supabase/migrations/20260809150000_post_build_hosting_safety.sql "$hold_root"/
           mv supabase/migrations/20260809150417_activation_readiness_follow_up.sql "$hold_root"/
           mv supabase/migrations/20260812092043_fourth_activation_readiness_remediation.sql "$hold_root"/
@@ -172,9 +193,7 @@ jobs:
           restore_pending
           export CAPITAL_LAB_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
           node scripts/local-auth-restore-fixture.mjs --mode=prepare "--credentials=${artifact_root}/pre-auth.json"
-          export CAPITAL_LAB_LOCAL_MVCC_RACE='application-setting-v1'
-          node scripts/export-critical-tables.mjs --contract=pre "--output-dir=${artifact_root}/pre"
-          unset CAPITAL_LAB_LOCAL_MVCC_RACE
+          run_mvcc_export pre "${artifact_root}/pre" "${artifact_root}/pre-race-control"
           test "$(PGPASSWORD=postgres psql -X --no-psqlrc --tuples-only --no-align -h 127.0.0.1 -p 54322 -U postgres -d postgres -c "select count(*) from private.application_settings where setting_key = 'local_mvcc_race_fixture_v1'")" = '0'
           node scripts/run-redacted-subprocess.mjs --id=restore-stack-b-pre-start -- supabase start "--workdir=${target_workdir}"
           target_running=true
@@ -198,9 +217,7 @@ jobs:
           target_running=false
           supabase db reset --no-seed
           node scripts/local-auth-restore-fixture.mjs --mode=prepare "--credentials=${artifact_root}/post-auth.json"
-          export CAPITAL_LAB_LOCAL_MVCC_RACE='application-setting-v1'
-          node scripts/export-critical-tables.mjs --contract=post "--output-dir=${artifact_root}/post"
-          unset CAPITAL_LAB_LOCAL_MVCC_RACE
+          run_mvcc_export post "${artifact_root}/post" "${artifact_root}/post-race-control"
           node scripts/run-redacted-subprocess.mjs --id=restore-stack-b-post-start -- supabase start "--workdir=${target_workdir}"
           target_running=true
           node scripts/prepare-seed-free-local-restore-target.mjs "--proof=${artifact_root}/post-target-proof.json"
@@ -272,7 +289,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Native Windows subprocess and path gates
-        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/lib/held-files.test.ts scripts/run-activation-phase.test.ts scripts/run-emergency-kill.test.ts scripts/run-redacted-subprocess.test.ts scripts/migration-rehearsal-contract.test.ts scripts/critical-backup-contract.test.ts scripts/local-supabase-target-proof.test.ts
+        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/lib/held-files.test.ts scripts/lib/safe-artifact-path.test.ts scripts/lib/mvcc-race-control.test.ts scripts/run-activation-phase.test.ts scripts/run-emergency-kill.test.ts scripts/run-redacted-subprocess.test.ts scripts/migration-rehearsal-contract.test.ts scripts/critical-backup-contract.test.ts scripts/local-supabase-target-proof.test.ts
       - name: Parse every Windows-sensitive subprocess wrapper
         run: |
           node --check scripts/export-critical-tables.mjs
@@ -281,5 +298,6 @@ jobs:
           node --check scripts/run-ci-gate.mjs
           node --check scripts/verify-backup-restore.mjs
           node --check scripts/local-auth-restore-fixture.mjs
+          node --check scripts/run-local-mvcc-race-writer.mjs
           node --check scripts/create-local-restore-stack.mjs
           node --check scripts/run-redacted-subprocess.mjs

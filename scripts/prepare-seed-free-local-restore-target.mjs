@@ -18,7 +18,10 @@ import {
   resolvedArguments,
   resolveNativeExecutable,
 } from './lib/safe-process.mjs'
-import { newExternalPath } from './lib/safe-artifact-path.mjs'
+import {
+  newExternalPath,
+  verifiedExternalFile,
+} from './lib/safe-artifact-path.mjs'
 
 const PROCESS_TIMEOUT_MS = 300_000
 const DISPOSABLE_CONFIRMATION =
@@ -280,7 +283,8 @@ commit;
   const bytes = Buffer.from(`${canonicalProofJson(proof)}\n`)
   await writeFile(proofPath, bytes, { mode: 0o600, flag: 'wx' })
   await chmod(proofPath, 0o600)
-  if (!(await readFile(proofPath)).equals(bytes)) {
+  const verifiedProofPath = await verifiedExternalFile(workspace, proofPath)
+  if (!(await readFile(verifiedProofPath)).equals(bytes)) {
     throw new Error('Restore-target proof write was not durable')
   }
   process.stdout.write(

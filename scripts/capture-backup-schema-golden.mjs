@@ -14,7 +14,10 @@ import {
   resolvedArguments,
   resolveNativeExecutable,
 } from './lib/safe-process.mjs'
-import { newExternalPath } from './lib/safe-artifact-path.mjs'
+import {
+  newExternalPath,
+  verifyCreatedExternalPath,
+} from './lib/safe-artifact-path.mjs'
 
 const CONFIRMATION = 'UPDATE REVIEWED CAPITAL LAB SCHEMA GOLDEN'
 
@@ -129,7 +132,7 @@ async function main() {
   const { contract, sha256: relationContractSha256 } =
     await loadCriticalRelationContract(contractPath, contractKind)
   const actual = await evidence(
-    postgresUrlToLibpqEnv(databaseUrl).libpqEnv,
+    postgresUrlToLibpqEnv(databaseUrl, { localOnly: true }).libpqEnv,
     buildSchemaGoldenEvidenceSql(contract),
   )
   if (
@@ -159,6 +162,7 @@ async function main() {
   const bytes = Buffer.from(`${canonicalJson(golden)}\n`)
   await writeFile(output, bytes, { mode: 0o600, flag: 'wx' })
   await chmod(output, 0o600)
+  await verifyCreatedExternalPath(workspace, output)
   process.stdout.write(
     `${JSON.stringify({ status: 'schema_golden_captured', contractKind, outputContainsRowData: false })}\n`,
   )

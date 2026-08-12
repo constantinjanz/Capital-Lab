@@ -1,10 +1,19 @@
 import { createHash } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
 import { chmod, readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
-import { newExternalPath } from './lib/safe-artifact-path.mjs'
+import {
+  newExternalPath,
+  verifyCreatedExternalPath,
+  verifiedExternalFile,
+} from './lib/safe-artifact-path.mjs'
+import {
+  resolvedArguments,
+  resolveNativeExecutable,
+} from './lib/safe-process.mjs'
 
 const DEPLOYMENT_ID = /^dpl_[A-Za-z0-9]{20,64}$/u
 const GIT_SHA = /^[0-9a-f]{40}$/u
@@ -65,6 +74,24 @@ function exactKeys(value, expected, label) {
   ) {
     throw new Error(`${label} has unexpected fields`)
   }
+}
+
+function git(repository, args) {
+  const executable = resolveNativeExecutable('git')
+  const result = spawnSync(
+    executable.command,
+    resolvedArguments(executable, args),
+    {
+      cwd: repository,
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: true,
+    },
+  )
+  if (result.status !== 0 || result.signal || result.error) {
+    throw new Error('Git deployment identity could not be derived')
+  }
+  return result.stdout.trim()
 }
 
 function canonicalOrigin(value, allowedHosts) {
@@ -248,6 +275,13 @@ async function main() {
     'Deployment proof arguments',
   )
   const repository = await realpath(process.cwd())
+  const actualCommitSha = git(repository, ['rev-parse', 'HEAD'])
+  if (
+    actualCommitSha !== options['commit-sha'] ||
+    git(repository, ['status', '--porcelain=v1', '--untracked-files=all'])
+  ) {
+    throw new Error('Deployment proof requires the exact clean Git HEAD')
+  }
   const contractPath = path.join(
     repository,
     'supabase',
@@ -299,11 +333,17 @@ async function main() {
     evidenceHash: deploymentEvidenceHash(immutable),
     verifiedAt: new Date().toISOString(),
   }
-  await writeFile(outputPath, `${canonicalJson(proof)}\n`, {
+  const proofBytes = Buffer.from(`${canonicalJson(proof)}\n`)
+  await writeFile(outputPath, proofBytes, {
     mode: 0o600,
     flag: 'wx',
   })
   await chmod(outputPath, 0o600)
+  await verifyCreatedExternalPath(repository, outputPath)
+  const verifiedOutputPath = await verifiedExternalFile(repository, outputPath)
+  if (!(await readFile(verifiedOutputPath)).equals(proofBytes)) {
+    throw new Error('Deployment proof identity changed after creation')
+  }
   process.stdout.write(
     `${JSON.stringify({ status: 'deployment_proof_created', role: proof.role, deploymentId: proof.deploymentId, proofSha256: sha256(`${canonicalJson(proof)}\n`), projectContractSha256: sha256(contractBytes) })}\n`,
   )

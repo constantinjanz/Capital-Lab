@@ -17,25 +17,44 @@ export const BACKUP_ARTIFACT_KEYS = Object.freeze([
   'historyData',
 ])
 
+export const AUTH_DATA_RELATIONS = Object.freeze([
+  'auth.identities',
+  'auth.users',
+])
+
 export function buildAuthEvidenceSql() {
   return `select jsonb_build_object(
-    'schemaVersion', 1,
+    'schemaVersion', 2,
+    'contractVersion', 'capital-lab-auth-user-identity-closure-v1',
+    'dataRelations', jsonb_build_array('auth.identities', 'auth.users'),
     'userCount', (select count(*)::text from auth.users),
+    'identityCount', (select count(*)::text from auth.identities),
     'mappedApplicationOwnerCount', (
       select count(*)::text from public.app_users as app_user
       join auth.users as auth_user on auth_user.id = app_user.user_id
     ),
-    'relationCounts', (
-      select coalesce(jsonb_object_agg(relation_name, row_count order by relation_name), '{}'::jsonb)
-      from (
-        select table_name as relation_name,
-          (xpath('/row/count/text()', query_to_xml(
-            format('select count(*) as count from auth.%I', table_name),
-            false, true, ''
-          )))[1]::text as row_count
-        from information_schema.tables
-        where table_schema = 'auth' and table_type = 'BASE TABLE'
-      ) as counts
+    'orphanApplicationOwnerCount', (
+      select count(*)::text from public.app_users as app_user
+      left join auth.users as auth_user on auth_user.id = app_user.user_id
+      where auth_user.id is null
+    ),
+    'orphanIdentityCount', (
+      select count(*)::text from auth.identities as identity
+      left join auth.users as auth_user on auth_user.id = identity.user_id
+      where auth_user.id is null
+    ),
+    'usersWithoutIdentityCount', (
+      select count(*)::text from auth.users as auth_user
+      where not exists (
+        select 1 from auth.identities as identity
+        where identity.user_id = auth_user.id
+      )
+    ),
+    'excludedDataRelations', (
+      select coalesce(jsonb_agg('auth.' || table_name order by table_name), '[]'::jsonb)
+      from information_schema.tables
+      where table_schema = 'auth' and table_type = 'BASE TABLE'
+        and table_name not in ('identities', 'users')
     )
   );\n`
 }
@@ -559,6 +578,13 @@ export function buildSchemaFingerprintPayloadExpression() {
     from pg_catalog.pg_extension as extension
     join pg_catalog.pg_namespace as namespace on namespace.oid = extension.extnamespace),
     'authDependencies', jsonb_build_object(
+      'schema', (select jsonb_build_object(
+        'name', namespace.nspname, 'owner', owner.rolname,
+        'acl', namespace.nspacl
+      )
+      from pg_catalog.pg_namespace as namespace
+      join pg_catalog.pg_roles as owner on owner.oid = namespace.nspowner
+      where namespace.nspname = 'auth'),
       'relations', (select coalesce(jsonb_agg(jsonb_build_object(
         'name', relation.relname, 'owner', owner.rolname, 'acl', relation.relacl,
         'rlsEnabled', relation.relrowsecurity, 'rlsForced', relation.relforcerowsecurity
@@ -602,7 +628,56 @@ export function buildSchemaFingerprintPayloadExpression() {
         'roles', roles, 'command', cmd, 'using', qual, 'check', with_check
       ) order by tablename, policyname), '[]'::jsonb)
       from pg_catalog.pg_policies
-      where schemaname = 'auth' and tablename in ('users','identities'))
+      where schemaname = 'auth' and tablename in ('users','identities')),
+      'tableGrants', (select coalesce(jsonb_agg(jsonb_build_object(
+        'relation', table_name, 'grantee', grantee,
+        'privilege', privilege_type, 'grantable', is_grantable
+      ) order by table_name, grantee, privilege_type), '[]'::jsonb)
+      from information_schema.table_privileges
+      where table_schema = 'auth' and table_name in ('users','identities')),
+      'triggers', (select coalesce(jsonb_agg(jsonb_build_object(
+        'relation', relation.relname, 'name', trigger_record.tgname,
+        'internal', trigger_record.tgisinternal,
+        'definition', pg_catalog.pg_get_triggerdef(trigger_record.oid, true)
+      ) order by relation.relname, trigger_record.tgname), '[]'::jsonb)
+      from pg_catalog.pg_trigger as trigger_record
+      join pg_catalog.pg_class as relation on relation.oid = trigger_record.tgrelid
+      join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+      where namespace.nspname = 'auth'
+        and relation.relname in ('users','identities')),
+      'functions', (select coalesce(jsonb_agg(jsonb_build_object(
+        'identity', procedure.oid::regprocedure::text,
+        'owner', owner.rolname, 'acl', procedure.proacl,
+        'securityDefiner', procedure.prosecdef,
+        'volatility', procedure.provolatile,
+        'definition', pg_catalog.pg_get_functiondef(procedure.oid)
+      ) order by procedure.oid::regprocedure::text), '[]'::jsonb)
+      from pg_catalog.pg_proc as procedure
+      join pg_catalog.pg_namespace as namespace on namespace.oid = procedure.pronamespace
+      join pg_catalog.pg_roles as owner on owner.oid = procedure.proowner
+      where namespace.nspname = 'auth'),
+      'functionGrants', (select coalesce(jsonb_agg(jsonb_build_object(
+        'identity', procedure.oid::regprocedure::text,
+        'grantee', coalesce(grantee.rolname, 'PUBLIC'),
+        'privilege', privilege.privilege_type,
+        'grantable', privilege.is_grantable
+      ) order by procedure.oid::regprocedure::text,
+        coalesce(grantee.rolname, 'PUBLIC'), privilege.privilege_type), '[]'::jsonb)
+      from pg_catalog.pg_proc as procedure
+      join pg_catalog.pg_namespace as namespace on namespace.oid = procedure.pronamespace
+      cross join lateral pg_catalog.aclexplode(coalesce(procedure.proacl,
+        pg_catalog.acldefault('f', procedure.proowner))) as privilege
+      left join pg_catalog.pg_roles as grantee on grantee.oid = privilege.grantee
+      where namespace.nspname = 'auth'),
+      'views', (select coalesce(jsonb_agg(jsonb_build_object(
+        'name', relation.relname, 'kind', relation.relkind,
+        'owner', owner.rolname, 'acl', relation.relacl,
+        'definition', pg_catalog.pg_get_viewdef(relation.oid, true)
+      ) order by relation.relname), '[]'::jsonb)
+      from pg_catalog.pg_class as relation
+      join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+      join pg_catalog.pg_roles as owner on owner.oid = relation.relowner
+      where namespace.nspname = 'auth' and relation.relkind in ('v','m'))
     )
   )`
 }
@@ -743,13 +818,23 @@ export function assertBackupManifest(manifest, expected) {
     )
   const checks = {
     auth_evidence:
-      manifest.authEvidence?.schemaVersion === 1 &&
+      manifest.authEvidence?.schemaVersion === 2 &&
+      manifest.authEvidence?.contractVersion ===
+        'capital-lab-auth-user-identity-closure-v1' &&
+      canonicalJson(manifest.authEvidence?.dataRelations) ===
+        canonicalJson(AUTH_DATA_RELATIONS) &&
       /^\d+$/.test(manifest.authEvidence?.userCount ?? '') &&
+      /^\d+$/.test(manifest.authEvidence?.identityCount ?? '') &&
       /^\d+$/.test(manifest.authEvidence?.mappedApplicationOwnerCount ?? '') &&
-      manifest.authEvidence?.relationCounts &&
-      Object.values(manifest.authEvidence.relationCounts).every((value) =>
-        /^\d+$/.test(value),
-      ),
+      /^\d+$/.test(manifest.authEvidence?.orphanApplicationOwnerCount ?? '') &&
+      /^\d+$/.test(manifest.authEvidence?.orphanIdentityCount ?? '') &&
+      /^\d+$/.test(manifest.authEvidence?.usersWithoutIdentityCount ?? '') &&
+      Array.isArray(manifest.authEvidence?.excludedDataRelations) &&
+      manifest.authEvidence.excludedDataRelations.every((relation) =>
+        /^auth\.[a-z][a-z0-9_]{0,62}$/.test(relation),
+      ) &&
+      new Set(manifest.authEvidence.excludedDataRelations).size ===
+        manifest.authEvidence.excludedDataRelations.length,
     applied_migrations: appliedMigrationsValid,
     artifact_metadata: artifactsValid,
     created_at: !Number.isNaN(Date.parse(manifest.createdAt)),
@@ -774,10 +859,10 @@ export function assertBackupManifest(manifest, expected) {
       SHA256.test(manifest.restorePreludeSha256 ?? '') &&
       manifest.restorePreludeSha256 === expected.restorePreludeSha256,
     schema_contract:
-      manifest.schemaVersion === 6 &&
+      manifest.schemaVersion === 7 &&
       manifest.contractKind === expected.contractKind &&
       manifest.schemaContractVersion ===
-        `capital-lab-${expected.contractKind}-backup-v6`,
+        `capital-lab-${expected.contractKind}-backup-v7`,
     schema_golden:
       SHA256.test(manifest.schemaGoldenSha256 ?? '') &&
       manifest.schemaGoldenSha256 === expected.schemaGoldenSha256 &&
@@ -872,11 +957,27 @@ export function assertRestoredEvidence(manifest, actualEvidence) {
 }
 
 export function assertRestoredAuthEvidence(manifest, actualAuthEvidence) {
-  if (
-    canonicalJson(actualAuthEvidence) !== canonicalJson(manifest.authEvidence)
-  ) {
+  const keys = [
+    'contractVersion',
+    'dataRelations',
+    'excludedDataRelations',
+    'identityCount',
+    'mappedApplicationOwnerCount',
+    'orphanApplicationOwnerCount',
+    'orphanIdentityCount',
+    'schemaVersion',
+    'userCount',
+    'usersWithoutIdentityCount',
+  ]
+  const expected = Object.fromEntries(
+    keys.map((key) => [key, manifest.authEvidence?.[key]]),
+  )
+  const actual = Object.fromEntries(
+    keys.map((key) => [key, actualAuthEvidence?.[key]]),
+  )
+  if (canonicalJson(actual) !== canonicalJson(expected)) {
     throw new Error(
-      'Restored Auth relation-count or owner-mapping evidence differs',
+      'Restored Auth user/identity/owner closure evidence differs',
     )
   }
 }

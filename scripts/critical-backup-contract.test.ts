@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 
 import {
+  AUTH_DATA_RELATIONS,
   assertBackupManifest,
   assertContractKeys,
   assertRestoredAuthEvidence,
   assertRestoredEvidence,
   buildRolePolicySql,
+  buildSchemaFingerprintPayloadExpression,
   buildServerIdentitySql,
   canonicalJson,
   criticalRelationSchemas,
@@ -56,10 +58,16 @@ const manifest = {
     historyData: { file: 'history-data.sql', sha256: hashB },
   },
   authEvidence: {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    contractVersion: 'capital-lab-auth-user-identity-closure-v1',
+    dataRelations: [...AUTH_DATA_RELATIONS],
+    excludedDataRelations: ['auth.sessions'],
     userCount: '2',
+    identityCount: '2',
     mappedApplicationOwnerCount: '1',
-    relationCounts: { users: '2', identities: '2' },
+    orphanApplicationOwnerCount: '0',
+    orphanIdentityCount: '0',
+    usersWithoutIdentityCount: '0',
   },
   createdAt: '2026-08-10T00:00:00.000Z',
   contractKind: 'post_activation',
@@ -70,8 +78,8 @@ const manifest = {
     platformExcludedEntryCount: 3,
     platformExcludedOwner: 'supabase_admin',
   },
-  schemaVersion: 6,
-  schemaContractVersion: 'capital-lab-post_activation-backup-v6',
+  schemaVersion: 7,
+  schemaContractVersion: 'capital-lab-post_activation-backup-v7',
   schemaEvidenceSha256,
   schemaFingerprintSha256: hashA,
   schemaGoldenSha256: hashB,
@@ -121,6 +129,49 @@ const expected = {
 }
 
 describe('critical backup contract', () => {
+  it('keeps the exporter read-only and limits Auth data to the reviewed closure', () => {
+    const exporter = readFileSync(
+      new URL('./export-critical-tables.mjs', import.meta.url),
+      'utf8',
+    )
+    const writer = readFileSync(
+      new URL('./run-local-mvcc-race-writer.mjs', import.meta.url),
+      'utf8',
+    )
+    expect(exporter).not.toMatch(
+      /(?:insert into|delete from) private\.application_settings/iu,
+    )
+    expect(exporter).toContain('AUTH_DATA_RELATIONS.flatMap')
+    expect(AUTH_DATA_RELATIONS).toEqual(['auth.identities', 'auth.users'])
+    expect(exporter).toMatch(
+      /snapshotArgument,\s*'--schema-only',\s*'--schema',\s*'auth'/u,
+    )
+    expect(exporter).not.toMatch(
+      /snapshotArgument,\s*'--schema-only',\s*'--no-owner',\s*'--schema',\s*'auth'/u,
+    )
+    expect(writer).toMatch(/insert into private\.application_settings/iu)
+    expect(writer).toMatch(/delete from private\.application_settings/iu)
+  })
+
+  it('fingerprints the complete supported Auth schema dependency closure', () => {
+    const sql = buildSchemaFingerprintPayloadExpression()
+    for (const key of [
+      "'schema'",
+      "'columns'",
+      "'constraints'",
+      "'indexes'",
+      "'policies'",
+      "'tableGrants'",
+      "'triggers'",
+      "'functions'",
+      "'functionGrants'",
+      "'views'",
+    ]) {
+      expect(sql.slice(sql.indexOf("'authDependencies'"))).toContain(key)
+    }
+    expect(sql).toContain("namespace.nspname = 'auth'")
+    expect(sql).toContain("relation.relname in ('users','identities')")
+  })
   it('keeps application DEFAULT ACL entries and excludes only platform-owned entries', () => {
     const toc = [
       '; PostgreSQL database dump',
@@ -423,6 +474,6 @@ describe('critical backup contract', () => {
         ...manifest.authEvidence,
         userCount: '1',
       }),
-    ).toThrow(/Auth relation-count or owner-mapping evidence differs/)
+    ).toThrow(/Auth user\/identity\/owner closure evidence differs/)
   })
 })

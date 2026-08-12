@@ -11,6 +11,7 @@ import path from 'node:path'
 
 import {
   BACKUP_ARTIFACT_KEYS,
+  AUTH_DATA_RELATIONS,
   assertContractKeys,
   buildAuthEvidenceSql,
   buildCriticalEvidenceSql,
@@ -33,8 +34,14 @@ import {
 } from './lib/safe-process.mjs'
 import {
   newExternalPath,
-  verifyCreatedExternalPath,
+  verifiedDirectChild,
+  verifiedExternalDirectory,
 } from './lib/safe-artifact-path.mjs'
+import {
+  loadMvccRaceControl,
+  signalMvccMarker,
+  waitForMvccMarker,
+} from './lib/mvcc-race-control.mjs'
 
 const SUPABASE_CLI_VERSION = '2.113.0'
 const PROCESS_TIMEOUT_MS = 600_000
@@ -255,46 +262,6 @@ async function toolVersion(name) {
   return result.stdout.trim()
 }
 
-async function injectFixedLocalMvccRace(connection) {
-  if (process.env.CAPITAL_LAB_LOCAL_MVCC_RACE !== 'application-setting-v1') {
-    return false
-  }
-  if (!['127.0.0.1', 'localhost', '::1'].includes(connection.hostname)) {
-    throw new Error('MVCC race fixture is restricted to a local source')
-  }
-  await run(
-    'psql',
-    ['-X', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1'],
-    {
-      ...process.env,
-      ...connection.libpqEnv,
-      PGCONNECT_TIMEOUT: '10',
-      PGOPTIONS: '-c statement_timeout=30000 -c lock_timeout=10000',
-    },
-    `insert into private.application_settings (owner_id, setting_key, value, is_secret)
-select user_id, 'local_mvcc_race_fixture_v1', 'false'::jsonb, false
-from public.app_users order by user_id limit 1;
-`,
-  )
-  return true
-}
-
-async function cleanupFixedLocalMvccRace(connection) {
-  await run(
-    'psql',
-    ['-X', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1'],
-    {
-      ...process.env,
-      ...connection.libpqEnv,
-      PGCONNECT_TIMEOUT: '10',
-      PGOPTIONS: '-c statement_timeout=30000 -c lock_timeout=10000',
-    },
-    `delete from private.application_settings
-where setting_key = 'local_mvcc_race_fixture_v1';
-`,
-  )
-}
-
 async function main() {
   const requested = options()
   const workspace = await realpath(process.cwd())
@@ -306,14 +273,22 @@ async function main() {
     throw new Error('Exact Git HEAD is invalid')
   const outputPath = await newExternalPath(workspace, requested['output-dir'])
   await mkdir(outputPath, { recursive: false, mode: 0o700 })
-  await verifyCreatedExternalPath(workspace, outputPath)
+  await verifiedExternalDirectory(workspace, outputPath)
   let completed = false
-  let raceCleanupConnection = null
   try {
     const databaseUrl = process.env.CAPITAL_LAB_DATABASE_URL
     if (!databaseUrl)
       throw new Error('CAPITAL_LAB_DATABASE_URL is required and never printed')
     const connection = postgresUrlToLibpqEnv(databaseUrl)
+    const mvccRaceControl = await loadMvccRaceControl(workspace)
+    if (
+      mvccRaceControl &&
+      (connection.hostname !== '127.0.0.1' ||
+        connection.port !== '54322' ||
+        connection.database !== 'postgres')
+    ) {
+      throw new Error('MVCC fault injection is restricted to local stack A')
+    }
     const contractKind =
       requested.contract === 'pre' ? 'pre_activation' : 'post_activation'
     const contractPath = path.join(
@@ -436,15 +411,17 @@ async function main() {
           'Source schema, migration history, or relation set differs from the committed golden',
         )
       }
-      mvccRaceFixtureEnabled = await injectFixedLocalMvccRace(connection)
-      if (mvccRaceFixtureEnabled) raceCleanupConnection = connection
+      if (mvccRaceControl) {
+        await signalMvccMarker(workspace, mvccRaceControl, 'snapshot-ready')
+        await waitForMvccMarker(mvccRaceControl, 'mutation-visible')
+        mvccRaceFixtureEnabled = true
+      }
       const snapshotArgument = `--snapshot=${snapshot}`
       await run(
         'pg_dump',
         [
           snapshotArgument,
           '--schema-only',
-          '--no-owner',
           '--schema',
           'auth',
           '--file',
@@ -459,8 +436,7 @@ async function main() {
           '--data-only',
           '--no-owner',
           '--no-privileges',
-          '--schema',
-          'auth',
+          ...AUTH_DATA_RELATIONS.flatMap((relation) => ['--table', relation]),
           '--file',
           paths.authData,
         ],
@@ -525,11 +501,11 @@ async function main() {
           dumpEnv,
         )
       }
+      if (mvccRaceControl) {
+        await signalMvccMarker(workspace, mvccRaceControl, 'dumps-complete')
+        await waitForMvccMarker(mvccRaceControl, 'source-restored')
+      }
     })
-    if (raceCleanupConnection) {
-      await cleanupFixedLocalMvccRace(raceCleanupConnection)
-      raceCleanupConnection = null
-    }
     for (const key of BACKUP_ARTIFACT_KEYS) await chmod(paths[key], 0o600)
     const identityAfter = await evidence(
       connection.libpqEnv,
@@ -555,10 +531,12 @@ async function main() {
       )
     }
     const artifacts = {}
+    await verifiedExternalDirectory(workspace, outputPath)
     for (const key of BACKUP_ARTIFACT_KEYS) {
+      const artifactPath = await verifiedDirectChild(outputPath, paths[key])
       artifacts[key] = {
-        file: path.basename(paths[key]),
-        sha256: sha256(await readFile(paths[key])),
+        file: path.basename(artifactPath),
+        sha256: sha256(await readFile(artifactPath)),
       }
     }
     const manifest = {
@@ -588,11 +566,11 @@ async function main() {
       relationSetSha256: evidenceBefore.relationSetSha256,
       relations: evidenceBefore.relations,
       restorePreludeSha256,
-      schemaContractVersion: `capital-lab-${contractKind}-backup-v6`,
+      schemaContractVersion: `capital-lab-${contractKind}-backup-v7`,
       schemaEvidenceSha256: golden.schemaEvidenceSha256,
       schemaFingerprintSha256: evidenceBefore.schemaFingerprintSha256,
       schemaGoldenSha256,
-      schemaVersion: 6,
+      schemaVersion: 7,
       source: {
         appliedMigrations: evidenceBefore.appliedMigrations,
         databaseFingerprint: evidenceBefore.databaseFingerprint,
@@ -613,17 +591,18 @@ async function main() {
     }
     const manifestBytes = Buffer.from(`${canonicalJson(manifest)}\n`)
     await writeFile(paths.manifest, manifestBytes, { mode: 0o600, flag: 'wx' })
+    const manifestPath = await verifiedDirectChild(outputPath, paths.manifest)
+    if (!(await readFile(manifestPath)).equals(manifestBytes)) {
+      throw new Error('Backup manifest identity changed after creation')
+    }
     completed = true
     process.stdout.write(
-      `${JSON.stringify({ status: 'sensitive_backup_created', contractKind, relationCount: contract.relations.length, manifestSha256: sha256(manifestBytes) })}\n`,
+      `${JSON.stringify({ status: 'backup_created', contractKind, relationCount: contract.relations.length, manifestSha256: sha256(manifestBytes), schemaMatchesGolden: true, activationEligible: false, sensitiveArtifact: true })}\n`,
     )
   } finally {
-    try {
-      if (raceCleanupConnection) {
-        await cleanupFixedLocalMvccRace(raceCleanupConnection)
-      }
-    } finally {
-      if (!completed) await rm(outputPath, { recursive: true, force: true })
+    if (!completed) {
+      await verifiedExternalDirectory(workspace, outputPath)
+      await rm(outputPath, { recursive: true, force: true })
     }
   }
 }

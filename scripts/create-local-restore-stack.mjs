@@ -1,14 +1,12 @@
-import {
-  chmod,
-  mkdir,
-  readFile,
-  realpath,
-  stat,
-  writeFile,
-} from 'node:fs/promises'
+import { chmod, mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { restoreProjectId } from './lib/local-supabase-target-proof.mjs'
+import {
+  newExternalPath,
+  verifiedExternalDirectory,
+  verifiedExternalFile,
+} from './lib/safe-artifact-path.mjs'
 
 function options() {
   const parsed = Object.fromEntries(
@@ -24,30 +22,10 @@ function options() {
   return parsed
 }
 
-async function exists(filename) {
-  try {
-    await stat(filename)
-    return true
-  } catch (error) {
-    if (error?.code === 'ENOENT') return false
-    throw error
-  }
-}
-
 async function main() {
   const requested = options()
   const workspace = await realpath(process.cwd())
-  const output = path.resolve(requested['output-dir'])
-  const parent = await realpath(path.dirname(output))
-  if (
-    path.relative(workspace, parent) === '' ||
-    !path.relative(workspace, parent).startsWith('..') ||
-    (await exists(output))
-  ) {
-    throw new Error(
-      'Run-specific restore stack must be new and outside the repository',
-    )
-  }
+  const output = await newExternalPath(workspace, requested['output-dir'])
   const projectId = restoreProjectId(requested['run-id'])
   const template = await readFile(
     path.join(
@@ -76,6 +54,11 @@ async function main() {
     { mode: 0o600, flag: 'wx' },
   )
   await chmod(output, 0o700)
+  await verifiedExternalDirectory(workspace, output)
+  await verifiedExternalFile(
+    workspace,
+    path.join(output, 'supabase', 'config.toml'),
+  )
   process.stdout.write(
     `${JSON.stringify({ status: 'run_specific_restore_stack_created', projectId, runId: requested['run-id'] })}\n`,
   )

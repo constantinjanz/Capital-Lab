@@ -1891,6 +1891,174 @@ begin
 end;
 $$;
 
+create or replace function private.dispatch_no_ai_shadow_dry_run_event(
+  p_job text,
+  p_requested_at timestamptz
+)
+returns bigint
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  campaign private.no_ai_shadow_dry_runs%rowtype;
+  event_row private.no_ai_shadow_dry_run_events%rowtype;
+  runtime_binding private.activation_deployment_bindings%rowtype;
+  sequence_number bigint;
+  configured_url text;
+  shared_secret text;
+  transport_id bigint;
+  valid_responses integer;
+  invalid_responses integer;
+  missing_responses integer;
+  submitted_count integer;
+  required_drain_at timestamptz;
+begin
+  if p_job not in ('market_dispatcher', 'reconciler') then
+    raise exception using errcode = '22023', message = 'scheduler event type is invalid';
+  end if;
+  select * into campaign from private.no_ai_shadow_dry_runs
+  where state in ('armed', 'running', 'auto_stopped')
+  order by prepared_at desc limit 1 for update;
+  if campaign.id is null then
+    return null;
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('activation:' || campaign.id::text, 0));
+  perform private.capture_activation_http_responses();
+  select coalesce(max(snapshot_sequence), 0) + 1 into sequence_number
+  from private.activation_control_snapshots where campaign_id = campaign.id;
+  perform private.capture_activation_control_snapshot(campaign.id, sequence_number);
+  perform private.capture_activation_relation_snapshot(campaign.id, 'tick', sequence_number);
+  if campaign.state = 'auto_stopped' then
+    if statement_timestamp() >= campaign.finalize_not_before_at then
+      perform private.finalize_activation_campaign(
+        campaign.id, campaign.prepared_commit_sha, campaign.config_version,
+        campaign.manifest_sha256, campaign.phase_contract_sha256,
+        campaign.database_fingerprint,
+        private.activation_deterministic_uuid(campaign.id, 'automatic-finalize-operation'),
+        private.activation_deterministic_uuid(campaign.id, 'automatic-finalize-correlation')
+      );
+    end if;
+    return null;
+  end if;
+  begin
+    perform private.assert_activation_controls(campaign.id, true);
+    perform private.assert_activation_job_specs(campaign.id, true);
+  exception when others then
+    perform private.emergency_kill_activation_controls(campaign.id);
+    return null;
+  end;
+  select count(*) filter (where response.schema_valid),
+    count(*) filter (where response.request_id is not null and not response.schema_valid),
+    count(*) filter (where event.pg_net_request_id is not null and response.request_id is null)
+  into valid_responses, invalid_responses, missing_responses
+  from private.no_ai_shadow_dry_run_events as event
+  left join private.activation_http_responses as response on response.request_id = event.request_id
+  where event.dry_run_id = campaign.id;
+  if invalid_responses > 0 or exists (
+    select 1 from private.activation_mutation_evidence as mutation
+    where mutation.campaign_id = campaign.id
+      and not mutation.expected_mutation
+  ) then
+    perform private.emergency_kill_activation_controls(campaign.id);
+    return null;
+  end if;
+  select greatest(
+    campaign.drain_not_before_at,
+    coalesce(max(request_submitted_at), campaign.planned_end_at)
+      + make_interval(secs => campaign.max_request_seconds + campaign.drain_safety_seconds)
+  ) into required_drain_at
+  from private.no_ai_shadow_dry_run_events where dry_run_id = campaign.id;
+  if statement_timestamp() >= required_drain_at then
+    perform private.emergency_kill_activation_controls(campaign.id);
+    return null;
+  end if;
+  if exists (
+    select 1 from private.no_ai_shadow_dry_run_events
+    where dry_run_id = campaign.id and pg_net_request_id is null
+      and expected_at < statement_timestamp() - interval '6 minutes'
+  ) then
+    perform private.emergency_kill_activation_controls(campaign.id);
+    return null;
+  end if;
+  select * into event_row from private.no_ai_shadow_dry_run_events
+  where dry_run_id = campaign.id and event_type = p_job
+    and pg_net_request_id is null
+    and expected_at between statement_timestamp() - interval '6 minutes'
+      and statement_timestamp() + interval '90 seconds'
+  order by expected_at limit 1 for update skip locked;
+  if event_row.id is null then
+    return null;
+  end if;
+  select * into strict runtime_binding from private.activation_deployment_bindings
+  where campaign_id = campaign.id and deployment_role = 'no_ai_runtime_enabled';
+  if runtime_binding.commit_sha <> campaign.prepared_commit_sha
+    or runtime_binding.vercel_team_id <> 'team_yqndKHk6nfWGlte1UVLTJOHG'
+    or runtime_binding.vercel_project_id <> 'prj_pbCNwlmXZLeZprZpsRAfAAhPPXVR'
+    or runtime_binding.supabase_project_ref <> 'qrnuyibntcxwffrxmrvn'
+    or runtime_binding.environment <> 'production'
+    or runtime_binding.target <> 'production'
+    or runtime_binding.ready_state <> 'READY'
+    or runtime_binding.production_origin <> campaign.production_origin
+    or runtime_binding.production_host <> campaign.production_host
+    or runtime_binding.scheduler_path <> campaign.scheduler_path
+    or runtime_binding.scheduler_url <> campaign.scheduler_url
+    or runtime_binding.runtime_config_path <> campaign.scheduler_path
+    or runtime_binding.runtime_config_url
+      <> runtime_binding.immutable_deployment_origin || runtime_binding.runtime_config_path
+    or runtime_binding.immutable_deployment_origin
+      <> 'https://' || runtime_binding.immutable_deployment_host
+    or runtime_binding.immutable_deployment_host
+      !~ '^[a-z0-9][a-z0-9.-]+\.vercel\.app$'
+    or not runtime_binding.scheduler_enabled
+  then
+    perform private.emergency_kill_activation_controls(campaign.id);
+    return null;
+  end if;
+  perform private.verify_activation_vault_scope(campaign.id);
+  execute $query$
+    select max(case when name = 'capital_lab_scheduler_url' then decrypted_secret end),
+      max(case when name = 'capital_lab_scheduler_shared_secret' then decrypted_secret end)
+    from vault.decrypted_secrets
+    where name in ('capital_lab_scheduler_url', 'capital_lab_scheduler_shared_secret')
+  $query$ into configured_url, shared_secret;
+  if configured_url <> campaign.scheduler_url or length(shared_secret) < 32 then
+    perform private.emergency_kill_activation_controls(campaign.id);
+    return null;
+  end if;
+  execute $query$
+    select net.http_post(
+      url := $1,
+      headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || $2),
+      body := $3,
+      timeout_milliseconds := $4
+    )
+  $query$ into transport_id using runtime_binding.runtime_config_url, shared_secret,
+    jsonb_build_object(
+      'schema_version', 3, 'mode', 'dry_run',
+      'deployment_role', runtime_binding.deployment_role,
+      'campaign_id', campaign.id, 'event_id', event_row.id,
+      'correlation_id', event_row.correlation_id,
+      'request_id', event_row.request_id, 'cycle_id', event_row.cycle_id,
+      'job', event_row.event_type, 'slot_number', event_row.slot_number,
+      'expected_deployment_id', runtime_binding.deployment_id,
+      'expected_project_id', runtime_binding.vercel_project_id,
+      'expected_commit_sha', campaign.prepared_commit_sha
+    ), campaign.max_request_seconds * 1000;
+  perform set_config('capital_lab.internal_event_write', 'on', true);
+  update private.no_ai_shadow_dry_run_events
+  set pg_net_request_id = transport_id, cron_trigger_count = 1,
+      request_submitted_at = statement_timestamp()
+  where id = event_row.id and pg_net_request_id is null;
+  get diagnostics submitted_count = row_count;
+  perform set_config('capital_lab.internal_event_write', 'off', true);
+  if submitted_count <> 1 then
+    raise exception using errcode = '55000', message = 'scheduler request identity was concurrently claimed';
+  end if;
+  return transport_id;
+end;
+$$;
+
 create or replace function private.arm_activation_campaign(
   p_campaign_id uuid,
   p_commit_sha text,

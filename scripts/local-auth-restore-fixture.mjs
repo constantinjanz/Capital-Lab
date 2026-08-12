@@ -5,8 +5,10 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import {
+  canonicalJson,
   postgresUrlToLibpqEnv,
   redactedPostgresError,
+  sha256,
 } from './critical-backup-contract.mjs'
 import {
   resolvedArguments,
@@ -382,14 +384,37 @@ async function main() {
     requested.mode === 'prepare'
       ? await newExternalPath(workspace, requested.credentials)
       : await verifiedExternalFile(workspace, requested.credentials)
-  if (requested.mode === 'prepare') await prepare(credentialsPath)
-  else {
+  if (requested.mode === 'prepare') {
+    await prepare(credentialsPath)
+    const verifiedCredentialsPath = await verifiedExternalFile(
+      workspace,
+      requested.credentials,
+    )
+    validateSyntheticAuthFixture(
+      JSON.parse(await readFile(verifiedCredentialsPath, 'utf8')),
+    )
+  } else {
+    const credentialsSha256 = sha256(await readFile(credentialsPath))
     const workdir = await verifiedExternalDirectory(
       workspace,
       requested['supabase-workdir'],
     )
     if (requested.mode === 'verify') await verify(credentialsPath, workdir)
     else await faults(credentialsPath, workdir)
+    const verifiedCredentialsPath = await verifiedExternalFile(
+      workspace,
+      requested.credentials,
+    )
+    const verifiedWorkdir = await verifiedExternalDirectory(
+      workspace,
+      requested['supabase-workdir'],
+    )
+    if (
+      sha256(await readFile(verifiedCredentialsPath)) !== credentialsSha256 ||
+      canonicalJson(workdir) !== canonicalJson(verifiedWorkdir)
+    ) {
+      throw new Error('Synthetic Auth artifact identity changed during use')
+    }
   }
   process.stdout.write(
     `${JSON.stringify({ status: requested.mode === 'prepare' ? 'synthetic_auth_created' : requested.mode === 'verify' ? 'synthetic_auth_login_and_rls_verified' : 'synthetic_auth_faults_detected', userCount: 2, rlsAllowCount: requested.mode === 'verify' ? 1 : null, rlsDenyCount: requested.mode === 'verify' ? 1 : null, secretValuesLogged: false })}\n`,
