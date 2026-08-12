@@ -22,7 +22,71 @@ import {
 
 const hashA = 'a'.repeat(64)
 const hashB = 'b'.repeat(64)
-const schemaEvidence = { schemas: [] }
+const schemaEvidence = {
+  schemas: [{ schema: 'private', owner: 'postgres', acl: null }],
+  relations: [{ schema: 'private', name: 'example', owner: 'postgres' }],
+  columns: [
+    {
+      schema: 'private',
+      relation: 'example',
+      name: 'id',
+      type: 'uuid',
+      default: 'gen_random_uuid()',
+    },
+  ],
+  constraints: [
+    {
+      schema: 'private',
+      relation: 'example',
+      name: 'example_owner_fkey',
+      type: 'f',
+      definition: 'FOREIGN KEY (owner_id) REFERENCES public.app_users(user_id)',
+    },
+  ],
+  indexes: [{ schema: 'private', relation: 'example', name: 'example_pkey' }],
+  rowSecurity: [
+    { schema: 'private', relation: 'example', enabled: true, forced: true },
+  ],
+  policies: [
+    {
+      schema: 'private',
+      relation: 'example',
+      name: 'owner_select',
+      using: '(owner_id = auth.uid())',
+    },
+  ],
+  tableGrants: [
+    {
+      schema: 'private',
+      relation: 'example',
+      grantee: 'service_role',
+      privilege: 'SELECT',
+    },
+  ],
+  triggers: [
+    {
+      schema: 'private',
+      relation: 'example',
+      name: 'protect_example',
+      definition: 'CREATE TRIGGER protect_example BEFORE DELETE',
+    },
+  ],
+  functions: [
+    {
+      schema: 'private',
+      identity: 'private.example_guard()',
+      definition:
+        "CREATE FUNCTION private.example_guard() RETURNS trigger SET search_path TO ''",
+    },
+  ],
+  functionGrants: [],
+  views: [],
+  types: [],
+  sequences: [],
+  defaultPrivileges: [],
+  extensions: [],
+  authDependencies: {},
+}
 const schemaEvidenceSha256 = sha256(canonicalJson(schemaEvidence))
 const relations = {
   'private.no_ai_shadow_dry_runs': {
@@ -209,6 +273,14 @@ describe('critical backup contract', () => {
     )
     expect(source).toContain('buildRestoreTargetProof')
     expect(source).toContain('capital_lab_restore.run_identity')
+    expect(
+      source.indexOf(
+        'const containerIdentity = validateRestoreContainerInspection',
+      ),
+    ).toBeLessThan(source.indexOf('create schema capital_lab_restore'))
+    expect(
+      source.indexOf('const proof = buildRestoreTargetProof'),
+    ).toBeLessThan(source.indexOf('drop schema if exists private cascade'))
     expect(source).not.toMatch(/drop database/iu)
   })
 
@@ -459,6 +531,82 @@ describe('critical backup contract', () => {
         schemaEvidence: {
           schemas: [{ name: 'same-drift-in-source-and-target' }],
         },
+        schemaFingerprintSha256: manifest.schemaFingerprintSha256,
+        migrationHistorySha256: manifest.source.migrationHistorySha256,
+      }),
+    ).toThrow(/differs/)
+  })
+
+  it.each([
+    [
+      'additional column',
+      (evidence: typeof schemaEvidence) =>
+        evidence.columns.push({
+          schema: 'private',
+          relation: 'example',
+          name: 'extra',
+          type: 'text',
+          default: "'extra'::text",
+        }),
+    ],
+    [
+      'deleted column',
+      (evidence: typeof schemaEvidence) => evidence.columns.splice(0, 1),
+    ],
+    [
+      'changed type or default',
+      (evidence: typeof schemaEvidence) => {
+        evidence.columns[0]!.type = 'text'
+        evidence.columns[0]!.default = "'drift'::text"
+      },
+    ],
+    [
+      'changed foreign key',
+      (evidence: typeof schemaEvidence) => {
+        evidence.constraints[0]!.definition =
+          'FOREIGN KEY (owner_id) REFERENCES auth.users(id)'
+      },
+    ],
+    [
+      'disabled RLS',
+      (evidence: typeof schemaEvidence) => {
+        evidence.rowSecurity[0]!.enabled = false
+      },
+    ],
+    [
+      'changed policy predicate',
+      (evidence: typeof schemaEvidence) => {
+        evidence.policies[0]!.using = 'true'
+      },
+    ],
+    [
+      'unexpected grant',
+      (evidence: typeof schemaEvidence) => {
+        evidence.tableGrants[0]!.grantee = 'anon'
+      },
+    ],
+    [
+      'changed function body or search_path',
+      (evidence: typeof schemaEvidence) => {
+        evidence.functions[0]!.definition =
+          'CREATE FUNCTION private.example_guard() RETURNS trigger SET search_path TO public'
+      },
+    ],
+    [
+      'changed or removed trigger',
+      (evidence: typeof schemaEvidence) => evidence.triggers.splice(0, 1),
+    ],
+  ])('rejects independent Golden drift: %s', (_label, mutate) => {
+    const drifted = structuredClone(schemaEvidence)
+    mutate(drifted)
+    expect(() =>
+      assertRestoredEvidence(manifest, {
+        contractKind: manifest.contractKind,
+        catalogRelations: Object.keys(relations).sort(),
+        relations,
+        appliedMigrations: manifest.source.appliedMigrations,
+        relationSetSha256: manifest.relationSetSha256,
+        schemaEvidence: drifted,
         schemaFingerprintSha256: manifest.schemaFingerprintSha256,
         migrationHistorySha256: manifest.source.migrationHistorySha256,
       }),

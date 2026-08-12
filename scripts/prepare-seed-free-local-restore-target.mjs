@@ -13,6 +13,7 @@ import {
   buildRestoreTargetProof,
   canonicalJson as canonicalProofJson,
   restoreProjectId,
+  validateRestoreContainerInspection,
 } from './lib/local-supabase-target-proof.mjs'
 import {
   resolvedArguments,
@@ -175,6 +176,17 @@ async function main() {
     throw new Error('Source A or disposable target B boundary is invalid')
   }
   const inspection = await inspectRestoreContainer(runId)
+  const containerIdentity = validateRestoreContainerInspection(
+    inspection,
+    runId,
+  )
+  if (
+    containerIdentity.hostname !== target.hostname ||
+    containerIdentity.port !== target.port ||
+    containerIdentity.database !== target.database
+  ) {
+    throw new Error('Disposable container differs from the target URL')
+  }
   const sourceIdentity = await databaseEvidence(
     source,
     buildServerIdentitySql(),
@@ -232,6 +244,28 @@ commit;
   ) {
     throw new Error('Disposable target marker evidence differs')
   }
+  const preparedAt = new Date().toISOString()
+  const proofBinding = {
+    disposableMarker,
+    markerEvidenceSha256: sha256(canonicalJson(markerEvidence)),
+    runId,
+    sourceServerFingerprint: sha256(sourceIdentity.serverIdentity),
+  }
+  const proof = buildRestoreTargetProof(
+    inspection,
+    targetIdentity,
+    proofBinding,
+    preparedAt,
+  )
+  if (
+    proof.hostname !== target.hostname ||
+    proof.port !== target.port ||
+    proof.database !== target.database ||
+    proof.disposableMarker !== disposableMarker ||
+    proof.runId !== runId
+  ) {
+    throw new Error('Destructive target proof differs before reset')
+  }
   await run(
     'psql',
     ['-X', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1'],
@@ -269,17 +303,16 @@ commit;
   ) {
     throw new Error('Disposable target marker changed during preparation')
   }
-  const proof = buildRestoreTargetProof(
-    inspection,
+  const postResetInspection = await inspectRestoreContainer(runId)
+  const postResetProof = buildRestoreTargetProof(
+    postResetInspection,
     postResetIdentity,
-    {
-      disposableMarker,
-      markerEvidenceSha256: sha256(canonicalJson(markerEvidence)),
-      runId,
-      sourceServerFingerprint: sha256(sourceIdentity.serverIdentity),
-    },
-    new Date().toISOString(),
+    proofBinding,
+    preparedAt,
   )
+  if (canonicalProofJson(proof) !== canonicalProofJson(postResetProof)) {
+    throw new Error('Disposable target proof changed during reset')
+  }
   const bytes = Buffer.from(`${canonicalProofJson(proof)}\n`)
   await writeFile(proofPath, bytes, { mode: 0o600, flag: 'wx' })
   await chmod(proofPath, 0o600)

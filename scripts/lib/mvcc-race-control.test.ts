@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -26,7 +26,9 @@ afterEach(async () => {
 
 describe('external MVCC race barriers', () => {
   it('persists exact run-bound markers outside the repository', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'capital-lab-mvcc-'))
+    const root = await realpath(
+      await mkdtemp(path.join(tmpdir(), 'capital-lab-mvcc-')),
+    )
     cleanup.push(root)
     const repository = path.join(root, 'repository')
     const controlPath = path.join(root, 'control')
@@ -43,7 +45,9 @@ describe('external MVCC race barriers', () => {
   })
 
   it('rejects repository-internal controls and changed marker identities', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'capital-lab-mvcc-'))
+    const root = await realpath(
+      await mkdtemp(path.join(tmpdir(), 'capital-lab-mvcc-')),
+    )
     cleanup.push(root)
     const repository = path.join(root, 'repository')
     const internal = path.join(repository, 'control')

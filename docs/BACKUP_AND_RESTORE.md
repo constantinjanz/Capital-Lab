@@ -66,6 +66,12 @@ path only, with credential-file paths redacted.
   schema version 7 also freezes the exact Auth data-relation allowlist and the
   names of every excluded Auth state relation.
 
+The independent Golden also freezes the supported Auth dependency structure:
+Auth schema/relation owners and ACLs, user/identity columns and defaults,
+constraints, indexes, RLS/policies, table grants and triggers, plus Auth-schema
+function/view definitions and function grants. The Auth schema dump preserves
+those owners; only data outside `auth.users` and `auth.identities` is excluded.
+
 Auth recovery deliberately excludes sessions, refresh tokens, MFA state,
 one-time codes, SSO state, audit entries, and every other internal Auth data
 relation. Old sessions and JWTs are not recovery promises. The supported

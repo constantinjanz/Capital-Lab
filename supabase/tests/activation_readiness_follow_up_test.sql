@@ -456,6 +456,39 @@ select throws_ok(
   '55000', 'activation mutation lacks an exact campaign and operation context',
   'unreviewed audit side effect fails'
 );
+select set_config(
+  'capital_lab.activation_campaign_id', pg_temp.campaign_id()::text, true
+);
+select set_config('capital_lab.activation_operation', 'control_snapshot', true);
+select set_config(
+  'capital_lab.activation_operation_id',
+  '19000000-0000-4000-8000-000000000001', true
+);
+select throws_ok(
+  $$insert into private.application_settings (
+      owner_id, setting_key, value, is_secret
+    ) values (
+      gen_random_uuid(), 'foreign_campaign_setting', 'false'::jsonb, false
+    )$$,
+  '55000', 'activation mutation owner differs from the campaign',
+  'a foreign campaign row cannot enter a bounded relation'
+);
+select throws_ok(
+  $$insert into public.storage_monitor_snapshots (
+      owner_id, captured_on, database_bytes, limit_bytes,
+      utilization_percent, threshold_state, largest_relations
+    )
+    select (select owner_id from private.no_ai_shadow_dry_runs
+        where id = pg_temp.campaign_id()),
+      (statement_timestamp() at time zone 'UTC')::date,
+      1, 2, 50, 'normal', '[]'::jsonb
+    from generate_series(1, 2)$$,
+  '55000', 'activation storage evidence exceeds its one-row operation bound',
+  'a second row in one expected operation fails before insertion'
+);
+select set_config('capital_lab.activation_campaign_id', '', true);
+select set_config('capital_lab.activation_operation', '', true);
+select set_config('capital_lab.activation_operation_id', '', true);
 select throws_ok(
   $$truncate table private.application_settings$$,
   '55000', 'activation mutation lacks an exact campaign and operation context',
@@ -950,6 +983,17 @@ savepoint market_side_effect_guard;
 update public.market_quotes set id = id where false;
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auto_stopped', 'market-data mutation trips the DB-first kill even with zero affected rows');
 rollback to savepoint market_side_effect_guard;
+savepoint compensated_side_effect_guard;
+insert into public.market_quotes
+select * from public.market_quotes where false;
+delete from public.market_quotes where false;
+select is(
+  (select state from private.no_ai_shadow_dry_runs
+    where id = pg_temp.campaign_id()),
+  'auto_stopped',
+  'an insert-delete compensation attempt trips the DB-first kill'
+);
+rollback to savepoint compensated_side_effect_guard;
 savepoint portfolio_side_effect_guard;
 update public.portfolio_snapshots set id = id where false;
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auto_stopped', 'portfolio mutation trips the DB-first kill');
@@ -1014,6 +1058,44 @@ select throws_ok(
 select throws_ok(
   $$truncate table private.activation_expected_mutation_rules$$,
   '55000', 'private.activation_expected_mutation_rules is append-only', 'expected mutation bounds reject truncate'
+);
+
+create function pg_temp.inject_hidden_activation_side_effect()
+returns trigger
+language plpgsql
+as $$
+begin
+  insert into private.audit_log (
+    owner_id, actor_type, actor_id, action, target_type,
+    target_id, correlation_id, metadata
+  ) values (
+    new.owner_id, 'system', null, 'activation.hidden_side_effect',
+    'campaign', pg_temp.campaign_id(), gen_random_uuid(), '{}'::jsonb
+  );
+  return new;
+end;
+$$;
+create trigger zz_inject_hidden_activation_side_effect
+after update of value on private.application_settings
+for each row execute function pg_temp.inject_hidden_activation_side_effect();
+select throws_ok(
+  $$select private.arm_activation_campaign(
+    pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
+    repeat('b', 64), repeat('c', 64), private.activation_database_fingerprint(),
+    '50000000-0000-4000-8000-000000000011',
+    '50000000-0000-4000-8000-000000000012'
+  )$$,
+  '55000', 'activation does not permit audit-log side effects',
+  'a hidden trigger side effect aborts the reviewed arm transaction'
+);
+drop trigger zz_inject_hidden_activation_side_effect
+on private.application_settings;
+drop function pg_temp.inject_hidden_activation_side_effect();
+select is(
+  (select state from private.no_ai_shadow_dry_runs
+    where id = pg_temp.campaign_id()),
+  'baseline_frozen',
+  'the failed hidden side effect leaves the Campaign and controls unchanged'
 );
 
 select lives_ok(

@@ -24,6 +24,25 @@ function digest(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
+function emergencyGitHead(repository) {
+  const git = resolveNativeExecutable('git')
+  const result = spawnSync(
+    git.command,
+    resolvedArguments(git, ['rev-parse', 'HEAD']),
+    { cwd: repository, encoding: 'utf8', shell: false, windowsHide: true },
+  )
+  const headSha = result.stdout?.trim()
+  if (
+    result.status !== 0 ||
+    result.signal ||
+    result.error ||
+    !/^[0-9a-f]{40}$/u.test(headSha ?? '')
+  ) {
+    throw new Error('Emergency runner cannot derive the exact Git HEAD')
+  }
+  return headSha
+}
+
 export function validateEmergencyTarget(databaseUrlValue) {
   let parsed
   try {
@@ -160,8 +179,25 @@ export async function emergencyDependencyClosure(repository) {
     }
   }
   discovered.add('scripts/lib/canonical-repository-bytes.mjs')
+  discovered.add('package.json')
   discovered.add('supabase/activation/emergency-kill.sql')
   return [...discovered].sort()
+}
+
+export async function verifyEmergencyDependencies(repository) {
+  const headSha = emergencyGitHead(repository)
+  const closure = await emergencyDependencyClosure(repository)
+  const closureDigests = []
+  for (const relativePath of closure) {
+    closureDigests.push(
+      `${relativePath}\u001f${await committedFileDigest(repository, relativePath)}`,
+    )
+  }
+  return {
+    closure,
+    dependencyClosureSha256: digest(closureDigests.join('\n')),
+    headSha,
+  }
 }
 
 async function spawnBounded(command, args, options) {
@@ -205,13 +241,7 @@ async function main() {
     throw new Error('CAPITAL_LAB_DATABASE_URL is required and never printed')
   const connectionMode = validateEmergencyTarget(databaseUrl)
   const repository = await realpath(process.cwd())
-  const closure = await emergencyDependencyClosure(repository)
-  const closureDigests = []
-  for (const relativePath of closure) {
-    closureDigests.push(
-      `${relativePath}\u001f${await committedFileDigest(repository, relativePath)}`,
-    )
-  }
+  const dependencyEvidence = await verifyEmergencyDependencies(repository)
   const scriptPath = await realpath(
     path.join(repository, 'supabase', 'activation', 'emergency-kill.sql'),
   )
@@ -250,8 +280,9 @@ async function main() {
       campaignId,
       projectRef: PROJECT_REF,
       connectionMode,
-      dependencyClosureCount: closure.length,
-      dependencyClosureSha256: digest(closureDigests.join('\n')),
+      gitHeadSha: dependencyEvidence.headSha,
+      dependencyClosureCount: dependencyEvidence.closure.length,
+      dependencyClosureSha256: dependencyEvidence.dependencyClosureSha256,
       runtimeExecutableVerified: true,
       ...processEvidence,
     })}\n`,
