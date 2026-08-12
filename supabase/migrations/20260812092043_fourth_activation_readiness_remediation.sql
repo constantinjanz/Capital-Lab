@@ -201,7 +201,8 @@ select classification.relation_name, classification.classification,
       'response_error_class', 'authenticated_count', 'claimed_cycle_count',
       'terminal_reason', 'model_call_count', 'budget_reservation_count',
       'order_count', 'fill_count', 'ledger_entry_count', 'correlation_id',
-      'completed_at'
+      'request_submitted_at', 'response_persisted_at', 'response_status',
+      'response_terminal_reason', 'completed_at'
     ]::text[]
     when 'private.activation_terminal_operations' then array[
       'status', 'completed_at', 'evidence'
@@ -214,11 +215,11 @@ select classification.relation_name, classification.classification,
     ]::text[]
     when 'private.scheduler_slots' then array[
       'status', 'result', 'lease_until', 'attempt_count', 'heartbeat_at',
-      'deadline_at', 'attempt_number', 'updated_at'
+      'updated_at'
     ]::text[]
     when 'private.scheduler_runs' then array[
       'status', 'finished_at', 'skipped_reason', 'error_class',
-      'retry_eligible', 'metadata'
+      'retry_eligible', 'metadata', 'heartbeat_at'
     ]::text[]
     else array[]::text[]
   end,
@@ -287,19 +288,29 @@ stable
 security definer
 set search_path = ''
 as $$
+declare
+  drift_relation text;
 begin
   if exists (
     select relation_name from private.activation_relation_classifications
     where classification in ('activation_evidence', 'scheduler_envelope')
     except
     select relation_name from private.activation_expected_mutation_rules
-  ) or exists (
+  ) then
+    raise exception using errcode = '55000',
+      message = 'Activation expected-mutation contract is missing a classified relation';
+  end if;
+  if exists (
     select relation_name from private.activation_expected_mutation_rules
     except
     select relation_name from private.activation_relation_classifications
     where classification in ('activation_evidence', 'scheduler_envelope')
-  ) or exists (
-    select 1 from private.activation_expected_mutation_rules as rule
+  ) then
+    raise exception using errcode = '55000',
+      message = 'Activation expected-mutation contract contains an unexpected relation';
+  end if;
+  select rule.relation_name into drift_relation
+  from private.activation_expected_mutation_rules as rule
     where rule.classification <> (
       select classification from private.activation_relation_classifications
       where relation_name = rule.relation_name
@@ -314,9 +325,11 @@ begin
         where column_contract.table_schema = split_part(rule.relation_name, '.', 1)
           and column_contract.table_name = split_part(rule.relation_name, '.', 2)
       )
-  ) then
+  order by rule.relation_name
+  limit 1;
+  if drift_relation is not null then
     raise exception using errcode = '55000',
-      message = 'Activation expected-mutation contract is incomplete or drifted';
+      message = 'Activation expected-mutation rule drifted for ' || drift_relation;
   end if;
 end;
 $$;

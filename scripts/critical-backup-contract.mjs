@@ -287,15 +287,55 @@ export async function loadSchemaGolden(
 ) {
   const bytes = canonicalRepositoryTextBytes(await readFile(filename))
   const golden = JSON.parse(bytes.toString('utf8'))
+  const schemaEvidenceKeys = [
+    'authDependencies',
+    'columns',
+    'constraints',
+    'defaultPrivileges',
+    'extensions',
+    'functionGrants',
+    'functions',
+    'indexes',
+    'policies',
+    'relations',
+    'rowSecurity',
+    'schemas',
+    'sequences',
+    'tableGrants',
+    'triggers',
+    'types',
+    'views',
+  ]
   if (
     bytes.toString('utf8') !== `${canonicalJson(golden)}\n` ||
+    canonicalJson(Object.keys(golden).sort()) !==
+      canonicalJson(
+        [
+          'contractKind',
+          'migrationHistorySha256',
+          'relationContractSha256',
+          'relationSetSha256',
+          'schemaEvidence',
+          'schemaEvidenceSha256',
+          'schemaFingerprintSha256',
+          'schemaFingerprintVersion',
+          'schemaVersion',
+        ].sort(),
+      ) ||
     golden.schemaVersion !== 1 ||
     golden.contractKind !== expectedKind ||
     golden.schemaFingerprintVersion !== 'capital-lab-schema-fingerprint-v2' ||
     golden.relationContractSha256 !== expectedRelationContractSha256 ||
     !SHA256.test(golden.schemaFingerprintSha256 ?? '') ||
+    !SHA256.test(golden.schemaEvidenceSha256 ?? '') ||
     !SHA256.test(golden.relationSetSha256 ?? '') ||
-    !SHA256.test(golden.migrationHistorySha256 ?? '')
+    !SHA256.test(golden.migrationHistorySha256 ?? '') ||
+    !golden.schemaEvidence ||
+    typeof golden.schemaEvidence !== 'object' ||
+    Array.isArray(golden.schemaEvidence) ||
+    canonicalJson(Object.keys(golden.schemaEvidence).sort()) !==
+      canonicalJson(schemaEvidenceKeys) ||
+    golden.schemaEvidenceSha256 !== sha256(canonicalJson(golden.schemaEvidence))
   ) {
     throw new Error('Committed schema golden is invalid or stale')
   }
@@ -377,8 +417,8 @@ function relationSql(spec) {
   from ${qualified} as source_row`
 }
 
-export function buildSchemaFingerprintExpression() {
-  return `select encode(extensions.digest(convert_to(jsonb_build_object(
+export function buildSchemaFingerprintPayloadExpression() {
+  return `jsonb_build_object(
     'schemas', (select coalesce(jsonb_agg(jsonb_build_object(
       'schema', namespace.nspname, 'owner', owner.rolname,
       'acl', namespace.nspacl
@@ -564,7 +604,14 @@ export function buildSchemaFingerprintExpression() {
       from pg_catalog.pg_policies
       where schemaname = 'auth' and tablename in ('users','identities'))
     )
-  )::text, 'UTF8'), 'sha256'), 'hex')`
+  )`
+}
+
+export function buildSchemaFingerprintExpression() {
+  return `select encode(extensions.digest(convert_to(
+    (${buildSchemaFingerprintPayloadExpression()})::text,
+    'UTF8'
+  ), 'sha256'), 'hex')`
 }
 
 export function buildCriticalEvidenceSql(contract) {
@@ -597,6 +644,7 @@ select jsonb_build_object(
   ),
   'relationSetSha256', encode(extensions.digest(convert_to(
     '${relationSet}', 'UTF8'), 'sha256'), 'hex'),
+  'schemaEvidence', (${buildSchemaFingerprintPayloadExpression()}),
   'schemaFingerprintSha256', (${buildSchemaFingerprintExpression()}),
   'catalogRelations', (
     select coalesce(jsonb_agg(
@@ -638,6 +686,7 @@ select jsonb_build_object(
   ),
   'relationSetSha256', encode(extensions.digest(convert_to(
     '${relationSet}', 'UTF8'), 'sha256'), 'hex'),
+  'schemaEvidence', (${buildSchemaFingerprintPayloadExpression()}),
   'schemaFingerprintSha256', (${buildSchemaFingerprintExpression()})
 ) as evidence;\n`
 }
@@ -732,6 +781,8 @@ export function assertBackupManifest(manifest, expected) {
     schema_golden:
       SHA256.test(manifest.schemaGoldenSha256 ?? '') &&
       manifest.schemaGoldenSha256 === expected.schemaGoldenSha256 &&
+      SHA256.test(manifest.schemaEvidenceSha256 ?? '') &&
+      manifest.schemaEvidenceSha256 === expected.schemaEvidenceSha256 &&
       manifest.schemaFingerprintSha256 === expected.schemaFingerprintSha256,
     schema_fingerprint:
       SHA256.test(manifest.schemaFingerprintSha256 ?? '') &&
@@ -748,6 +799,9 @@ export function assertBackupManifest(manifest, expected) {
     source_schema_fingerprint: SHA256.test(
       manifest.source?.schemaFingerprintSha256 ?? '',
     ),
+    source_schema_evidence:
+      SHA256.test(manifest.source?.schemaEvidenceSha256 ?? '') &&
+      manifest.source.schemaEvidenceSha256 === manifest.schemaEvidenceSha256,
     source_migration_history: SHA256.test(
       manifest.source?.migrationHistorySha256 ?? '',
     ),
@@ -806,6 +860,8 @@ export function assertRestoredEvidence(manifest, actualEvidence) {
       manifest.source.migrationHistorySha256 ||
     actualEvidence.schemaFingerprintSha256 !==
       manifest.schemaFingerprintSha256 ||
+    sha256(canonicalJson(actualEvidence.schemaEvidence)) !==
+      manifest.schemaEvidenceSha256 ||
     actualEvidence.relationSetSha256 !== manifest.relationSetSha256 ||
     actualEvidence.contractKind !== manifest.contractKind
   ) {

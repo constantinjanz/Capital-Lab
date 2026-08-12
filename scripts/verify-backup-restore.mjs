@@ -306,6 +306,7 @@ async function main() {
     relationNames: contract.relations.map((spec) => spec.relation),
     relationSetSha256,
     restorePreludeSha256,
+    schemaEvidenceSha256: golden.schemaEvidenceSha256,
     schemaFingerprintSha256: golden.schemaFingerprintSha256,
     schemaGoldenSha256,
   })

@@ -457,7 +457,7 @@ select throws_ok(
   'unreviewed audit side effect fails'
 );
 select throws_ok(
-  $$truncate table public.storage_monitor_snapshots$$,
+  $$truncate table private.application_settings$$,
   '55000', 'activation mutation lacks an exact campaign and operation context',
   'bounded evidence rejects truncate during an active campaign'
 );

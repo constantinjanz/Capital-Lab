@@ -8,16 +8,20 @@ import {
   assertRestoredEvidence,
   buildRolePolicySql,
   buildServerIdentitySql,
+  canonicalJson,
   criticalRelationSchemas,
   filterApplicationSchemaArchiveToc,
   fingerprintRolePolicy,
   postgresUrlToLibpqEnv,
   redactedPostgresError,
   roleRestoreRequired,
+  sha256,
 } from './critical-backup-contract.mjs'
 
 const hashA = 'a'.repeat(64)
 const hashB = 'b'.repeat(64)
+const schemaEvidence = { schemas: [] }
+const schemaEvidenceSha256 = sha256(canonicalJson(schemaEvidence))
 const relations = {
   'private.no_ai_shadow_dry_runs': {
     rowCount: '1',
@@ -68,6 +72,7 @@ const manifest = {
   },
   schemaVersion: 6,
   schemaContractVersion: 'capital-lab-post_activation-backup-v6',
+  schemaEvidenceSha256,
   schemaFingerprintSha256: hashA,
   schemaGoldenSha256: hashB,
   gitCommitSha: 'c'.repeat(40),
@@ -87,6 +92,7 @@ const manifest = {
     appliedMigrations: [{ version: '20260809150417', name: 'activation' }],
     databaseFingerprint: hashB,
     rolePolicyFingerprint: hashA,
+    schemaEvidenceSha256,
     schemaFingerprintSha256: hashA,
     migrationHistorySha256: hashB,
     serverFingerprint: hashB,
@@ -108,6 +114,7 @@ const expected = {
   relationNames: Object.keys(relations).sort(),
   relationSetSha256: hashB,
   restorePreludeSha256: hashB,
+  schemaEvidenceSha256,
   schemaFingerprintSha256: hashA,
   schemaGoldenSha256: hashB,
   migrations,
@@ -361,6 +368,7 @@ describe('critical backup contract', () => {
       relations,
       appliedMigrations: manifest.source.appliedMigrations,
       relationSetSha256: manifest.relationSetSha256,
+      schemaEvidence,
       schemaFingerprintSha256: manifest.schemaFingerprintSha256,
       migrationHistorySha256: manifest.source.migrationHistorySha256,
     }) as {
@@ -382,6 +390,24 @@ describe('critical backup contract', () => {
         relations,
         appliedMigrations: [{ version: '20260809150417', name: 'tampered' }],
         relationSetSha256: manifest.relationSetSha256,
+        schemaEvidence,
+        schemaFingerprintSha256: manifest.schemaFingerprintSha256,
+        migrationHistorySha256: manifest.source.migrationHistorySha256,
+      }),
+    ).toThrow(/differs/)
+  })
+
+  it('rejects common-mode schema drift even when the database fingerprint is copied', () => {
+    expect(() =>
+      assertRestoredEvidence(manifest, {
+        contractKind: manifest.contractKind,
+        catalogRelations: Object.keys(relations).sort(),
+        relations,
+        appliedMigrations: manifest.source.appliedMigrations,
+        relationSetSha256: manifest.relationSetSha256,
+        schemaEvidence: {
+          schemas: [{ name: 'same-drift-in-source-and-target' }],
+        },
         schemaFingerprintSha256: manifest.schemaFingerprintSha256,
         migrationHistorySha256: manifest.source.migrationHistorySha256,
       }),

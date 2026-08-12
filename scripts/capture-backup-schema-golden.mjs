@@ -8,6 +8,7 @@ import {
   loadCriticalRelationContract,
   postgresUrlToLibpqEnv,
   redactedPostgresError,
+  sha256,
 } from './critical-backup-contract.mjs'
 import {
   resolvedArguments,
@@ -149,6 +150,8 @@ async function main() {
     migrationHistorySha256: actual.migrationHistorySha256,
     relationContractSha256,
     relationSetSha256: actual.relationSetSha256,
+    schemaEvidence: actual.schemaEvidence,
+    schemaEvidenceSha256: sha256(canonicalJson(actual.schemaEvidence)),
     schemaFingerprintSha256: actual.schemaFingerprintSha256,
     schemaFingerprintVersion: 'capital-lab-schema-fingerprint-v2',
     schemaVersion: 1,

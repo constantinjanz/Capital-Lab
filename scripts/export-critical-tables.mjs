@@ -425,6 +425,10 @@ async function main() {
           ) ||
         evidenceBefore.schemaFingerprintSha256 !==
           golden.schemaFingerprintSha256 ||
+        canonicalJson(evidenceBefore.schemaEvidence) !==
+          canonicalJson(golden.schemaEvidence) ||
+        sha256(canonicalJson(evidenceBefore.schemaEvidence)) !==
+          golden.schemaEvidenceSha256 ||
         evidenceBefore.relationSetSha256 !== golden.relationSetSha256 ||
         evidenceBefore.migrationHistorySha256 !== golden.migrationHistorySha256
       ) {
@@ -585,6 +589,7 @@ async function main() {
       relations: evidenceBefore.relations,
       restorePreludeSha256,
       schemaContractVersion: `capital-lab-${contractKind}-backup-v6`,
+      schemaEvidenceSha256: golden.schemaEvidenceSha256,
       schemaFingerprintSha256: evidenceBefore.schemaFingerprintSha256,
       schemaGoldenSha256,
       schemaVersion: 6,
@@ -592,6 +597,7 @@ async function main() {
         appliedMigrations: evidenceBefore.appliedMigrations,
         databaseFingerprint: evidenceBefore.databaseFingerprint,
         rolePolicyFingerprint: fingerprintRolePolicy(rolePolicyBefore),
+        schemaEvidenceSha256: golden.schemaEvidenceSha256,
         schemaFingerprintSha256: evidenceBefore.schemaFingerprintSha256,
         migrationHistorySha256: evidenceBefore.migrationHistorySha256,
         serverFingerprint: sha256(identityBefore.serverIdentity),
