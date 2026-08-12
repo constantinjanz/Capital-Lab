@@ -1,6 +1,6 @@
-# PR #21 third activation-readiness remediation report
+# PR #21 fourth activation-readiness remediation report
 
-Date: 2026-08-11
+Date: 2026-08-12
 
 Repository: `constantinjanz/Capital-Lab`
 
@@ -8,9 +8,9 @@ Branch: `codex/activation-readiness-follow-up`
 
 Draft PR: `#21` (must remain Draft and unmerged)
 
-Verified starting SHA: `e705f67db819be13c99f759e07186c63f114b831`
+Verified starting SHA: `3015f864f26e2d547f43e1f47a8adfe6a1200bf8`
 
-Implementation SHA: `e99fe09d988a76c76927551ac822013230f531cf`
+Implementation SHA: `ae878c0b02b4a929570465da9c61a0282a007521`
 
 Final report/handoff SHA: intentionally recorded in the Draft PR and final chat
 handoff after this report is committed. A Git commit cannot contain its own SHA
@@ -18,6 +18,19 @@ without changing that SHA, so the report does not make a self-referential claim.
 
 Merge base used by the checksum contract:
 `70ed610d5e0e5c08bf523d0d160a7b76f5fe2e51`.
+
+## Current acceptance status
+
+`BLOCKED — CODE-LEVEL ACCEPTANCE CRITERIA NOT MET`
+
+The executable provenance workflow for independent pre/post schema Goldens is
+implemented, but the two required committed Golden files are deliberately
+absent. They were not fabricated from the backup source, restore target,
+Hosted database, placeholders, or a circular CI artifact. Consequently exact
+implementation CI run `31609688876` correctly fails closed in
+`verify-schema-golden-contracts.mjs`; application gates after that step and the
+pre/post export/restore gates cannot be counted as passed. This supersedes every
+earlier positive readiness conclusion in the historical sections below.
 
 ## Authorization and non-execution
 
@@ -46,16 +59,18 @@ No activation phase was executed in this remediation.
   dirty set in the shared checkout. Work occurred in a clean detached worktree;
   those unrelated files were neither staged, reformatted, reverted, nor committed.
 - The linked Supabase project ref is `qrnuyibntcxwffrxmrvn`. Read-only migration
-  metadata showed 32 applied entries and proved both pending PR migrations
-  `20260809150000` and `20260809150417` absent.
+  metadata showed 32 applied entries. The four repository migrations beginning
+  with `20260809150000`, `20260809150417`, `20260812092043`, and
+  `20260812140953` are not in that Hosted history; none was applied here.
 - Fifteen same-name version discrepancies were mapped one-to-one to the Hosted
   applied identifiers. Each repository rename is 100% byte-identical in Git.
   Hosted history was not mutated and migration repair was not used. A final
   read-only metadata comparison found the exact same 82 public/private base
   relation names in Hosted and the pre-activation contract, with RLS enabled on
-  all 82. The exact local pre/post schema, migration-history, grant, relation,
-  column, constraint, index, policy, trigger, function/view, and row-evidence
-  restore contracts passed in CI. No Hosted rows were exported.
+  all 82. The new independent-Golden contract additionally covers the full Auth
+  base-table schema and application/Auth foreign-key closure, but its pre/post
+  restore cannot pass until the two separately generated Golden files are
+  reviewed and committed. No Hosted rows were exported.
 - Read-only extension metadata showed `pg_cron` and `pg_net` absent. The
   platform-managed Vault extension exists. Vault values and entries were not read.
   No Hosted Cron/job/Vault mutation or scheduler request was made.
@@ -71,40 +86,146 @@ No activation phase was executed in this remediation.
 
 ## Finding-by-finding disposition
 
-| Finding                     | Root cause                                                                             | Executable remediation                                                                                                                                                                                                                                    | Test/evidence                                                                                                     | Remaining gate or risk                                                                  |
-| --------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| P0-1 two Vercel deployments | One deployment identity incorrectly represented disabled auth and enabled runtime      | Append-only role bindings `auth_disabled` and `no_ai_runtime_enabled`; distinct immutable IDs; required `runtime_deployment_verified` state before freeze/arm; Runtime envelopes use only the Runtime binding                                             | Route, domain, runner and pgTAP happy/negative paths prohibit equal IDs and role/commit/project/environment drift | Future real deployments require separately reviewed read-only proofs; none created here |
-| P0-2 trusted endpoint       | URL syntax and operator strings could bless an attacker origin                         | Checksummed project identity contract plus read-only Vercel proof verifier for team/project/READY/production/commit/deployment/alias/path; canonical no-port/userinfo/query/fragment origin; sanitized proof hash                                         | Hostile arbitrary host, redirect, alias, team/project, Preview, commit/deployment drift and forged-echo fixtures  | Live proof intentionally not executed in this repository-only run                       |
-| P0-3 mandatory 401 probes   | Auth-noop could skip missing/invalid Bearer validation                                 | Mandatory endpoint/probe-claimed/probes-verified/auth-noop/runtime states; exactly one durable missing and one invalid identity; exact 401/schema/no-redirect/zero-effects evidence; original request reconciliation only                                 | pgTAP happy path runs the probes; Auth-Noop-before-probes and replacement/unknown-outcome paths fail              | No real request sent by design                                                          |
-| P0-4 pre-migration backup   | Existing exporter referenced post-migration objects and covered a partial relation set | Separate versioned pre (82 relations) and post (105 relations) contracts; catalog-complete classification; migration/history/role/server/schema/content evidence; external manifest hash; version-5 default-ACL policy; safe seed-free target preparation | Unit tamper matrix plus exact-head CI exported/restored and verified 82/82 pre and 105/105 post relations         | Production export/restore remains an independently authorized operator gate             |
-| P0-5 handoff checksums      | Stale hashes and omitted changed files were not enforced                               | Deterministic status-aware merge-base generator; A/M hash HEAD bytes, D hashes merge-base bytes; exact casing/uniqueness/set verification; CRLF/LF-sensitive                                                                                              | Stale, omitted, extra, duplicate, rename/delete, casing and byte-difference tests                                 | Manifest excludes only itself and this report                                           |
-| Break-glass availability    | General runner rejected dirty trees and required Campaign/Vercel artifacts             | Minimal emergency runner allows unrelated dirt, verifies its own HEAD blobs, structurally binds TLS/project/database, requires UUID and exact phrase, runs bounded DB-first kill/readback without Vercel/manifest                                         | Dirty tree, absent manifest, Vercel unavailable, replay, target/campaign mismatch, timeout/unknown tests          | Requires a future authorized database operator and valid target credentials             |
-| Side-effect completeness    | A fixed 22-table list omitted mutable application state                                | Every public/private base table is exactly activation evidence, scheduler envelope, forbidden, or explicit platform exclusion; new tables fail CI classification                                                                                          | Catalog equality plus adversarial market/portfolio/risk/simulator/trade/decision/experiment mutation tests        | Schema growth must update the reviewed contract                                         |
-| Paid Canary prerequisite    | Paid claim was not tied to passed no-AI terminal evidence                              | Claim requires exactly one immutable passed Campaign, all dangerous controls false, jobs inactive/absent, and no unresolved network outcome                                                                                                               | Canary-before-terminal and state-drift negatives                                                                  | Canary remains disabled and was not executed                                            |
-| Retry-safe terminal work    | Unknown commits could repeat or overwrite operations                                   | Operation-ID keyed append-only terminal operations return same evidence on retry and reject different identities                                                                                                                                          | Duplicate/unknown finalize, unschedule and emergency phase-two tests                                              | Operator runbook must preserve the original operation ID                                |
-| Runtime/Windows/credentials | Mixed Node versions, shallow CI history, unsafe subprocess assumptions                 | Node 24.x everywhere; 100-commit bounded scanner with binary/size guards; executable resolution, argument arrays, `shell:false`, timeouts/signals, safe junction/case handling, held-file `try/finally`                                                   | Windows subprocess/metacharacter/path/fault tests and redacted current/history scan                               | Local database gates need Docker; CI supplies the clean Linux database run              |
-| Database privilege/evidence | Administrative paths and append-only evidence needed stronger denial                   | Fixed empty `search_path`, qualified SQL, owner/campaign checks, composite FKs, minimal wrapper grants, no service-role admin transitions, UPDATE/DELETE/TRUNCATE guards                                                                                  | pgTAP RLS/grants/SECURITY DEFINER/TRUNCATE/service-role tests                                                     | Database owner retains unavoidable DDL authority                                        |
-| Reconcile/finalize          | Ephemeral pg_net and owner availability could strand or fabricate outcomes             | Capture first on every tick, exact JSON bindings/counters, fresh snapshots, missing evidence becomes inconclusive, drain before job disable, exact 52 slots/104 events, server-time final gates                                                           | Deterministic full path and late/duplicate/missing/error/correlation/counter/terminal mismatch tests              | Real transport remains a later authorized gate                                          |
+| Finding                     | Root cause                                                                                         | Executable remediation                                                                                                                                                                                                                                                                                             | Test/evidence                                                                                                                                                | Remaining gate or risk                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| P0-1 two Vercel deployments | One deployment identity incorrectly represented disabled auth and enabled runtime                  | Append-only role bindings `auth_disabled` and `no_ai_runtime_enabled`; distinct immutable IDs; required `runtime_deployment_verified` state before freeze/arm; Runtime envelopes use only the Runtime binding                                                                                                      | Route, domain, runner and pgTAP happy/negative paths prohibit equal IDs and role/commit/project/environment drift                                            | Future real deployments require separately reviewed read-only proofs; none created here |
+| P0-2 trusted endpoint       | URL syntax and operator strings could bless an attacker origin                                     | Checksummed project identity contract plus read-only Vercel proof verifier for team/project/READY/production/commit/deployment/alias/path; canonical no-port/userinfo/query/fragment origin; sanitized proof hash                                                                                                  | Hostile arbitrary host, redirect, alias, team/project, Preview, commit/deployment drift and forged-echo fixtures                                             | Live proof intentionally not executed in this repository-only run                       |
+| P0-3 mandatory 401 probes   | Auth-noop could skip missing/invalid Bearer validation                                             | Mandatory endpoint/probe-claimed/probes-verified/auth-noop/runtime states; exactly one durable missing and one invalid identity; exact 401/schema/no-redirect/zero-effects evidence; original request reconciliation only                                                                                          | pgTAP happy path runs the probes; Auth-Noop-before-probes and replacement/unknown-outcome paths fail                                                         | No real request sent by design                                                          |
+| P0-4 pre-migration backup   | Existing exporter referenced post-migration objects and covered a partial relation set             | Separate versioned pre (82 relations/32 migrations) and post (108 relations/36 migrations) contracts; full Auth schema, sensitive Auth equality only in ephemeral memory, exact Owner/Auth closure, schema-driven FK validation, external manifest hash, distinct stack proof and empty-target identity validation | Unit tamper/identity/provenance matrix; source/target restore remains fail-closed before use without both independent Goldens                                | The two approved seed-free Golden files are absent; no restore pass is claimed          |
+| P0-5 handoff checksums      | Stale hashes and omitted changed files were not enforced                                           | Deterministic status-aware merge-base generator; A/M hash HEAD bytes, D hashes merge-base bytes; exact casing/uniqueness/set verification; CRLF/LF-sensitive                                                                                                                                                       | Stale, omitted, extra, duplicate, rename/delete, casing and byte-difference tests                                                                            | Manifest excludes only itself and this report                                           |
+| Break-glass availability    | General runner rejected dirty trees and required Campaign/Vercel artifacts                         | Minimal emergency runner allows unrelated dirt, verifies its own HEAD blobs, structurally binds TLS/project/database, requires UUID and exact phrase, runs bounded DB-first kill/readback without Vercel/manifest                                                                                                  | Dirty tree, absent manifest, Vercel unavailable, replay, target/campaign mismatch, timeout/unknown tests                                                     | Requires a future authorized database operator and valid target credentials             |
+| Side-effect completeness    | A fixed 22-table list omitted mutable application state                                            | Every public/private base table is exactly activation evidence, scheduler envelope, forbidden, or explicit platform exclusion; new tables fail CI classification                                                                                                                                                   | Catalog equality plus adversarial market/portfolio/risk/simulator/trade/decision/experiment mutation tests                                                   | Schema growth must update the reviewed contract                                         |
+| Paid Canary prerequisite    | Paid claim was not tied to passed no-AI terminal evidence                                          | Claim requires exactly one immutable passed Campaign, all dangerous controls false, jobs inactive/absent, and no unresolved network outcome                                                                                                                                                                        | Canary-before-terminal and state-drift negatives                                                                                                             | Canary remains disabled and was not executed                                            |
+| Retry-safe terminal work    | Unknown commits could repeat or overwrite operations                                               | Operation-ID keyed append-only terminal operations return same evidence on retry and reject different identities                                                                                                                                                                                                   | Duplicate/unknown finalize, unschedule and emergency phase-two tests                                                                                         | Operator runbook must preserve the original operation ID                                |
+| Runtime/Windows/credentials | Mixed Node versions, shallow CI history, unsafe subprocess assumptions                             | Node 24.x everywhere; 100-commit bounded scanner with binary/size guards; executable resolution, argument arrays, `shell:false`, timeouts/signals, safe junction/case handling, held-file `try/finally`                                                                                                            | Windows subprocess/metacharacter/path/fault tests and redacted current/history scan                                                                          | Local database gates need Docker; CI supplies the clean Linux database run              |
+| Database privilege/evidence | Administrative paths and append-only evidence needed stronger denial                               | Fixed empty `search_path`, qualified SQL, owner/campaign checks, composite FKs, minimal wrapper grants, no service-role admin transitions, UPDATE/DELETE/TRUNCATE guards                                                                                                                                           | pgTAP RLS/grants/SECURITY DEFINER/TRUNCATE/service-role tests                                                                                                | Database owner retains unavoidable DDL authority                                        |
+| Reconcile/finalize          | Ephemeral pg_net and owner availability could strand or fabricate outcomes                         | Capture first on every tick, exact JSON bindings/counters, fresh snapshots, missing evidence becomes inconclusive, drain before job disable, exact 52 slots/104 events, server-time final gates                                                                                                                    | Deterministic full path and late/duplicate/missing/error/correlation/counter/terminal mismatch tests                                                         | Real transport remains a later authorized gate                                          |
+| Auth transport destination  | A valid Bearer could still be sent to a mutable Production alias before response identity checking | Forward-only submission functions revalidate the immutable `auth_disabled` binding and send both probes and Auth No-op only to its deployment-specific URL; the Vault alias remains a separate scope check                                                                                                         | Function-definition assertions, hostile identity fixtures, distinct deployment route tests                                                                   | No live request was sent                                                                |
+| Transport/counter evidence  | Auth evidence did not require exact JSON/no-store metadata and omitted portfolio mutations         | Durable transport insertion re-reads the exact transient pg_net row, accepts only `application/json` plus exact `Cache-Control: no-store`, persists sanitized fields only, and requires the portfolio zero-counter                                                                                                 | Missing no-store, wrong content type, missing portfolio key, exact route and 104-response pgTAP fixtures                                                     | pg_net remains transient and is never long-term audit storage                           |
+| Forbidden mutation timing   | AFTER-statement triggers detected a forbidden effect after its DML could persist                   | Every classified forbidden relation now rejects INSERT/UPDATE/DELETE/TRUNCATE in a BEFORE-statement trigger while protected states exist                                                                                                                                                                           | Actual synthetic market, portfolio, risk, simulator, outcome, decision and experiment row mutations plus compensation attempts must throw and preserve bytes | Exact SQL execution requires the current ephemeral CI database gate                     |
+| Emergency state drift       | A global active-Campaign count made phase-one kill fail when a second Campaign existed             | Bounded mutations are scoped to the exact operation/campaign; emergency repair is valid from terminal drift; nine settings and owner experiment controls are verified before Campaign stop evidence                                                                                                                | Second Campaign is created through the real prepare lifecycle; repeated kill and terminal-control-drift cases                                                | Cron phase two remains separate and cannot roll back phase one                          |
+| Golden provenance           | Golden generation could circularly use Source A and ignored most Auth schema objects               | A checksummed run/container/system-ID proof requires a fresh seed-free, migration-built reference cluster distinct from Source A; complete Auth base-schema fingerprints are frozen while Auth row data remains users/identities only                                                                              | Provenance, same-server, seeded, wrong-contract, Auth cardinality and FK query tests                                                                         | Golden generation requires explicit separate approval and has not occurred              |
+
+## Fourth-remediation verification delta
+
+Local commands used Node `v24.14.0` and repository dependencies without network
+or external providers:
+
+| Command                                  |        Exit | Exact result                                                                          |
+| ---------------------------------------- | ----------: | ------------------------------------------------------------------------------------- |
+| `prettier --check .`                     |           0 | all matched files formatted                                                           |
+| `eslint . --max-warnings=0`              |           0 | zero warnings                                                                         |
+| `tsc --noEmit`                           |           0 | strict TypeScript passed                                                              |
+| `vitest run`                             |           0 | 96 files / 715 tests passed                                                           |
+| focused adversarial suite                |           0 | 8 files / 94 tests passed                                                             |
+| `check-paper-only.mjs`                   |           0 | PAPER-only scan passed                                                                |
+| `check-credential-patterns.mjs`          |           0 | worktree plus 100 commits, zero redacted findings                                     |
+| `activation-phase-contract.mjs --verify` |           0 | 21 phases; SHA-256 `66524049b1ead87e89014109c9757a6051bab6584846f6c9b69a7d0e8054d85a` |
+| `generate-backup-contracts.mjs --verify` |           0 | 82 pre / 108 post relations; 32 pre / 36 post migrations                              |
+| `verify-schema-golden-contracts.mjs`     |           1 | expected fail-closed `ENOENT`; both independent Golden files absent                   |
+| `git diff --check`                       |           0 | no whitespace errors                                                                  |
+| Docker/local Supabase                    | unavailable | no Docker executable; no local reset/pgTAP/restore claim                              |
+
+Exact implementation CI `31609688876` is tied to
+`ae878c0b02b4a929570465da9c61a0282a007521`. Browser 4/4 and the native Windows
+subprocess job passed. The Application job stopped at the intentionally absent
+schema Goldens before later application gates. The database job verified the
+pinned CLI setup but its redacted ephemeral `supabase start` exited 1 before
+rollback, reset, pgTAP or restore. No retry was added or used to mask that
+unknown infrastructure outcome; no database gate from this run is claimed.
+
+### Exact fourth-run changed files (`3015f864` → `ae878c0`)
+
+```text
+M  .github/workflows/ci.yml
+M  IMPLEMENTATION_PLAN.md
+M  docs/BACKUP_AND_RESTORE.md
+M  docs/RUNBOOK.md
+M  package.json
+M  scripts/activation-artifacts.test.ts
+M  scripts/activation-phase-contract.mjs
+A  scripts/capture-backup-schema-golden.mjs
+M  scripts/check-credential-patterns.mjs
+A  scripts/create-local-restore-stack.mjs
+M  scripts/critical-backup-contract.mjs
+M  scripts/critical-backup-contract.test.ts
+M  scripts/export-critical-tables.mjs
+M  scripts/generate-backup-contracts.mjs
+A  scripts/lib/credential-scan-safety.mjs
+A  scripts/lib/credential-scan-safety.test.ts
+A  scripts/lib/local-supabase-target-proof.mjs
+A  scripts/lib/mvcc-race-control.mjs
+A  scripts/lib/mvcc-race-control.test.ts
+A  scripts/lib/safe-artifact-path.mjs
+A  scripts/lib/safe-artifact-path.test.ts
+M  scripts/lib/safe-process.mjs
+A  scripts/lib/schema-golden-reference-proof.mjs
+A  scripts/lib/schema-golden-reference-proof.test.ts
+A  scripts/local-auth-restore-fixture.mjs
+A  scripts/local-auth-restore-fixture.test.ts
+A  scripts/local-supabase-target-proof.test.ts
+A  scripts/prepare-schema-golden-reference-proof.mjs
+M  scripts/prepare-seed-free-local-restore-target.mjs
+A  scripts/prepare-seed-free-local-restore-target.test.ts
+M  scripts/run-activation-phase.mjs
+M  scripts/run-activation-phase.test.ts
+M  scripts/run-database-tests.mjs
+A  scripts/run-database-tests.test.ts
+A  scripts/run-emergency-bootstrap.mjs
+M  scripts/run-emergency-kill.mjs
+M  scripts/run-emergency-kill.test.ts
+A  scripts/run-local-mvcc-race-writer.mjs
+M  scripts/run-local-rollback-migration-rehearsal.mjs
+A  scripts/run-redacted-subprocess.mjs
+A  scripts/run-redacted-subprocess.test.ts
+M  scripts/vercel-deployment-proof.mjs
+M  scripts/vercel-deployment-proof.test.ts
+M  scripts/verify-backup-restore.mjs
+A  scripts/verify-schema-golden-contracts.mjs
+M  src/app/api/internal/scheduler/route.test.ts
+M  src/app/api/internal/scheduler/route.ts
+M  src/domain/activation-readiness/no-ai-dry-run.ts
+M  src/lib/env/server.test.ts
+M  src/lib/env/server.ts
+M  supabase/activation/emergency-kill.sql
+A  supabase/activation/finalize-runtime-deployment.sql
+M  supabase/activation/phase-contract.json
+M  supabase/activation/prepare-no-ai-dry-run.sql
+M  supabase/activation/project-identity.v1.json
+A  supabase/activation/request-runtime-config-attestation.sql
+A  supabase/activation/verify-runtime-config-attestation.sql
+M  supabase/activation/verify-runtime-deployment.sql
+M  supabase/backup/post-activation.v1.json
+M  supabase/backup/pre-activation.v1.json
+A  supabase/backup/target-stack/supabase/config.toml
+A  supabase/migrations/20260812092043_fourth_activation_readiness_remediation.sql
+A  supabase/migrations/20260812140953_fourth_activation_readiness_review_closure.sql
+M  supabase/tests/activation_readiness_follow_up_test.sql
+M  tasks/lessons.md
+M  tasks/todo.md
+```
 
 ## Checksums from final implementation bytes
 
 ### Top-level contracts
 
-| Artifact                                            | SHA-256                                                            |
-| --------------------------------------------------- | ------------------------------------------------------------------ |
-| `20260809150000_post_build_hosting_safety.sql`      | `ee9a1390a6cf1abfca9a8664d6dfe492bc217741265f2d0d5e8b010af6c0352e` |
-| `20260809150417_activation_readiness_follow_up.sql` | `01e5b32ccc10581b272a31b91660854e6875241a88aa2893b3f1e185ef9dfb7d` |
-| `pre-activation.v1.json`                            | `98fad4a3292bf2f0e1d62e8967f04b165f5464e62590d164d80659c26239c706` |
-| `post-activation.v1.json`                           | `e1bf901b7e34177acff0884bd2138cb28359b69b40adc9d3504fe27a7cfb91b3` |
-| `project-identity.v1.json`                          | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
-| `phase-contract.json` (18 phases)                   | `19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d` |
-| handoff checksum manifest (115 entries)             | `42173c56c38f96550ec008dbad9b97b30f072b276eb7a2ca8d07d6be3cbd2c88` |
+| Artifact                                                        | SHA-256                                                            |
+| --------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `20260809150000_post_build_hosting_safety.sql`                  | `ee9a1390a6cf1abfca9a8664d6dfe492bc217741265f2d0d5e8b010af6c0352e` |
+| `20260809150417_activation_readiness_follow_up.sql`             | `01e5b32ccc10581b272a31b91660854e6875241a88aa2893b3f1e185ef9dfb7d` |
+| `20260812092043_fourth_activation_readiness_remediation.sql`    | `0385cf8d05b105766f43f2c5f0b2683696a3d0416cd79390fbdae97b2d0b23fa` |
+| `20260812140953_fourth_activation_readiness_review_closure.sql` | `e8382eb73227eb4a227eb1036daaa7e7c1d5826f4234ee3f86516980f8f136fe` |
+| `pre-activation.v1.json`                                        | `fa8a573a1d5ee2a1134b1079bc4e813fb9463061aa9ed8df9397ba57690f27de` |
+| `post-activation.v1.json`                                       | `95e8d4426e5f12626faa03a7d99e283a49beb7a3faf88383eec98890c09b5197` |
+| `project-identity.v1.json`                                      | `d6b38244bdc714f3aa68efbb96ddd36115e13410e8c2d9e8c14677e512f1a634` |
+| `phase-contract.json` (21 phases)                               | `66524049b1ead87e89014109c9757a6051bab6584846f6c9b69a7d0e8054d85a` |
+| handoff checksum manifest (145 entries)                         | `1d9e940abf5867c5d87e33717a5ada210602fb8da4521eea211820cc38da7560` |
 
 ### Phase SQL
 
 | Phase                                | SHA-256                                                            |
 | ------------------------------------ | ------------------------------------------------------------------ |
-| prepare                              | `87592e2e3d87155884ad16d431f5a99771f6099a10a4faeab3a26612cf817b4c` |
+| prepare                              | `f91e119c407441b5313f08ff1ac2bdfc30fb467273ec088e8228d3763549d20d` |
 | scheduler-infrastructure-preparation | `380c12f533caf6af75abae33b2f7c0a15b0dca8e1721bc45cd4b051335d8df01` |
 | vault-verification                   | `cfd79e63558f668269148e88abd49a22d7be5122d1ae34414546fb41b17f878b` |
 | install-jobs-disabled                | `733ed8603607ef7be0c5d54fdfe88d564c3df61e11c2733c692122b19bb90713` |
@@ -113,14 +234,17 @@ No activation phase was executed in this remediation.
 | auth-failure-reconcile               | `f0ddc8d05101b714d4d6e65dfb6492b348958449c7672151d2eb4fdee9c3b020` |
 | auth-noop-request                    | `25cd5df3aa260b81fec0d80cd7d425151ca6d0cb6776d6f5bf2ab01aa6042b1c` |
 | auth-noop-reconcile                  | `7f033516ed8fbb0fb1e33d74eef3b4412d27f198dd08d5a7ff470102681680da` |
-| runtime-deployment-verify            | `9a744d361d9812a91636d92b7cf1c4ae362d0175c09597523937f558f774d57f` |
+| runtime-deployment-verify            | `2cb2de20d560dd9655e176862570f58ca0e3fd61f30f81937cf14a9aefae9166` |
+| runtime-config-request               | `12b47deb2cbb6332990ad0ca206a94e0e97d9679bbc4cc955fc7aedced7684c6` |
+| runtime-config-reconcile             | `7a71cffe4ff8a66622cf24fcb57a1727a67a3147ae1dc877ff589c349017a4c7` |
+| runtime-deployment-finalize          | `3c1f3e68958e56629521cff118bba3abcd7028bd91cb50c56e813b830d52ad3f` |
 | baseline-freeze                      | `5ec0f72caeac1b4ff66dc3876d0a2e0c838c7ab290be8d7a10e51efbb459e111` |
 | arm                                  | `289f55a7c4c5cd4ddb941ce86874a59ae9517fdfdd77a4684c3fcf69f4faec85` |
 | drain-reconcile                      | `74a7ad9ed88e17e4e2fae20f82d2d1d209fad9e52d53a241867a97968f75abdc` |
 | manual-finalize                      | `92b0cf37028d26e441afd4d5dcb9f41ccbff58c2b94204a4fa0bd08d4a5d2fea` |
 | orderly-stop                         | `66f98a1645e163e945037ffc6f94e71da1c2412479e46fa37dd79e075ac8e7b7` |
 | unschedule-terminal-jobs             | `adb2645b7d667641bbfeddc70c5a5455cc051564ef4dcafc302d051d723d6d2e` |
-| emergency-kill                       | `e395906040ea74cbf23c44a6162851b98c9df974cb5ce2bc3e6129167505e5ea` |
+| emergency-kill                       | `9ff1e85f95f975c4db3cd578783d01fe2288de024128b1409afdbe7662b7e6a6` |
 | emergency-disable-jobs               | `367efa2975e081b3323086ed9d39c2cba62598bd7aee0da96c1b070d7ec2d0c3` |
 
 ## Verification ledger
@@ -440,4 +564,4 @@ M  vitest.config.ts
 
 ## Conclusion
 
-READY FOR THIRD INDEPENDENT REVIEW — NOT AUTHORIZED FOR MERGE, MIGRATION APPLY, PRODUCTION DEPLOYMENT OR ACTIVATION
+BLOCKED — CODE-LEVEL ACCEPTANCE CRITERIA NOT MET
