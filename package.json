@@ -22,6 +22,8 @@
     "backup:critical": "node scripts/export-critical-tables.mjs",
     "backup:golden:prove-reference": "node scripts/prepare-schema-golden-reference-proof.mjs",
     "backup:golden:update": "node scripts/capture-backup-schema-golden.mjs",
+    "backup:golden:bootstrap": "node scripts/bootstrap-schema-goldens.mjs",
+    "backup:golden:verify-candidate": "node scripts/verify-schema-golden-candidate-artifact.mjs",
     "backup:contracts:generate": "node scripts/generate-backup-contracts.mjs --write",
     "backup:contracts:verify": "node scripts/generate-backup-contracts.mjs --verify",
     "backup:restore:test": "node scripts/verify-backup-restore.mjs",

@@ -2,6 +2,23 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## PR #21 bounded CI closure pass (2026-08-12)
+
+Safety status: exactly one diagnostic cycle and at most two repair/CI cycles.
+Repository and ephemeral CI only; no Hosted, Production, scheduler, provider,
+Canary, broker, Vault, Cron, extension, migration-history, or trading action.
+
+- [x] Verify Draft PR #21, branch, remote, exact clean isolated HEAD `26e7e41b31846a8535280c1d9121a98c7f551f57`, and preserve the unrelated shared checkout.
+- [x] Review the pinned Supabase CLI 2.113.0 release and current official local-stack guidance before changing the diagnostic/bootstrap path.
+- [x] Buffer `supabase start` output privately and emit only categorized allowlisted evidence; prove synthetic secrets never reach output, errors, summaries, or artifacts.
+- [x] Repair the five-argument schema-Golden capture parser and add positive/negative parser tests.
+- [ ] Build PRE and POST twice from four fresh, seed-free, migration-exact Reference clusters with unique identities/ports and exact CLI/image/contract provenance; compare normalized candidates byte-for-byte.
+- [x] Add a manual, secret-free Golden bootstrap workflow that uploads only two row-free candidates plus harmless provenance and never commits automatically.
+- [x] Keep application gates running independently while Golden/DR verification remains a required red job.
+- [ ] Push the diagnostic commit, inspect exactly one categorized `supabase start` result, and repair only its demonstrated cause.
+- [ ] Inspect the generated artifact, commit exactly both Golden JSON files, regenerate byte manifests/report, and use no more than two repair/CI cycles.
+- [ ] Record exact final jobs, test counts, Golden hashes, Preview target/SHA, failure category, non-execution evidence, and the bounded final status.
+
 ## PR #21 fourth and final activation-readiness remediation (2026-08-12)
 
 Safety status: repository hardening only. No Hosted migration/history repair,

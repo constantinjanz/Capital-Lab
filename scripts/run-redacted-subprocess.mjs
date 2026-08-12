@@ -7,8 +7,10 @@ import {
   resolvedArguments,
   resolveNativeExecutable,
 } from './lib/safe-process.mjs'
+import { buildRedactedSupabaseDiagnostic } from './lib/redacted-supabase-diagnostic.mjs'
 
 const PROCESS_TIMEOUT_MS = 10 * 60 * 1000
+const PRIVATE_OUTPUT_LIMIT_BYTES = 1024 * 1024
 const SAFE_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/u
 
 const SENSITIVE = [
@@ -77,6 +79,14 @@ export async function runRedacted(argv = process.argv.slice(2)) {
   const outcome = await new Promise((resolve) => {
     let settled = false
     let timedOut = false
+    let forceTimer
+    let privateOutput = Buffer.alloc(0)
+    const retainPrivateOutput = (chunk) => {
+      privateOutput = Buffer.concat([
+        privateOutput,
+        Buffer.from(chunk),
+      ]).subarray(-PRIVATE_OUTPUT_LIMIT_BYTES)
+    }
     const child = spawn(
       executable.command,
       resolvedArguments(executable, args),
@@ -87,43 +97,44 @@ export async function runRedacted(argv = process.argv.slice(2)) {
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     )
-    // Consume both streams without ever forwarding credential-bearing output.
-    child.stdout.on('data', () => {})
-    child.stderr.on('data', () => {})
+    // Buffer a bounded diagnostic tail privately. It is classified but never
+    // forwarded, persisted, included in an error, or returned to the caller.
+    child.stdout.on('data', retainPrivateOutput)
+    child.stderr.on('data', retainPrivateOutput)
     const timer = setTimeout(() => {
       timedOut = true
       child.kill('SIGTERM')
+      forceTimer = setTimeout(() => child.kill('SIGKILL'), 5_000)
     }, PROCESS_TIMEOUT_MS)
     child.once('error', () => {
       if (settled) return
       settled = true
       clearTimeout(timer)
-      resolve({ code: null, signal: null, timedOut, spawnError: true })
+      clearTimeout(forceTimer)
+      resolve({
+        code: null,
+        signal: null,
+        timedOut,
+        spawnError: true,
+        privateOutput,
+      })
     })
     child.once('exit', (code, signal) => {
       if (settled) return
       settled = true
       clearTimeout(timer)
-      resolve({ code, signal, timedOut, spawnError: false })
+      clearTimeout(forceTimer)
+      resolve({ code, signal, timedOut, spawnError: false, privateOutput })
     })
   })
-  const success =
-    outcome.code === 0 &&
-    !outcome.signal &&
-    !outcome.timedOut &&
-    !outcome.spawnError
-  const evidence = {
-    status: success
-      ? 'redacted_subprocess_ready'
-      : 'redacted_subprocess_failed',
-    operation: requested.id,
-    outputForwarded: false,
-    timedOut: outcome.timedOut,
-    signal: outcome.signal,
-    exitCode: outcome.code,
-  }
-  process.stdout.write(`${JSON.stringify(evidence)}\n`)
-  return success ? 0 : 1
+  const diagnostic = buildRedactedSupabaseDiagnostic(
+    outcome.privateOutput.toString('utf8'),
+    outcome,
+  )
+  process.stdout.write(`${JSON.stringify(diagnostic)}\n`)
+  return diagnostic.exit_code === 0 && !diagnostic.timeout && !diagnostic.signal
+    ? 0
+    : 1
 }
 
 if (
@@ -133,7 +144,9 @@ if (
   await runRedacted()
     .then((code) => process.exit(code))
     .catch(() => {
-      process.stderr.write('Redacted subprocess failed closed before launch.\n')
+      process.stdout.write(
+        `${JSON.stringify(buildRedactedSupabaseDiagnostic('', { code: 2, signal: null, timedOut: false, spawnError: false }))}\n`,
+      )
       process.exit(2)
     })
 }

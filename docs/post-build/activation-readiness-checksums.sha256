@@ -61,7 +61,7 @@ ed05be65988c7c10e29fa8b410ce7f73d92569d999dc1419169838225434ebfe  A  scripts/run
 746aad987e55c09899e6cd22795538ff39bf260faa41895374dc054e044efff1  A  scripts/run-openai-paid-canary-child.mjs
 73b731da54da7966212a2f5f925f5e28ed9ba5d6aec5374a3c44487afc00c8a9  M  scripts/run-openai-paid-canary.ts
 c56595bdb1e287a5c5dbd094d989ba75a913d11bf77714941c1ec97092c7fed8  A  scripts/run-redacted-subprocess.mjs
-282ad0399e350990cbecb6f78baf27ead77e2801d599c3e7f99bbbe631a57c45  A  scripts/run-redacted-subprocess.test.ts
+f3c152a08f26c969e857c8ee215bbafa82ce111455099b571e20263e57fcd8d5  A  scripts/run-redacted-subprocess.test.ts
 96134471e03b96068d5a2d49e32f2e9a8071bc6a4bc025ae778354538a6fb196  A  scripts/vercel-deployment-proof.mjs
 c5b59dca4b9cf9e072e824d651cb794f4c6c194083e3621582db71e2448817ab  A  scripts/vercel-deployment-proof.test.ts
 1147aeb661aa80210e134d0c9355ec73665dbb335cb4f1e166c56bc870684861  M  scripts/verify-backup-restore.mjs

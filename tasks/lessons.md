@@ -1,5 +1,8 @@
 # Lessons
 
+- A suppressed infrastructure log is not actionable evidence. Buffer it only in bounded process memory, classify against a fixed diagnostic enum, persist only allowlisted fields, and test the entire serialized evidence path with synthetic secrets.
+- Independent schema Goldens need a runnable bootstrap closure, not just a capture script: exact clean HEAD, frozen migration bytes, pinned CLI and exact official image, fresh isolated clusters, double-build byte reproducibility, row-free artifacts, and verify-only normal CI.
+
 - A deployment control-plane proof establishes identity only; runtime flags must be observed once from the immutable deployment URL and must never be derived from a requested role or echoed client claims.
 - A schema golden is independent evidence only when generated from a fresh seed-free reference cluster. Never derive or refresh it from the source being backed up, the restore target, or Hosted production.
 - A restore-isolation proof must bind distinct server system identifiers plus a run-specific container, database role, random disposable marker, and exact cleanup scope; two databases or aliases on one cluster are not isolation.

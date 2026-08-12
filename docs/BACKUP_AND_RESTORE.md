@@ -5,7 +5,7 @@ Capital Lab has two compact, sorted, versioned disaster-recovery contracts:
 - `supabase/backup/pre-activation.v1.json` describes the exact 32-migration
   Hosted baseline before any of the three pending Activation/remediation
   migrations. It references no object introduced by those migrations.
-- `supabase/backup/post-activation.v1.json` describes all 35 migrations and the
+- `supabase/backup/post-activation.v1.json` describes all 36 migrations and the
   complete post-migration Activation/Canary evidence schema.
 
 Each relation contract is paired with a committed independent
@@ -15,40 +15,35 @@ the reviewed migrations. Normal CI is verify-only. A backup source and its
 restore target are both compared with the same golden, so copying the same
 schema drift into both databases cannot pass.
 
-Golden capture has a separate, fail-closed provenance gate. First build a
-fresh seed-free local Supabase reference stack under a run-specific project ID
-`capital-lab-reference-$runId`; it must expose only its exact loopback port and
-must contain the reviewed migration history with zero Auth/application users.
-Then retain the proof hash outside the repository. The update command queries
-both that reference cluster and a separately identified Source A and rejects a
-shared PostgreSQL system or database identity.
+Golden capture has a separate, fail-closed bootstrap closure. Manually dispatch
+`Schema Golden Bootstrap Candidate` with one exact clean commit SHA. The
+workflow uses Node 24 and Supabase CLI `2.113.0`, whose reviewed stack contract
+pins the exact official
+`public.ecr.aws/supabase/postgres:17.6.1.158` image. It never accepts a Hosted,
+Source, Backup, or Restore database URL.
 
-```powershell
-$runId = 'run-<reviewed-random-id>'
-$proof = 'D:\Capital-Lab-Temp\schema-reference-proof.json'
-$golden = 'D:\Capital-Lab-Temp\pre-activation.schema-golden.v2.json'
-$env:CAPITAL_LAB_REFERENCE_RUN_ID = $runId
-$env:CAPITAL_LAB_REFERENCE_DATABASE_URL = '<redacted loopback reference URL>'
-$env:CAPITAL_LAB_BACKUP_SOURCE_DATABASE_URL = '<redacted distinct loopback Source-A URL>'
-try {
-  node scripts/prepare-schema-golden-reference-proof.mjs `
-    --contract=pre --proof=$proof
-  $proofHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $proof).Hash.ToLowerInvariant()
-  node scripts/capture-backup-schema-golden.mjs `
-    --contract=pre --output=$golden `
-    --reference-proof=$proof `
-    --expected-reference-proof-sha256=$proofHash `
-    --confirm="UPDATE REVIEWED CAPITAL LAB SCHEMA GOLDEN"
-} finally {
-  Remove-Item Env:\CAPITAL_LAB_REFERENCE_RUN_ID -ErrorAction SilentlyContinue
-  Remove-Item Env:\CAPITAL_LAB_REFERENCE_DATABASE_URL -ErrorAction SilentlyContinue
-  Remove-Item Env:\CAPITAL_LAB_BACKUP_SOURCE_DATABASE_URL -ErrorAction SilentlyContinue
-}
-```
+For each contract the workflow creates two fresh seed-free Reference stacks
+with different project IDs, ports, container IDs, server identities, and
+database identities. PRE receives exactly the 32 frozen PRE migrations; POST
+receives the complete 36-migration set. Each migration is checked against its
+contract checksum before the first stack starts. The two independently
+captured candidates must be byte-identical. Cleanup is limited to run-owned
+containers and directories and runs on every exit path.
 
-Repeat with `--contract=post` on a separately migration-built post-activation
-reference stack. Normal CI invokes only `verify-schema-golden-contracts.mjs`;
-it never executes either update command.
+The one-day artifact contains exactly:
+
+- `pre-activation.schema-golden.v2.json`;
+- `post-activation.schema-golden.v2.json`;
+- `schema-golden-bootstrap-provenance.v1.json`, containing only commit,
+  contract, migration-set, relation-set, schema, image, cluster, and evidence
+  hashes and an explicit `outputContainsRowData=false` assertion.
+
+The workflow verifies this exact file/key set before upload and never commits,
+approves, or deploys anything. A reviewer must inspect the artifact and commit
+exactly the two Golden JSON files; the transient provenance file remains
+outside the repository. Normal CI invokes only
+`verify-schema-golden-contracts.mjs`; it never executes the bootstrap or update
+commands.
 
 These generated contracts are the only relation source of truth for the
 exporter, manifest writer, restore verifier, row ordering, full-row hashes,

@@ -13,6 +13,7 @@ import {
   sha256,
 } from './critical-backup-contract.mjs'
 import { buildSchemaGoldenReferenceProof } from './lib/schema-golden-reference-proof.mjs'
+import { loadSchemaGoldenBootstrapContract } from './lib/schema-golden-bootstrap-contract.mjs'
 import {
   newExternalPath,
   verifiedExternalFile,
@@ -163,6 +164,8 @@ async function main() {
   )
   const { contract, sha256: relationContractSha256 } =
     await loadCriticalRelationContract(contractPath, contractKind)
+  const { contract: bootstrapContract, sha256: bootstrapContractSha256 } =
+    await loadSchemaGoldenBootstrapContract(workspace)
   const actual = await evidence(
     connection.libpqEnv,
     buildSchemaGoldenEvidenceSql(contract),
@@ -218,10 +221,13 @@ async function main() {
     databaseFingerprint: sha256(identity.databaseIdentity),
     containerFingerprint: sha256(inspection.Id),
     containerImage: inspection.Config?.Image,
+    containerImageRegistry: bootstrapContract.postgresImageRegistry,
+    supabaseCliVersion: bootstrapContract.supabaseCliVersion,
+    bootstrapContractSha256,
     seedFree: true,
     builtFromReviewedMigrations: true,
     capturedAt: new Date().toISOString(),
-  })
+  }, bootstrapContract)
   const output = await newExternalPath(workspace, requested.proof)
   const bytes = Buffer.from(`${canonicalJson(proof)}\n`)
   await writeFile(output, bytes, { mode: 0o600, flag: 'wx' })

@@ -11,7 +11,7 @@ const referenceIdentity = {
   serverIdentity: '170000:reference-system',
   databaseIdentity: '170000:postgres:reference-system',
 }
-const sourceIdentity = {
+const peerReferenceIdentity = {
   databaseRole: 'postgres',
   serverIdentity: '170000:source-system',
   databaseIdentity: '170000:postgres:source-system',
@@ -31,50 +31,61 @@ const base = {
   databaseFingerprint: sha256(referenceIdentity.databaseIdentity),
   containerFingerprint: 'd'.repeat(64),
   containerImage: 'public.ecr.aws/supabase/postgres:17.6.1.001',
+  containerImageRegistry: 'public.ecr.aws/supabase',
+  supabaseCliVersion: '2.113.0',
+  bootstrapContractSha256: 'e'.repeat(64),
   seedFree: true,
   builtFromReviewedMigrations: true,
   capturedAt: '2026-08-12T12:00:00.000Z',
+}
+const bootstrapContract = {
+  contractVersion: 'capital-lab-schema-golden-bootstrap-v1',
+  postgresImage: base.containerImage,
+  postgresImageRegistry: base.containerImageRegistry,
+  supabaseCliVersion: base.supabaseCliVersion,
 }
 const expected = {
   contractKind: base.contractKind,
   gitCommitSha: base.gitCommitSha,
   relationContractSha256: base.relationContractSha256,
   migrationHistorySha256: base.migrationHistorySha256,
+  bootstrapContract,
+  bootstrapContractSha256: base.bootstrapContractSha256,
   sha256,
 }
 const invalidProvenance: Array<
   [
     string,
     typeof referenceIdentity,
-    typeof sourceIdentity,
+    typeof peerReferenceIdentity,
     Partial<typeof base>?,
   ]
 > = [
-  ['same server', sourceIdentity, sourceIdentity],
-  ['seeded', referenceIdentity, sourceIdentity, { seedFree: false }],
+  ['same server', peerReferenceIdentity, peerReferenceIdentity],
+  ['seeded', referenceIdentity, peerReferenceIdentity, { seedFree: false }],
   [
     'not migration built',
     referenceIdentity,
-    sourceIdentity,
+    peerReferenceIdentity,
     { builtFromReviewedMigrations: false },
   ],
   [
     'wrong contract',
     referenceIdentity,
-    sourceIdentity,
+    peerReferenceIdentity,
     { contractKind: 'post_activation' },
   ],
 ]
 
 describe('independent schema-golden reference proof', () => {
-  it('binds a seed-free migration-built cluster distinct from Source A', () => {
-    const proof = buildSchemaGoldenReferenceProof(base)
+  it('binds one seed-free migration-built cluster to a distinct peer Reference cluster', () => {
+    const proof = buildSchemaGoldenReferenceProof(base, bootstrapContract)
     expect(() =>
       validateSchemaGoldenReferenceProof(
         proof,
         expected,
         referenceIdentity,
-        sourceIdentity,
+        peerReferenceIdentity,
       ),
     ).not.toThrow()
   })
@@ -83,7 +94,10 @@ describe('independent schema-golden reference proof', () => {
     'rejects %s proof provenance',
     (_label, reference, source, mutation = {}) => {
       expect(() => {
-        const proof = buildSchemaGoldenReferenceProof({ ...base, ...mutation })
+        const proof = buildSchemaGoldenReferenceProof(
+          { ...base, ...mutation },
+          bootstrapContract,
+        )
         validateSchemaGoldenReferenceProof(proof, expected, reference, source)
       }).toThrow()
     },

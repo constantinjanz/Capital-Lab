@@ -12,3 +12,4 @@ supabase/activation/phase-contract.json
 supabase/activation/project-identity.v1.json
 supabase/backup/pre-activation.v1.json
 supabase/backup/post-activation.v1.json
+supabase/backup/schema-golden-bootstrap.v1.json

@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { chmod, readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import {
   buildSchemaGoldenEvidenceSql,
@@ -12,6 +13,7 @@ import {
   sha256,
 } from './critical-backup-contract.mjs'
 import { validateSchemaGoldenReferenceProof } from './lib/schema-golden-reference-proof.mjs'
+import { loadSchemaGoldenBootstrapContract } from './lib/schema-golden-bootstrap-contract.mjs'
 import {
   resolvedArguments,
   resolveNativeExecutable,
@@ -24,8 +26,8 @@ import {
 
 const CONFIRMATION = 'UPDATE REVIEWED CAPITAL LAB SCHEMA GOLDEN'
 
-function options() {
-  const entries = process.argv.slice(2).map((argument) => {
+export function parseSchemaGoldenCaptureOptions(argv) {
+  const entries = argv.map((argument) => {
     const match =
       /^--(confirm|contract|expected-reference-proof-sha256|output|reference-proof)=(.+)$/u.exec(
         argument,
@@ -36,7 +38,7 @@ function options() {
   const parsed = Object.fromEntries(entries)
   if (
     entries.length !== 5 ||
-    new Set(entries.map(([key]) => key)).size !== 3 ||
+    new Set(entries.map(([key]) => key)).size !== 5 ||
     !['pre', 'post'].includes(parsed.contract) ||
     parsed.confirm !== CONFIRMATION ||
     !/^[0-9a-f]{64}$/u.test(parsed['expected-reference-proof-sha256'] ?? '')
@@ -119,17 +121,18 @@ async function evidence(connectionEnv, sql) {
 }
 
 async function main() {
-  const requested = options()
+  const requested = parseSchemaGoldenCaptureOptions(process.argv.slice(2))
   const workspace = await realpath(process.cwd())
   if (git(['status', '--porcelain=v1', '--untracked-files=all'], workspace)) {
     throw new Error('Schema-golden capture requires a clean Working Tree')
   }
   const output = await newExternalPath(workspace, requested.output)
   const databaseUrl = process.env.CAPITAL_LAB_REFERENCE_DATABASE_URL
-  const sourceDatabaseUrl = process.env.CAPITAL_LAB_BACKUP_SOURCE_DATABASE_URL
-  if (!databaseUrl || !sourceDatabaseUrl)
+  const peerReferenceDatabaseUrl =
+    process.env.CAPITAL_LAB_GOLDEN_PEER_REFERENCE_DATABASE_URL
+  if (!databaseUrl || !peerReferenceDatabaseUrl)
     throw new Error(
-      'Reference and distinct Source-A database URLs are required and never printed',
+      'Two distinct Reference database URLs are required and never printed',
     )
   const contractKind =
     requested.contract === 'pre' ? 'pre_activation' : 'post_activation'
@@ -144,9 +147,12 @@ async function main() {
   const referenceConnection = postgresUrlToLibpqEnv(databaseUrl, {
     localOnly: true,
   })
-  const sourceConnection = postgresUrlToLibpqEnv(sourceDatabaseUrl, {
-    localOnly: true,
-  })
+  const peerReferenceConnection = postgresUrlToLibpqEnv(
+    peerReferenceDatabaseUrl,
+    {
+      localOnly: true,
+    },
+  )
   const actual = await evidence(
     referenceConnection.libpqEnv,
     buildSchemaGoldenEvidenceSql(contract),
@@ -186,10 +192,12 @@ async function main() {
     referenceConnection.libpqEnv,
     buildServerIdentitySql(),
   )
-  const sourceIdentity = await evidence(
-    sourceConnection.libpqEnv,
+  const peerReferenceIdentity = await evidence(
+    peerReferenceConnection.libpqEnv,
     buildServerIdentitySql(),
   )
+  const { contract: bootstrapContract, sha256: bootstrapContractSha256 } =
+    await loadSchemaGoldenBootstrapContract(workspace)
   validateSchemaGoldenReferenceProof(
     referenceProof,
     {
@@ -197,10 +205,12 @@ async function main() {
       gitCommitSha: git(['rev-parse', 'HEAD'], workspace),
       relationContractSha256,
       migrationHistorySha256: actual.migrationHistorySha256,
+      bootstrapContract,
+      bootstrapContractSha256,
       sha256,
     },
     referenceIdentity,
-    sourceIdentity,
+    peerReferenceIdentity,
   )
   if (
     referenceProof.hostname !== referenceConnection.hostname ||
@@ -229,11 +239,16 @@ async function main() {
   )
 }
 
-await main().catch((error) => {
-  console.error(
-    error instanceof Error
-      ? error.message
-      : 'Schema-golden capture failed closed',
-  )
-  process.exit(1)
-})
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
+  await main().catch((error) => {
+    console.error(
+      error instanceof Error
+        ? error.message
+        : 'Schema-golden capture failed closed',
+    )
+    process.exit(1)
+  })
+}

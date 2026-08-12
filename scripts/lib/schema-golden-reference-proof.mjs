@@ -15,9 +15,9 @@ function canonical(value) {
   return JSON.stringify(value)
 }
 
-export function buildSchemaGoldenReferenceProof(input) {
+export function buildSchemaGoldenReferenceProof(input, bootstrap) {
   const proof = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     contractKind: input.contractKind,
     runId: input.runId,
     projectId: input.projectId,
@@ -32,20 +32,23 @@ export function buildSchemaGoldenReferenceProof(input) {
     databaseFingerprint: input.databaseFingerprint,
     containerFingerprint: input.containerFingerprint,
     containerImage: input.containerImage,
+    containerImageRegistry: input.containerImageRegistry,
+    supabaseCliVersion: input.supabaseCliVersion,
+    bootstrapContractSha256: input.bootstrapContractSha256,
     seedFree: input.seedFree,
     builtFromReviewedMigrations: input.builtFromReviewedMigrations,
     capturedAt: input.capturedAt,
   }
-  validateShape(proof)
+  validateShape(proof, bootstrap)
   return {
     ...proof,
     evidenceSha256: createHash('sha256').update(canonical(proof)).digest('hex'),
   }
 }
 
-function validateShape(proof) {
+function validateShape(proof, bootstrap) {
   if (
-    proof?.schemaVersion !== 1 ||
+    proof?.schemaVersion !== 2 ||
     !['pre_activation', 'post_activation'].includes(proof?.contractKind) ||
     !RUN_ID.test(proof?.runId ?? '') ||
     proof?.projectId !== `capital-lab-reference-${proof.runId}` ||
@@ -59,9 +62,10 @@ function validateShape(proof) {
     !HASH.test(proof?.serverFingerprint ?? '') ||
     !HASH.test(proof?.databaseFingerprint ?? '') ||
     !HASH.test(proof?.containerFingerprint ?? '') ||
-    !/^public\.ecr\.aws\/supabase\/postgres:[a-zA-Z0-9._-]{3,80}$/u.test(
-      proof?.containerImage ?? '',
-    ) ||
+    proof?.containerImage !== bootstrap?.postgresImage ||
+    proof?.containerImageRegistry !== bootstrap?.postgresImageRegistry ||
+    proof?.supabaseCliVersion !== bootstrap?.supabaseCliVersion ||
+    !HASH.test(proof?.bootstrapContractSha256 ?? '') ||
     proof?.seedFree !== true ||
     proof?.builtFromReviewedMigrations !== true ||
     Number.isNaN(Date.parse(proof?.capturedAt ?? ''))
@@ -74,10 +78,10 @@ export function validateSchemaGoldenReferenceProof(
   proof,
   expected,
   referenceIdentity,
-  sourceIdentity,
+  peerReferenceIdentity,
 ) {
   const { evidenceSha256, ...payload } = proof ?? {}
-  validateShape(payload)
+  validateShape(payload, expected.bootstrapContract)
   if (
     !HASH.test(evidenceSha256 ?? '') ||
     evidenceSha256 !==
@@ -86,13 +90,15 @@ export function validateSchemaGoldenReferenceProof(
     payload.gitCommitSha !== expected.gitCommitSha ||
     payload.relationContractSha256 !== expected.relationContractSha256 ||
     payload.migrationHistorySha256 !== expected.migrationHistorySha256 ||
+    payload.bootstrapContractSha256 !== expected.bootstrapContractSha256 ||
     payload.databaseRole !== referenceIdentity.databaseRole ||
     payload.serverFingerprint !==
       expected.sha256(referenceIdentity.serverIdentity) ||
     payload.databaseFingerprint !==
       expected.sha256(referenceIdentity.databaseIdentity) ||
-    referenceIdentity.serverIdentity === sourceIdentity.serverIdentity ||
-    referenceIdentity.databaseIdentity === sourceIdentity.databaseIdentity
+    referenceIdentity.serverIdentity === peerReferenceIdentity.serverIdentity ||
+    referenceIdentity.databaseIdentity ===
+      peerReferenceIdentity.databaseIdentity
   ) {
     throw new Error('Schema-golden reference proof is stale or circular')
   }

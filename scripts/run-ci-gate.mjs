@@ -6,6 +6,7 @@ import {
   resolveNativeExecutable,
   resolvedArguments,
 } from './lib/safe-process.mjs'
+import { redactedDiagnosticForCi } from './lib/redacted-supabase-diagnostic.mjs'
 
 const PROCESS_TIMEOUT_MS = 20 * 60 * 1000
 
@@ -108,6 +109,12 @@ const evidence = {
     flaky: flakyTests,
   },
 }
+const redactedDiagnostic = redactedDiagnosticForCi(id, normalizedOutput, {
+  exitCode,
+  signal: outcome.signal,
+  timedOut: outcome.timedOut,
+})
+if (redactedDiagnostic) evidence.redactedDiagnostic = redactedDiagnostic
 
 const evidenceDirectory = path.join(process.cwd(), '.ci-evidence')
 await mkdir(evidenceDirectory, { recursive: true })

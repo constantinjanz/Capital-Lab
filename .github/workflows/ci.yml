@@ -34,10 +34,6 @@ jobs:
           node-version: 24.x
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node scripts/activation-phase-contract.mjs --verify
-      - run: node scripts/generate-backup-contracts.mjs --verify
-      - run: node scripts/verify-schema-golden-contracts.mjs
-      - run: node scripts/handoff-checksums.mjs --verify
       - run: node scripts/run-ci-gate.mjs --id format -- pnpm format:check
       - run: node scripts/run-ci-gate.mjs --id lint -- pnpm lint
       - run: node scripts/run-ci-gate.mjs --id typecheck -- pnpm typecheck
@@ -55,6 +51,33 @@ jobs:
           path: .ci-evidence/*.json
           include-hidden-files: true
           if-no-files-found: error
+
+  disaster-recovery-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact clean checkout
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain)"
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: 24.x
+      - name: Verify activation phase contracts
+        run: node scripts/activation-phase-contract.mjs --verify
+      - name: Verify backup relation contracts
+        run: node scripts/generate-backup-contracts.mjs --verify
+      - name: Verify committed independent schema Goldens
+        run: node scripts/verify-schema-golden-contracts.mjs
+      - name: Verify complete handoff byte manifest
+        if: always()
+        run: node scripts/handoff-checksums.mjs --verify
 
   database:
     runs-on: ubuntu-latest
@@ -290,7 +313,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Native Windows subprocess and path gates
-        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/lib/held-files.test.ts scripts/lib/safe-artifact-path.test.ts scripts/lib/credential-scan-safety.test.ts scripts/lib/schema-golden-reference-proof.test.ts scripts/lib/mvcc-race-control.test.ts scripts/run-activation-phase.test.ts scripts/run-database-tests.test.ts scripts/run-emergency-kill.test.ts scripts/run-redacted-subprocess.test.ts scripts/migration-rehearsal-contract.test.ts scripts/critical-backup-contract.test.ts scripts/local-supabase-target-proof.test.ts scripts/prepare-seed-free-local-restore-target.test.ts
+        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/lib/held-files.test.ts scripts/lib/safe-artifact-path.test.ts scripts/lib/credential-scan-safety.test.ts scripts/lib/schema-golden-reference-proof.test.ts scripts/lib/mvcc-race-control.test.ts scripts/run-activation-phase.test.ts scripts/run-database-tests.test.ts scripts/run-emergency-kill.test.ts scripts/run-redacted-subprocess.test.ts scripts/migration-rehearsal-contract.test.ts scripts/critical-backup-contract.test.ts scripts/local-supabase-target-proof.test.ts scripts/prepare-seed-free-local-restore-target.test.ts scripts/capture-backup-schema-golden.test.ts scripts/bootstrap-schema-goldens.test.ts scripts/verify-schema-golden-candidate-artifact.test.ts
       - name: Parse every Windows-sensitive subprocess wrapper
         run: |
           node --check scripts/export-critical-tables.mjs
@@ -305,4 +328,6 @@ jobs:
           node --check scripts/run-database-tests.mjs
           node --check scripts/prepare-schema-golden-reference-proof.mjs
           node --check scripts/capture-backup-schema-golden.mjs
+          node --check scripts/bootstrap-schema-goldens.mjs
+          node --check scripts/verify-schema-golden-candidate-artifact.mjs
           node --check scripts/run-emergency-bootstrap.mjs
