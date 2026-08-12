@@ -122,6 +122,7 @@ create table private.activation_expected_mutation_rules (
 
 alter table private.activation_mutation_evidence
   add column operation_id uuid,
+  add column expected_mutation boolean not null default false,
   add column row_identity jsonb check (
     row_identity is null or jsonb_typeof(row_identity) = 'object'
   ),
@@ -1358,11 +1359,12 @@ begin
   where campaign_id = campaign.id and deployment_role = 'no_ai_runtime_enabled';
   if campaign.state = 'runtime_deployment_verified' then
     if not exists (
-      select 1 from private.no_ai_shadow_dry_run_transitions
-      where dry_run_id = campaign.id and from_state = 'runtime_config_verified'
-        and to_state = 'runtime_deployment_verified'
-        and correlation_id = p_correlation_id
-        and evidence ->> 'operation_id' = p_operation_id::text
+      select 1 from private.no_ai_shadow_dry_run_transitions as transition
+      where transition.dry_run_id = campaign.id
+        and transition.from_state = 'runtime_config_verified'
+        and transition.to_state = 'runtime_deployment_verified'
+        and transition.correlation_id = p_correlation_id
+        and transition.evidence ->> 'operation_id' = p_operation_id::text
     ) then
       raise exception using errcode = '55000', message = 'runtime deployment finalization operation identity drifted';
     end if;
@@ -1515,10 +1517,10 @@ begin
 
   insert into private.activation_mutation_evidence (
     campaign_id, owner_id, relation_name, mutation_kind,
-    operation_id, row_identity, changed_columns
+    operation_id, expected_mutation, row_identity, changed_columns
   ) values (
     campaign.id, campaign.owner_id, tg_table_schema || '.' || tg_table_name,
-    tg_op, context_operation_id,
+    tg_op, context_operation_id, true,
     jsonb_build_object(
       'owner_id', campaign.owner_id,
       'setting_key', case when tg_table_name = 'application_settings' then row_key else null end,
@@ -1685,6 +1687,207 @@ begin
         finalize_not_before_at, statement_timestamp() + interval '300 seconds'
       )
   where id = campaign.id;
+end;
+$$;
+
+create or replace function private.finalize_activation_campaign(
+  p_campaign_id uuid,
+  p_commit_sha text,
+  p_config_version text,
+  p_manifest_sha256 text,
+  p_phase_contract_sha256 text,
+  p_database_fingerprint text,
+  p_operation_id uuid,
+  p_correlation_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  campaign private.no_ai_shadow_dry_runs%rowtype;
+  actual_slots integer;
+  actual_events integer;
+  complete_responses integer;
+  missing_responses integer;
+  invalid_responses integer;
+  forbidden_effects integer;
+  terminal_status text;
+  controls_disabled boolean;
+  terminal_operation private.activation_terminal_operations%rowtype;
+begin
+  campaign := private.assert_activation_context(
+    p_campaign_id, p_commit_sha, p_config_version, p_manifest_sha256,
+    p_phase_contract_sha256, p_database_fingerprint
+  );
+  select * into terminal_operation
+  from private.activation_terminal_operations as operation
+  where operation.campaign_id = campaign.id
+    and operation.operation_kind = 'manual_finalize'
+  for update;
+  if found then
+    if terminal_operation.operation_id <> p_operation_id
+      or terminal_operation.correlation_id <> p_correlation_id
+    then
+      raise exception using errcode = '55000',
+        message = 'manual finalization operation identity drifted';
+    end if;
+    if terminal_operation.status = 'completed' then
+      return (
+        select jsonb_build_object('status', evidence.terminal_status,
+          'expected_slots', evidence.expected_slots,
+          'actual_slots', evidence.actual_slots,
+          'expected_events', evidence.expected_events,
+          'actual_events', evidence.actual_events,
+          'complete_responses', evidence.complete_response_count,
+          'missing_responses', evidence.missing_response_count,
+          'invalid_responses', evidence.invalid_response_count,
+          'forbidden_effects', evidence.forbidden_effect_count,
+          'jobs_inactive', evidence.jobs_inactive, 'reused', true)
+        from private.activation_terminal_evidence as evidence
+        where evidence.campaign_id = campaign.id
+      );
+    end if;
+  else
+    insert into private.activation_terminal_operations (
+      campaign_id, owner_id, operation_kind, operation_id,
+      correlation_id, status
+    ) values (
+      campaign.id, campaign.owner_id, 'manual_finalize', p_operation_id,
+      p_correlation_id, 'claimed'
+    ) returning * into terminal_operation;
+  end if;
+  if campaign.state <> 'auto_stopped' or campaign.stopped_at is null
+    or statement_timestamp() < campaign.stopped_at + interval '300 seconds'
+    or statement_timestamp() < campaign.finalize_not_before_at
+  then
+    raise exception using errcode = '55000',
+      message = 'campaign finalization is too early or in the wrong state';
+  end if;
+  perform private.capture_activation_http_responses();
+  perform private.assert_activation_controls(campaign.id, false);
+  perform set_config('capital_lab.internal_event_write', 'on', true);
+  update private.no_ai_shadow_dry_run_events as event
+  set response_error_class = case
+        when event.pg_net_request_id is null then 'request_not_submitted'
+        else 'transport_evidence_missing'
+      end,
+      response_persisted_at = statement_timestamp(),
+      completed_at = statement_timestamp()
+  where event.dry_run_id = campaign.id
+    and not exists (
+      select 1 from private.activation_http_responses as response
+      where response.request_id = event.request_id
+    );
+  perform set_config('capital_lab.internal_event_write', 'off', true);
+  if exists (
+    select 1 from private.no_ai_shadow_dry_run_events as event
+    where event.dry_run_id = campaign.id and event.completed_at is null
+  ) then
+    raise exception using errcode = '55000',
+      message = 'known request outcomes are not terminally reconciled';
+  end if;
+  perform private.set_activation_jobs_active(
+    campaign.id, false, p_operation_id, p_correlation_id
+  );
+  perform private.assert_activation_job_specs(campaign.id, false);
+  perform private.capture_activation_relation_snapshot(
+    campaign.id, 'terminal', 0
+  );
+  perform private.capture_activation_control_snapshot(
+    campaign.id,
+    (select coalesce(max(snapshot.snapshot_sequence), 0) + 1
+      from private.activation_control_snapshots as snapshot
+      where snapshot.campaign_id = campaign.id)
+  );
+  select count(distinct (event.session_date, event.slot_number)), count(*)
+  into actual_slots, actual_events
+  from private.no_ai_shadow_dry_run_events as event
+  where event.dry_run_id = campaign.id;
+  select count(*) filter (where response.schema_valid),
+    count(*) filter (where response.request_id is null),
+    count(*) filter (
+      where response.request_id is not null and not response.schema_valid
+    )
+  into complete_responses, missing_responses, invalid_responses
+  from private.no_ai_shadow_dry_run_events as event
+  left join private.activation_http_responses as response
+    on response.request_id = event.request_id
+  where event.dry_run_id = campaign.id;
+  select count(*) into forbidden_effects
+  from private.activation_mutation_evidence as mutation
+  where mutation.campaign_id = campaign.id
+    and not mutation.expected_mutation;
+  if not private.activation_snapshots_match(
+    campaign.id, 'pre_dry_run', 0, 'terminal', 0
+  ) then
+    forbidden_effects := forbidden_effects + 1;
+  end if;
+  controls_disabled := not exists (
+    select 1 from public.experiment_controls as control
+    where control.owner_id = campaign.owner_id
+      and (control.scheduler_enabled or control.agent_enabled
+        or not control.emergency_paused)
+  );
+  terminal_status := case
+    when missing_responses > 0 then 'inconclusive'
+    when invalid_responses > 0 or forbidden_effects > 0
+      or actual_slots <> 52 or actual_events <> 104
+      or complete_responses <> 104 or not controls_disabled then 'failed'
+    else 'passed' end;
+  insert into private.activation_terminal_evidence (
+    campaign_id, owner_id, terminal_status, expected_slots, actual_slots,
+    expected_events, actual_events, complete_response_count,
+    missing_response_count, invalid_response_count, forbidden_effect_count,
+    scheduler_controls_disabled, dangerous_controls_disabled, jobs_inactive,
+    evidence
+  ) values (
+    campaign.id, campaign.owner_id, terminal_status, 52, actual_slots,
+    104, actual_events, complete_responses, missing_responses,
+    invalid_responses, forbidden_effects, not campaign.scheduler_control_enabled,
+    controls_disabled, true,
+    jsonb_build_object('operation_id', p_operation_id,
+      'response_source', 'persisted_activation_http_responses',
+      'server_time_enforced', true, 'minimum_stopped_seconds', 300,
+      'relation_state_equal', forbidden_effects = 0,
+      'all_request_outcomes_terminal', true,
+      'missing_transport_outcomes_classified', missing_responses,
+      'expected_mutations_excluded_from_forbidden_count', true)
+  );
+  perform private.transition_no_ai_shadow_dry_run(
+    campaign.id, 'auto_stopped', 'reconciled', 'system',
+    campaign.prepared_commit_sha, campaign.config_version,
+    private.activation_deterministic_uuid(campaign.id, 'transition:reconciled'),
+    jsonb_build_object('complete_responses', complete_responses,
+      'missing_responses', missing_responses,
+      'invalid_responses', invalid_responses)
+  );
+  perform private.transition_no_ai_shadow_dry_run(
+    campaign.id, 'reconciled', terminal_status, 'system',
+    campaign.prepared_commit_sha, campaign.config_version,
+    private.activation_deterministic_uuid(
+      campaign.id, 'transition:' || terminal_status
+    ),
+    jsonb_build_object('reason_code', case terminal_status
+      when 'passed' then null when 'failed' then 'terminal_invariant_failed'
+      else 'transport_evidence_missing' end,
+      'terminal_evidence_persisted', true)
+  );
+  update private.activation_terminal_operations as operation
+  set status = 'completed', completed_at = statement_timestamp(),
+      evidence = jsonb_build_object('terminal_status', terminal_status,
+        'terminal_evidence_persisted', true)
+  where operation.campaign_id = campaign.id
+    and operation.operation_kind = 'manual_finalize'
+    and operation.operation_id = p_operation_id;
+  return jsonb_build_object('status', terminal_status,
+    'expected_slots', 52, 'actual_slots', actual_slots,
+    'expected_events', 104, 'actual_events', actual_events,
+    'complete_responses', complete_responses,
+    'missing_responses', missing_responses,
+    'invalid_responses', invalid_responses,
+    'forbidden_effects', forbidden_effects, 'jobs_inactive', true);
 end;
 $$;
 

@@ -12,6 +12,11 @@ import {
   resolvedArguments,
   resolveNativeExecutable,
 } from './lib/safe-process.mjs'
+import {
+  newExternalPath,
+  verifiedExternalDirectory,
+  verifiedExternalFile,
+} from './lib/safe-artifact-path.mjs'
 
 const PROCESS_TIMEOUT_MS = 120_000
 
@@ -343,7 +348,8 @@ async function verify(credentialsPath, workdir) {
   }
 }
 
-async function faults(credentialsPath) {
+async function faults(credentialsPath, workdir) {
+  await localStatus(workdir, 55321)
   const fixture = validateSyntheticAuthFixture(
     JSON.parse(await readFile(credentialsPath, 'utf8')),
   )
@@ -371,11 +377,20 @@ async function faults(credentialsPath) {
 
 async function main() {
   const requested = options()
-  const credentialsPath = path.resolve(requested.credentials)
+  const workspace = await realpath(process.cwd())
+  const credentialsPath =
+    requested.mode === 'prepare'
+      ? await newExternalPath(workspace, requested.credentials)
+      : await verifiedExternalFile(workspace, requested.credentials)
   if (requested.mode === 'prepare') await prepare(credentialsPath)
-  else if (requested.mode === 'verify') {
-    await verify(credentialsPath, requested['supabase-workdir'])
-  } else await faults(credentialsPath)
+  else {
+    const workdir = await verifiedExternalDirectory(
+      workspace,
+      requested['supabase-workdir'],
+    )
+    if (requested.mode === 'verify') await verify(credentialsPath, workdir)
+    else await faults(credentialsPath, workdir)
+  }
   process.stdout.write(
     `${JSON.stringify({ status: requested.mode === 'prepare' ? 'synthetic_auth_created' : requested.mode === 'verify' ? 'synthetic_auth_login_and_rls_verified' : 'synthetic_auth_faults_detected', userCount: 2, rlsAllowCount: requested.mode === 'verify' ? 1 : null, rlsDenyCount: requested.mode === 'verify' ? 1 : null, secretValuesLogged: false })}\n`,
   )

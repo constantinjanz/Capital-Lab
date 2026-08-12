@@ -30,7 +30,7 @@ fixtures pass.
 - [ ] Close break-glass integrity over the entrypoint and every transitive helper/SQL/template/config/wrapper using realpath plus exact HEAD Git-blob bytes before database/network access while allowing unrelated dirt.
 - [ ] Replace table-level side-effect exceptions with row/column/operation/transition/cardinality-bounded contracts and adversarial tests for same-count mutation, wrong campaign/column, trigger mutation, insert-delete compensation and unclassified relations.
 - [ ] Require strong source/target cluster identity, run ID, target marker, role/database/fingerprint and source-not-target proof before every destructive process; prove zero spawn on failed validation.
-- [ ] Revalidate backup/artifact realpaths and parents against symlink/junction/case escapes, use restrictive temporary artifacts, redact stdout and stderr, distinguish backup/restore/schema-golden/activation status, and cover encoded URLs/JWT/header/token patterns.
+- [x] Revalidate backup/artifact realpaths and parents against symlink/junction/case escapes, use restrictive temporary artifacts, redact stdout and stderr, distinguish backup/restore/schema-golden/activation status, and cover encoded URLs/JWT/header/token patterns.
 - [ ] Add a forward-only migration through the pinned Supabase CLI workflow without modifying the 32 Hosted-applied migration bytes; update reset, pgTAP, rollback rehearsal and grants/RLS contracts.
 
 ### Independent review, exact-head gates and handoff
@@ -42,9 +42,10 @@ fixtures pass.
 ### Verification checkpoint 2026-08-12
 
 - [x] Focused runtime, backup/Auth, break-glass, filesystem, redaction and contract suites passed: 12 files / 113 tests.
-- [x] Complete Vitest suite passed: 91 files / 676 tests.
+- [x] Complete Vitest suite passed after canonical Auth-artifact path hardening: 91 files / 678 tests.
 - [x] Prettier, zero-warning ESLint and strict TypeScript passed after the fourth-remediation implementation changes.
 - [x] PAPER-only safety scan and redacted credential scan passed across the worktree and 100 commits with zero findings.
+- [x] Intermediate exact-head CI `31594018211` passed Windows subprocess, 4/4 mock Playwright flows, Supabase CLI/start, rollback rehearsal and reset; pgTAP narrowed the remaining database work to an ambiguous retry reference plus incorrect counting of immutable expected mutations as forbidden effects. Both are corrected forward-only with explicit expected/forbidden evidence semantics and new assertions; replacement exact-head CI is pending.
 - [ ] Local database gates remain unclaimed: this workstation has no Docker-compatible runtime or local PostgreSQL server.
 - [ ] Replace the pre/post schema-golden inputs with outputs generated from a fresh seed-free migration-built local stack; Hosted/source-derived or placeholder goldens are prohibited.
 - [ ] Re-run all exact-head application, browser, database, dual-stack restore and CI gates after the schema goldens and final bytes are complete.

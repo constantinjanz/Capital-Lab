@@ -69,6 +69,24 @@ export async function verifiedExternalFile(workspace, requested) {
   return canonical
 }
 
+export async function verifiedExternalDirectory(workspace, requested) {
+  const repository = await realpath(workspace)
+  const lexical = path.resolve(requested)
+  const canonical = await realpath(lexical)
+  const metadata = await lstat(lexical)
+  if (
+    !metadata.isDirectory() ||
+    metadata.isSymbolicLink() ||
+    pathIsInside(repository, canonical) ||
+    normalized(lexical) !== normalized(canonical)
+  ) {
+    throw new Error(
+      'Sensitive artifact directory is not a canonical external directory',
+    )
+  }
+  return canonical
+}
+
 export async function verifiedDirectChild(directory, requested) {
   const parent = await realpath(directory)
   const lexical = path.resolve(requested)

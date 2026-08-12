@@ -112,28 +112,57 @@ jobs:
           disposable_marker="$(node -e "process.stdout.write(require('node:crypto').randomUUID())")"
           export CAPITAL_LAB_RESTORE_RUN_ID="$restore_run_id"
           export CAPITAL_LAB_RESTORE_DISPOSABLE_MARKER="$disposable_marker"
+          [[ "$restore_run_id" =~ ^run-[0-9]+-[0-9]+$ ]]
+          [[ "$artifact_root" == "$RUNNER_TEMP"/capital-lab-artifacts.* ]]
+          [[ "$hold_root" == "$RUNNER_TEMP"/capital-lab-migrations.* ]]
+          [[ "$target_workdir" == "$RUNNER_TEMP"/capital-lab-restore-run-* ]]
           node scripts/create-local-restore-stack.mjs "--run-id=${restore_run_id}" "--output-dir=${target_workdir}"
           target_running=false
           restore_pending() {
+            local restore_failed=0
             for file in "$hold_root"/*.sql; do
-              if [ -f "$file" ]; then mv "$file" supabase/migrations/; fi
+              if [ -f "$file" ] && ! mv "$file" supabase/migrations/; then
+                restore_failed=1
+              fi
             done
+            return "$restore_failed"
           }
           cleanup() {
-            restore_pending
+            prior_status=$?
+            trap - EXIT
+            set +e
+            cleanup_failed=0
+            if ! restore_pending; then
+              echo 'Migration hold cleanup failed closed' >&2
+              cleanup_failed=1
+            fi
             if [ "$target_running" = true ]; then
-              supabase stop --no-backup --workdir "$target_workdir" >/dev/null 2>&1 || true
+              if ! supabase stop --no-backup --workdir "$target_workdir" >/dev/null 2>&1; then
+                echo 'Disposable restore stack cleanup failed closed' >&2
+                cleanup_failed=1
+              fi
             fi
-            if [[ "$artifact_root" == "$RUNNER_TEMP/"* ]]; then
-              chmod -R u+rwX "$artifact_root" 2>/dev/null || true
-              rm -rf -- "$artifact_root"
+            if [[ "$artifact_root" == "$RUNNER_TEMP"/capital-lab-artifacts.* ]]; then
+              if ! chmod -R u+rwX "$artifact_root" 2>/dev/null; then cleanup_failed=1; fi
+              if ! rm -rf -- "$artifact_root"; then cleanup_failed=1; fi
+            else
+              cleanup_failed=1
             fi
-            if [[ "$target_workdir" == "$RUNNER_TEMP/"* ]]; then
-              rm -rf -- "$target_workdir"
+            if [[ "$target_workdir" == "$RUNNER_TEMP"/capital-lab-restore-run-* ]]; then
+              if ! rm -rf -- "$target_workdir"; then cleanup_failed=1; fi
+            else
+              cleanup_failed=1
             fi
-            if [[ "$hold_root" == "$RUNNER_TEMP/"* ]]; then
-              rm -rf -- "$hold_root"
+            if [[ "$hold_root" == "$RUNNER_TEMP"/capital-lab-migrations.* ]]; then
+              if ! rm -rf -- "$hold_root"; then cleanup_failed=1; fi
+            else
+              cleanup_failed=1
             fi
+            if [ "$cleanup_failed" -ne 0 ]; then
+              echo 'Sensitive local artifact cleanup was incomplete' >&2
+            fi
+            if [ "$prior_status" -ne 0 ]; then exit "$prior_status"; fi
+            exit "$cleanup_failed"
           }
           trap cleanup EXIT
           mv supabase/migrations/20260809150000_post_build_hosting_safety.sql "$hold_root"/

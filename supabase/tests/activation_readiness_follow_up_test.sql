@@ -1235,6 +1235,15 @@ select lives_ok(
   $$select private.dispatch_no_ai_shadow_dry_run_event('reconciler', statement_timestamp())$$,
   'owner-offline reconciler automatically persists terminal evidence and finalizes'
 );
+select ok(exists (
+  select 1 from private.activation_mutation_evidence
+  where campaign_id = pg_temp.campaign_id() and expected_mutation
+    and operation_id is not null
+), 'bounded expected mutations retain immutable operation evidence');
+select is((
+  select count(*) from private.activation_mutation_evidence
+  where campaign_id = pg_temp.campaign_id() and not expected_mutation
+), 0::bigint, 'no forbidden mutation evidence is reclassified as expected');
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'passed', '52-slot 104-event deterministic happy path reaches passed');
 select is((select terminal_status from private.activation_terminal_evidence where campaign_id = pg_temp.campaign_id()), 'passed', 'terminal evidence records passed before job removal');
 select is((select complete_response_count from private.activation_terminal_evidence where campaign_id = pg_temp.campaign_id()), 104, 'finalizer uses all 104 persisted responses');

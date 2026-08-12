@@ -13,6 +13,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   newExternalPath,
   pathIsInside,
+  verifiedExternalDirectory,
+  verifiedExternalFile,
   verifiedDirectChild,
   verifyCreatedExternalPath,
 } from './safe-artifact-path.mjs'
@@ -43,10 +45,32 @@ describe('canonical sensitive artifact paths', () => {
     expect(await verifyCreatedExternalPath(repository, candidate)).toBe(
       await realpath(candidate),
     )
+    expect(await verifiedExternalDirectory(repository, candidate)).toBe(
+      await realpath(candidate),
+    )
     const artifact = path.join(candidate, 'manifest.json')
     await writeFile(artifact, '{}\n')
+    expect(await verifiedExternalFile(repository, artifact)).toBe(
+      await realpath(artifact),
+    )
     expect(await verifiedDirectChild(candidate, artifact)).toBe(
       await realpath(artifact),
+    )
+  })
+
+  it('rejects sensitive files and directories inside the repository', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'capital-lab-inside-'))
+    cleanup.push(root)
+    const repository = path.join(root, 'repository')
+    const directory = path.join(repository, 'artifacts')
+    const artifact = path.join(directory, 'auth.json')
+    await mkdir(directory, { recursive: true })
+    await writeFile(artifact, '{}\n')
+    await expect(
+      verifiedExternalDirectory(repository, directory),
+    ).rejects.toThrow(/external directory/)
+    await expect(verifiedExternalFile(repository, artifact)).rejects.toThrow(
+      /external regular file/,
     )
   })
 
