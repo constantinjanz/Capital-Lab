@@ -8,6 +8,12 @@ Safety status: exactly one diagnostic cycle and at most two repair/CI cycles.
 Repository and ephemeral CI only; no Hosted, Production, scheduler, provider,
 Canary, broker, Vault, Cron, extension, migration-history, or trading action.
 
+- [x] Scope the credential-history gate to the verified current HEAD and its
+      100 ancestors so divergent local refs cannot contaminate PR evidence; retain
+      the unchanged working-tree scan and all credential rules.
+      Verified with 3 focused files / 26 tests, zero-warning lint, and the complete
+      working-tree plus 100-ancestor scanner at `08ebc2f7`.
+
 - [x] Verify Draft PR #21, branch, remote, exact clean isolated HEAD `26e7e41b31846a8535280c1d9121a98c7f551f57`, and preserve the unrelated shared checkout.
 - [x] Review the pinned Supabase CLI 2.113.0 release and current official local-stack guidance before changing the diagnostic/bootstrap path.
 - [x] Buffer `supabase start` output privately and emit only categorized allowlisted evidence; prove synthetic secrets never reach output, errors, summaries, or artifacts.

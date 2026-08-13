@@ -1,5 +1,8 @@
 # Lessons
 
+- A branch credential gate must enumerate ancestors of an exact verified HEAD,
+  never `--all`; otherwise stale or divergent local refs make identical PR
+  commits produce environment-dependent evidence.
 - A suppressed infrastructure log is not actionable evidence. Buffer it only in bounded process memory, classify against a fixed diagnostic enum, persist only allowlisted fields, and test the entire serialized evidence path with synthetic secrets.
 - Independent schema Goldens need a runnable bootstrap closure, not just a capture script: exact clean HEAD, frozen migration bytes, pinned CLI and exact official image, fresh isolated clusters, double-build byte reproducibility, row-free artifacts, and verify-only normal CI.
 

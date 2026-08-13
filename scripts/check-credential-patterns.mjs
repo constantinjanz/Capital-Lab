@@ -164,9 +164,26 @@ function scanContent(rule, filename, content) {
 }
 
 const git = resolveNativeExecutable('git')
+const head = spawnSync(
+  git.command,
+  resolvedArguments(git, ['rev-parse', 'HEAD']),
+  { cwd: root, encoding: 'utf8', shell: false, windowsHide: true },
+)
+const headSha = head.stdout.trim()
+if (head.status !== 0 || !/^[0-9a-f]{40}$/u.test(headSha)) {
+  throw new Error('Credential scan could not verify the current Git HEAD')
+}
+const assertedHeadSha = process.env.CAPITAL_LAB_CI_COMMIT_SHA
+if (
+  assertedHeadSha !== undefined &&
+  (!/^[0-9a-f]{40}$/u.test(assertedHeadSha) || assertedHeadSha !== headSha)
+) {
+  throw new Error('Credential scan commit assertion does not match Git HEAD')
+}
+const verifiedHeadSha = assertedHeadSha ?? headSha
 const history = spawnSync(
   git.command,
-  resolvedArguments(git, ['log', '--format=%H', '--max-count=100', '--all']),
+  resolvedArguments(git, ['rev-list', '--max-count=100', verifiedHeadSha]),
   { cwd: root, encoding: 'utf8', shell: false, windowsHide: true },
 )
 if (history.status !== 0) {
@@ -177,7 +194,7 @@ if (history.status !== 0) {
 const commits = history.stdout.trim().split(/\r?\n/).filter(Boolean)
 const totalHistory = spawnSync(
   git.command,
-  resolvedArguments(git, ['rev-list', '--count', '--all']),
+  resolvedArguments(git, ['rev-list', '--count', verifiedHeadSha]),
   { cwd: root, encoding: 'utf8', shell: false, windowsHide: true },
 )
 const totalCommitCount = Number.parseInt(totalHistory.stdout.trim(), 10)
