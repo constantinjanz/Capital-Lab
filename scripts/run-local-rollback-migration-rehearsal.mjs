@@ -1,28 +1,19 @@
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import {
-  mkdtemp,
-  readFile,
-  realpath,
-  rm,
-  stat,
-  writeFile,
-} from 'node:fs/promises'
-import os from 'node:os'
+import { readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 
 import {
-  postgresUrlToLibpqEnv,
-  redactedPostgresError,
+  canonicalJson,
+  loadCriticalRelationContract,
 } from './critical-backup-contract.mjs'
-import { extractRollbackMigrationBody } from './migration-rehearsal-contract.mjs'
+import { ownedPsql } from './lib/local-container-postgres.mjs'
 import {
   resolvedArguments,
   resolveNativeExecutable,
 } from './lib/safe-process.mjs'
-import { withHeldFiles } from './lib/held-files.mjs'
+import { extractRollbackMigrationBody } from './migration-rehearsal-contract.mjs'
 
-const PROCESS_TIMEOUT_MS = 600_000
 const MIGRATIONS = Object.freeze([
   '20260809150000_post_build_hosting_safety.sql',
   '20260809150417_activation_readiness_follow_up.sql',
@@ -40,77 +31,16 @@ function git(args, cwd) {
   const result = spawnSync(
     executable.command,
     resolvedArguments(executable, args),
-    {
-      cwd,
-      encoding: 'utf8',
-      shell: false,
-      windowsHide: true,
-    },
+    { cwd, encoding: 'utf8', shell: false, windowsHide: true },
   )
-  if (result.status !== 0) fail('Git evidence could not be derived')
+  if (result.status !== 0 || result.signal || result.error) {
+    fail('Git evidence could not be derived')
+  }
   return result.stdout.trim()
 }
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex')
-}
-
-async function exists(filename) {
-  try {
-    await stat(filename)
-    return true
-  } catch (error) {
-    if (error?.code === 'ENOENT') return false
-    throw error
-  }
-}
-
-async function run(executableName, args, phase, env = process.env) {
-  return new Promise((resolve, reject) => {
-    let settled = false
-    let timedOut = false
-    let stdout = ''
-    let stderr = ''
-    const executable = resolveNativeExecutable(executableName)
-    const child = spawn(
-      executable.command,
-      resolvedArguments(executable, args),
-      {
-        env,
-        shell: false,
-        windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    )
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString()
-    })
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString()
-    })
-    const timer = setTimeout(() => {
-      timedOut = true
-      child.kill('SIGTERM')
-    }, PROCESS_TIMEOUT_MS)
-    child.once('error', (error) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      reject(error)
-    })
-    child.once('exit', (code, signal) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      if (code !== 0 || signal || timedOut) {
-        reject(
-          new Error(
-            `Local rollback rehearsal failed: ${phase}; redacted database error: ${redactedPostgresError(stderr)}`,
-          ),
-        )
-      } else resolve(stdout)
-    })
-  })
 }
 
 async function main() {
@@ -123,64 +53,37 @@ async function main() {
   if (git(['status', '--porcelain=v1', '--untracked-files=all'], workspace)) {
     fail('Local rollback rehearsal requires a completely clean Working Tree')
   }
-  const connectionValue = process.env.CAPITAL_LAB_DATABASE_URL
-  if (!connectionValue)
-    fail('CAPITAL_LAB_DATABASE_URL is required and never printed')
-  const connection = postgresUrlToLibpqEnv(connectionValue, { localOnly: true })
-  if (connection.database !== 'postgres') {
-    fail('Local rehearsal database must be exactly postgres')
-  }
-
   const migrationDirectory = path.join(workspace, 'supabase', 'migrations')
-  const holdDirectory = path.join(
-    workspace,
-    'supabase',
-    '.rollback-rehearsal-hold',
-  )
-  if (await exists(holdDirectory))
-    fail('Rollback rehearsal hold path already exists')
   const migrations = await Promise.all(
     MIGRATIONS.map(async (name) => {
-      const filename = path.join(migrationDirectory, name)
-      const bytes = await readFile(filename)
+      const bytes = await readFile(path.join(migrationDirectory, name))
       return {
         body: extractRollbackMigrationBody(bytes.toString('utf8'), name),
-        bytes,
-        filename,
         name,
         sha256: sha256(bytes),
       }
     }),
   )
-
-  await withHeldFiles(
-    migrations.map((migration) => ({
-      name: migration.name,
-      source: migration.filename,
-    })),
-    holdDirectory,
-    async () => {
-      await run('supabase', ['db', 'reset', '--no-seed'], 'baseline_reset')
-    },
+  const { contract: preContract } = await loadCriticalRelationContract(
+    path.join(workspace, 'supabase', 'backup', 'pre-activation.v1.json'),
+    'pre_activation',
   )
-
-  for (const migration of migrations) {
-    const restored = await readFile(migration.filename)
-    if (sha256(restored) !== migration.sha256) {
-      fail(`Migration ${migration.name} was not restored byte-for-byte`)
-    }
-  }
-  if (
-    git(['rev-parse', 'HEAD'], workspace) !== initialHead ||
-    git(['status', '--porcelain=v1', '--untracked-files=all'], workspace)
-  ) {
-    fail('Git identity changed during local rollback rehearsal')
-  }
-
-  const rehearsalDirectory = await mkdtemp(
-    path.join(os.tmpdir(), 'capital-lab-rollback-rehearsal-'),
+  const actualHistory = JSON.parse(
+    await ownedPsql(
+      'source',
+      `select coalesce(jsonb_agg(jsonb_build_object(
+        'name', name, 'version', version
+      ) order by version), '[]'::jsonb)
+      from supabase_migrations.schema_migrations;`,
+    ),
   )
-  const rehearsalFile = path.join(rehearsalDirectory, 'rehearsal.sql')
+  const expectedHistory = preContract.migrations.map(({ name, version }) => ({
+    name: name.slice(15, -4),
+    version,
+  }))
+  if (canonicalJson(actualHistory) !== canonicalJson(expectedHistory)) {
+    fail('Rollback rehearsal source is not the exact PRE migration baseline')
+  }
   const rehearsalSql = `\\set ON_ERROR_STOP on
 set statement_timeout = '300s';
 set lock_timeout = '10s';
@@ -199,33 +102,14 @@ select case
   else 'rollback_failed'
 end;
 `
-  await writeFile(rehearsalFile, rehearsalSql, { mode: 0o600 })
-  const psqlEnv = {
-    ...process.env,
-    ...connection.libpqEnv,
-    PGCONNECT_TIMEOUT: '10',
-    PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
+  if ((await ownedPsql('source', rehearsalSql)) !== 'rollback_verified') {
+    fail('Local rollback rehearsal did not prove a clean rollback')
   }
-  try {
-    const output = await run(
-      'psql',
-      [
-        '-X',
-        '--no-psqlrc',
-        '--quiet',
-        '--tuples-only',
-        '--no-align',
-        '--file',
-        rehearsalFile,
-      ],
-      'migration_transaction',
-      psqlEnv,
-    )
-    if (output.trim() !== 'rollback_verified') {
-      fail('Local rollback rehearsal did not prove a clean rollback')
-    }
-  } finally {
-    await rm(rehearsalDirectory, { recursive: true, force: true })
+  if (
+    git(['rev-parse', 'HEAD'], workspace) !== initialHead ||
+    git(['status', '--porcelain=v1', '--untracked-files=all'], workspace)
+  ) {
+    fail('Git identity changed during local rollback rehearsal')
   }
   process.stdout.write(
     `${JSON.stringify({

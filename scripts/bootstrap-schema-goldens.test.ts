@@ -62,7 +62,7 @@ describe('seed-free schema-Golden bootstrap closure', () => {
       studio: 56003,
     })
     expect(config).toContain('[db.seed]\nenabled = false\nsql_paths = []')
-    expect(config).toContain('[db.migrations]\nenabled = true')
+    expect(config).toContain('[db.migrations]\nenabled = false')
     expect(config).not.toContain('seed.sql')
     expect(config).not.toContain('database_url')
     expect(config).not.toContain('hosted')

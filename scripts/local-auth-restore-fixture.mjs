@@ -6,10 +6,10 @@ import { pathToFileURL } from 'node:url'
 
 import {
   canonicalJson,
-  postgresUrlToLibpqEnv,
   redactedPostgresError,
   sha256,
 } from './critical-backup-contract.mjs'
+import { ownedPsql } from './lib/local-container-postgres.mjs'
 import {
   resolvedArguments,
   resolveNativeExecutable,
@@ -141,28 +141,8 @@ async function localStatus(workdir, expectedPort) {
   }
 }
 
-async function query(connectionValue, sql) {
-  const connection = postgresUrlToLibpqEnv(connectionValue, { localOnly: true })
-  const output = await run(
-    'psql',
-    [
-      '-X',
-      '--no-psqlrc',
-      '--quiet',
-      '--tuples-only',
-      '--no-align',
-      '--set',
-      'ON_ERROR_STOP=1',
-    ],
-    {
-      ...process.env,
-      ...connection.libpqEnv,
-      PGCONNECT_TIMEOUT: '10',
-      PGOPTIONS: '-c statement_timeout=60000 -c lock_timeout=10000',
-    },
-    sql,
-  )
-  return output.trim()
+async function query(role, sql) {
+  return ownedPsql(role, sql)
 }
 
 async function adminCreateUser(status, email, password) {
@@ -237,12 +217,12 @@ async function prepare(credentialsPath) {
   if (await exists(credentialsPath)) {
     throw new Error('Synthetic Auth credentials file must not already exist')
   }
-  const databaseUrl = process.env.CAPITAL_LAB_DATABASE_URL
-  if (!databaseUrl) throw new Error('Local source database URL is required')
-  if ((await query(databaseUrl, 'select count(*) from auth.users;')) !== '0') {
+  if ((await query('source', 'select count(*) from auth.users;')) !== '0') {
     throw new Error('Synthetic source Auth fixture requires exactly zero users')
   }
-  const status = await localStatus(null, 54321)
+  const sourceWorkdir = process.env.CAPITAL_LAB_CI_WORKDIR
+  if (!sourceWorkdir) throw new Error('Owned source workdir is required')
+  const status = await localStatus(sourceWorkdir, 54321)
   const users = []
   for (let index = 0; index < 2; index += 1) {
     const email = `restore-${randomUUID()}@local.invalid`
@@ -257,12 +237,12 @@ async function prepare(credentialsPath) {
   const rlsRecordId = randomUUID()
   const emailLiteral = first.email.replaceAll("'", "''")
   await query(
-    databaseUrl,
+    'source',
     `insert into public.app_users (user_id, email, role, is_active)
 values ('${first.id}'::uuid, '${emailLiteral}'::extensions.citext, 'owner', true);`,
   )
   await query(
-    databaseUrl,
+    'source',
     `insert into public.configuration_versions (
       id, owner_id, config_kind, version, schema_version, name, config, content_hash
     ) values (
@@ -279,7 +259,7 @@ values ('${first.id}'::uuid, '${emailLiteral}'::extensions.citext, 'owner', true
   }
   if (
     !validAuthOwnerClosure(
-      JSON.parse(await query(databaseUrl, authClosureSql(fixture))),
+      JSON.parse(await query('source', authClosureSql(fixture))),
     )
   ) {
     throw new Error('Synthetic Auth and Owner-RLS closure is incomplete')
@@ -339,11 +319,9 @@ async function verify(credentialsPath, workdir) {
       throw new Error('Restored Owner-RLS allow/deny behavior differs')
     }
   }
-  const targetUrl = process.env.CAPITAL_LAB_RESTORE_DATABASE_URL
-  if (!targetUrl) throw new Error('Local restore database URL is required')
   if (
     !validAuthOwnerClosure(
-      JSON.parse(await query(targetUrl, authClosureSql(fixture))),
+      JSON.parse(await query('restore', authClosureSql(fixture))),
     )
   ) {
     throw new Error('Restored Auth, identity, FK, or Owner-RLS closure differs')
@@ -355,8 +333,6 @@ async function faults(credentialsPath, workdir) {
   const fixture = validateSyntheticAuthFixture(
     JSON.parse(await readFile(credentialsPath, 'utf8')),
   )
-  const targetUrl = process.env.CAPITAL_LAB_RESTORE_DATABASE_URL
-  if (!targetUrl) throw new Error('Local restore database URL is required')
   const mutations = [
     `delete from auth.identities where user_id = ${quoteUuid(fixture.users[1].id)};`,
     `set local session_replication_role = replica; update auth.users set id = gen_random_uuid() where id = ${quoteUuid(fixture.users[1].id)};`,
@@ -367,7 +343,7 @@ async function faults(credentialsPath, workdir) {
   for (const mutation of mutations) {
     const observed = JSON.parse(
       await query(
-        targetUrl,
+        'restore',
         `begin; ${mutation} ${authClosureSql(fixture)} rollback;`,
       ),
     )

@@ -22,6 +22,10 @@ Canary, broker, Vault, Cron, extension, migration-history, or trading action.
 - [x] Add a manual, secret-free Golden bootstrap workflow that uploads only two row-free candidates plus harmless provenance and never commits automatically.
 - [x] Keep application gates running independently while Golden/DR verification remains a required red job.
 - [ ] Push the diagnostic commit, inspect exactly one categorized `supabase start` result, and repair only its demonstrated cause.
+- [x] Repair the demonstrated local SQLSTATE `42601` cause by starting an exact
+      run-owned stack with CLI migrations disabled and replaying the checksummed
+      PRE/POST contract through credential-free container `psql` simple-query
+      mode; do not change any migration bytes.
 - [ ] Inspect the generated artifact, commit exactly both Golden JSON files, regenerate byte manifests/report, and use no more than two repair/CI cycles.
 - [ ] Record exact final jobs, test counts, Golden hashes, Preview target/SHA, failure category, non-execution evidence, and the bounded final status.
 

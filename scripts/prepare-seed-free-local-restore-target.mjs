@@ -7,10 +7,10 @@ import { pathToFileURL } from 'node:url'
 import {
   buildServerIdentitySql,
   canonicalJson,
-  postgresUrlToLibpqEnv,
   redactedPostgresError,
   sha256,
 } from './critical-backup-contract.mjs'
+import { ownedPsql } from './lib/local-container-postgres.mjs'
 import {
   buildRestoreTargetProof,
   canonicalJson as canonicalProofJson,
@@ -97,27 +97,8 @@ async function run(name, args, env, input, capture = false) {
   })
 }
 
-async function databaseEvidence(connection, sql) {
-  const output = await run(
-    'psql',
-    [
-      '-X',
-      '--no-psqlrc',
-      '--tuples-only',
-      '--no-align',
-      '--set',
-      'ON_ERROR_STOP=1',
-    ],
-    {
-      ...process.env,
-      ...connection.libpqEnv,
-      PGCONNECT_TIMEOUT: '10',
-      PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
-    },
-    sql,
-    true,
-  )
-  return JSON.parse(output.trim())
+async function databaseEvidence(role, sql) {
+  return JSON.parse(await ownedPsql(role, sql))
 }
 
 async function inspectRestoreContainer(runId) {
@@ -195,43 +176,28 @@ async function main() {
     throw new Error('Restore-target preparation requires a clean Working Tree')
   }
   const proofPath = await newExternalPath(workspace, requested.proof)
-  const sourceValue = process.env.CAPITAL_LAB_DATABASE_URL
-  const targetValue = process.env.CAPITAL_LAB_RESTORE_DATABASE_URL
-  if (!sourceValue || !targetValue) {
-    throw new Error(
-      'Source and target database URLs are required and never printed',
-    )
-  }
-  const source = postgresUrlToLibpqEnv(sourceValue, { localOnly: true })
-  const target = postgresUrlToLibpqEnv(targetValue, { localOnly: true })
-  if (
-    source.hostname !== '127.0.0.1' ||
-    source.port !== '54322' ||
-    source.database !== 'postgres' ||
-    target.hostname !== '127.0.0.1' ||
-    target.port !== '55322' ||
-    target.database !== 'postgres'
-  ) {
-    throw new Error('Source A or disposable target B boundary is invalid')
-  }
+  const target = { database: 'postgres', hostname: '127.0.0.1', port: '55322' }
   const inspection = await inspectRestoreContainer(runId)
   const containerIdentity = validateRestoreContainerInspection(
     inspection,
     runId,
   )
   if (
+    target.port !== '55322' ||
     containerIdentity.hostname !== target.hostname ||
     containerIdentity.port !== target.port ||
     containerIdentity.database !== target.database
   ) {
-    throw new Error('Disposable container differs from the target URL')
+    throw new Error(
+      'Disposable container differs from the fixed target boundary',
+    )
   }
   const sourceIdentity = await databaseEvidence(
-    source,
+    'source',
     buildServerIdentitySql(),
   )
   const targetIdentity = await databaseEvidence(
-    target,
+    'restore',
     buildServerIdentitySql(),
   )
   if (
@@ -244,15 +210,8 @@ async function main() {
   }
   const runIdLiteral = runId.replaceAll("'", "''")
   const markerLiteral = disposableMarker.replaceAll("'", "''")
-  await run(
-    'psql',
-    ['-X', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1'],
-    {
-      ...process.env,
-      ...target.libpqEnv,
-      PGCONNECT_TIMEOUT: '10',
-      PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
-    },
+  await ownedPsql(
+    'restore',
     `begin;
 create schema capital_lab_restore authorization postgres;
 create table capital_lab_restore.run_identity (
@@ -267,9 +226,10 @@ revoke all on schema capital_lab_restore from public;
 revoke all on all tables in schema capital_lab_restore from public, anon, authenticated, service_role;
 commit;
 `,
+    false,
   )
   const markerEvidence = await databaseEvidence(
-    target,
+    'restore',
     `select jsonb_build_object(
       'database', current_database(), 'databaseRole', current_user,
       'runId', marker.run_id, 'disposableMarker', marker.disposable_marker::text
@@ -315,15 +275,8 @@ commit;
       target,
     },
     () =>
-      run(
-        'psql',
-        ['-X', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1'],
-        {
-          ...process.env,
-          ...target.libpqEnv,
-          PGCONNECT_TIMEOUT: '10',
-          PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
-        },
+      ownedPsql(
+        'restore',
         `begin;
 drop schema if exists private cascade;
 drop schema if exists public cascade;
@@ -332,14 +285,15 @@ drop schema if exists auth cascade;
 create schema public authorization postgres;
 commit;
 `,
+        false,
       ),
   )
   const postResetIdentity = await databaseEvidence(
-    target,
+    'restore',
     buildServerIdentitySql(),
   )
   const postResetMarkerEvidence = await databaseEvidence(
-    target,
+    'restore',
     `select jsonb_build_object(
       'database', current_database(), 'databaseRole', current_user,
       'runId', marker.run_id, 'disposableMarker', marker.disposable_marker::text

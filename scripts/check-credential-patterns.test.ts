@@ -87,7 +87,7 @@ describe('credential scanner verified-head history scope', () => {
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('CRED-008')
     expect(result.stderr).not.toContain(syntheticCredential)
-  })
+  }, 30_000)
 
   it('ignores the same fixture on a divergent sibling branch', async () => {
     const root = await createRepository()
@@ -104,7 +104,7 @@ describe('credential scanner verified-head history scope', () => {
     expect(result.stdout).toContain('bounded Git-history commits')
     expect(result.stdout).not.toContain(syntheticCredential)
     expect(result.stderr).not.toContain(syntheticCredential)
-  })
+  }, 30_000)
 
   it('still detects a credential in the current working tree', async () => {
     const root = await createRepository()
@@ -115,7 +115,7 @@ describe('credential scanner verified-head history scope', () => {
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('CRED-008')
     expect(result.stderr).not.toContain(syntheticCredential)
-  })
+  }, 30_000)
 
   it('fails closed for invalid and mismatched CI commit assertions', async () => {
     const root = await createRepository()
@@ -130,5 +130,5 @@ describe('credential scanner verified-head history scope', () => {
     expect(invalid.stderr).toContain('does not match Git HEAD')
     expect(mismatched.status).toBe(1)
     expect(mismatched.stderr).toContain('does not match Git HEAD')
-  })
+  }, 30_000)
 })

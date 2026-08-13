@@ -27,11 +27,15 @@ import {
   fingerprintRolePolicy,
   loadCriticalRelationContract,
   loadSchemaGolden,
-  postgresUrlToLibpqEnv,
   redactedPostgresError,
   sha256,
 } from './critical-backup-contract.mjs'
 import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
+import {
+  inspectOwnedDatabaseContainer,
+  ownedPsql,
+  runOwnedPostgresTool,
+} from './lib/local-container-postgres.mjs'
 import {
   resolvedArguments,
   resolveNativeExecutable,
@@ -144,38 +148,17 @@ commit;
 `
 }
 
-async function evidence(connectionEnv, sql, snapshot) {
-  const result = await run(
-    'psql',
-    [
-      '-X',
-      '--no-psqlrc',
-      '--tuples-only',
-      '--no-align',
-      '--set',
-      'ON_ERROR_STOP=1',
-    ],
-    {
-      ...process.env,
-      ...connectionEnv,
-      PGCONNECT_TIMEOUT: '10',
-      PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
-    },
-    snapshot ? snapshotSql(sql, snapshot) : sql,
+async function evidence(sql, snapshot) {
+  return JSON.parse(
+    await ownedPsql('source', snapshot ? snapshotSql(sql, snapshot) : sql),
   )
-  return JSON.parse(result.stdout.trim())
 }
 
-async function assertForeignKeyIntegrity(connectionEnv, snapshot) {
-  const catalog = await evidence(
-    connectionEnv,
-    buildForeignKeyCatalogSql(),
-    snapshot,
-  )
+async function assertForeignKeyIntegrity(snapshot) {
+  const catalog = await evidence(buildForeignKeyCatalogSql(), snapshot)
   assertForeignKeyCatalog(catalog)
   for (const specification of catalog.constraints) {
     const result = await evidence(
-      connectionEnv,
       buildForeignKeyViolationSql(specification),
       snapshot,
     )
@@ -188,12 +171,18 @@ async function assertForeignKeyIntegrity(connectionEnv, snapshot) {
   return catalog
 }
 
-async function withExportedSnapshot(connectionEnv, callback) {
-  const executable = resolveNativeExecutable('psql')
+async function withExportedSnapshot(callback) {
+  const target = inspectOwnedDatabaseContainer('source')
+  const executable = resolveNativeExecutable('docker')
   const child = spawn(
     executable.command,
     resolvedArguments(executable, [
-      '-X',
+      'exec',
+      '--interactive',
+      target.container,
+      'psql',
+      '--username=postgres',
+      '--dbname=postgres',
       '--no-psqlrc',
       '--quiet',
       '--tuples-only',
@@ -202,12 +191,7 @@ async function withExportedSnapshot(connectionEnv, callback) {
       'ON_ERROR_STOP=1',
     ]),
     {
-      env: {
-        ...process.env,
-        ...connectionEnv,
-        PGCONNECT_TIMEOUT: '10',
-        PGOPTIONS: '-c statement_timeout=600000 -c lock_timeout=10000',
-      },
+      env: process.env,
       shell: false,
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -271,7 +255,11 @@ async function withExportedSnapshot(connectionEnv, callback) {
   }
 }
 
-async function toolVersion(name) {
+async function toolVersion(name, databaseTool = false) {
+  if (databaseTool) {
+    const result = await runOwnedPostgresTool('source', name, ['--version'])
+    return result.stdout.trim()
+  }
   const executable = resolveNativeExecutable(name)
   const result = spawnSync(
     executable.command,
@@ -288,6 +276,17 @@ async function toolVersion(name) {
   return result.stdout.trim()
 }
 
+async function writeDatabaseDump(filename, args, binary = false) {
+  const result = await runOwnedPostgresTool(
+    'source',
+    'pg_dump',
+    args,
+    undefined,
+    { binary },
+  )
+  await writeFile(filename, result.stdout, { mode: 0o600, flag: 'wx' })
+}
+
 async function main() {
   const requested = options()
   const workspace = await realpath(process.cwd())
@@ -302,19 +301,8 @@ async function main() {
   await verifiedExternalDirectory(workspace, outputPath)
   let completed = false
   try {
-    const databaseUrl = process.env.CAPITAL_LAB_DATABASE_URL
-    if (!databaseUrl)
-      throw new Error('CAPITAL_LAB_DATABASE_URL is required and never printed')
-    const connection = postgresUrlToLibpqEnv(databaseUrl)
     const mvccRaceControl = await loadMvccRaceControl(workspace)
-    if (
-      mvccRaceControl &&
-      (connection.hostname !== '127.0.0.1' ||
-        connection.port !== '54322' ||
-        connection.database !== 'postgres')
-    ) {
-      throw new Error('MVCC fault injection is restricted to local stack A')
-    }
+    inspectOwnedDatabaseContainer('source')
     const contractKind =
       requested.contract === 'pre' ? 'pre_activation' : 'post_activation'
     const contractPath = path.join(
@@ -364,18 +352,12 @@ async function main() {
     if (supabaseVersion !== SUPABASE_CLI_VERSION) {
       throw new Error(`Supabase CLI ${SUPABASE_CLI_VERSION} is required`)
     }
-    const psqlVersion = await toolVersion('psql')
-    const pgDumpVersion = await toolVersion('pg_dump')
-    const pgDumpallVersion = await toolVersion('pg_dumpall')
+    const psqlVersion = await toolVersion('psql', true)
+    const pgDumpVersion = await toolVersion('pg_dump', true)
+    const pgDumpallVersion = await toolVersion('pg_dumpall', true)
     const pgRestoreVersion = await toolVersion('pg_restore')
-    const identityBefore = await evidence(
-      connection.libpqEnv,
-      buildServerIdentitySql(),
-    )
-    const rolePolicyBefore = await evidence(
-      connection.libpqEnv,
-      buildRolePolicySql(),
-    )
+    const identityBefore = await evidence(buildServerIdentitySql())
+    const rolePolicyBefore = await evidence(buildRolePolicySql())
     const paths = {
       roles: path.join(outputPath, 'roles.sql'),
       authSchema: path.join(outputPath, 'auth-schema.sql'),
@@ -388,17 +370,11 @@ async function main() {
     }
     const schemaArchive = path.join(outputPath, '.application-schema.dump')
     const schemaToc = path.join(outputPath, '.application-schema.toc')
-    const dumpEnv = {
-      ...process.env,
-      ...connection.libpqEnv,
-      PGCONNECT_TIMEOUT: '10',
-      PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
-    }
-    await run(
-      'pg_dumpall',
-      ['--roles-only', '--no-role-passwords', '--file', paths.roles],
-      dumpEnv,
-    )
+    const rolesDump = await runOwnedPostgresTool('source', 'pg_dumpall', [
+      '--roles-only',
+      '--no-role-passwords',
+    ])
+    await writeFile(paths.roles, rolesDump.stdout, { mode: 0o600, flag: 'wx' })
     const evidenceSql = buildCriticalEvidenceSql(contract)
     let evidenceBefore
     let authEvidence
@@ -406,26 +382,14 @@ async function main() {
     let foreignKeyCatalogBefore
     let filteredToc
     let mvccRaceFixtureEnabled = false
-    await withExportedSnapshot(connection.libpqEnv, async (snapshot) => {
-      evidenceBefore = await evidence(
-        connection.libpqEnv,
-        evidenceSql,
-        snapshot,
-      )
-      authEvidence = await evidence(
-        connection.libpqEnv,
-        buildAuthEvidenceSql(),
-        snapshot,
-      )
+    await withExportedSnapshot(async (snapshot) => {
+      evidenceBefore = await evidence(evidenceSql, snapshot)
+      authEvidence = await evidence(buildAuthEvidenceSql(), snapshot)
       sensitiveAuthBefore = await evidence(
-        connection.libpqEnv,
         buildSensitiveAuthStateSql(),
         snapshot,
       )
-      foreignKeyCatalogBefore = await assertForeignKeyIntegrity(
-        connection.libpqEnv,
-        snapshot,
-      )
+      foreignKeyCatalogBefore = await assertForeignKeyIntegrity(snapshot)
       assertContractKeys(contract, evidenceBefore)
       if (
         canonicalJson(evidenceBefore.appliedMigrations) !==
@@ -454,33 +418,21 @@ async function main() {
         mvccRaceFixtureEnabled = true
       }
       const snapshotArgument = `--snapshot=${snapshot}`
-      await run(
-        'pg_dump',
-        [
-          snapshotArgument,
-          '--schema-only',
-          '--schema',
-          'auth',
-          '--file',
-          paths.authSchema,
-        ],
-        dumpEnv,
-      )
-      await run(
-        'pg_dump',
-        [
-          snapshotArgument,
-          '--data-only',
-          '--no-owner',
-          '--no-privileges',
-          ...AUTH_DATA_RELATIONS.flatMap((relation) => ['--table', relation]),
-          '--file',
-          paths.authData,
-        ],
-        dumpEnv,
-      )
-      await run(
-        'pg_dump',
+      await writeDatabaseDump(paths.authSchema, [
+        snapshotArgument,
+        '--schema-only',
+        '--schema',
+        'auth',
+      ])
+      await writeDatabaseDump(paths.authData, [
+        snapshotArgument,
+        '--data-only',
+        '--no-owner',
+        '--no-privileges',
+        ...AUTH_DATA_RELATIONS.flatMap((relation) => ['--table', relation]),
+      ])
+      await writeDatabaseDump(
+        schemaArchive,
         [
           snapshotArgument,
           '--format=custom',
@@ -489,16 +441,14 @@ async function main() {
           'public',
           '--schema',
           'private',
-          '--file',
-          schemaArchive,
         ],
-        dumpEnv,
+        true,
       )
       await chmod(schemaArchive, 0o600)
       const archiveToc = await run(
         'pg_restore',
         ['--list', schemaArchive],
-        dumpEnv,
+        process.env,
       )
       filteredToc = filterApplicationSchemaArchiveToc(archiveToc.stdout)
       await writeFile(schemaToc, filteredToc.toc, {
@@ -515,7 +465,7 @@ async function main() {
           paths.schema,
           schemaArchive,
         ],
-        dumpEnv,
+        process.env,
       )
       await rm(schemaArchive, { force: true })
       await rm(schemaToc, { force: true })
@@ -524,19 +474,13 @@ async function main() {
         [paths.historySchema, ['supabase_migrations'], true],
         [paths.historyData, ['supabase_migrations'], false],
       ]) {
-        await run(
-          'pg_dump',
-          [
-            snapshotArgument,
-            schemaOnly ? '--schema-only' : '--data-only',
-            '--no-owner',
-            ...(schemaOnly ? [] : ['--no-privileges']),
-            ...schemas.flatMap((schema) => ['--schema', schema]),
-            '--file',
-            file,
-          ],
-          dumpEnv,
-        )
+        await writeDatabaseDump(file, [
+          snapshotArgument,
+          schemaOnly ? '--schema-only' : '--data-only',
+          '--no-owner',
+          ...(schemaOnly ? [] : ['--no-privileges']),
+          ...schemas.flatMap((schema) => ['--schema', schema]),
+        ])
       }
       if (mvccRaceControl) {
         await signalMvccMarker(workspace, mvccRaceControl, 'dumps-complete')
@@ -544,26 +488,12 @@ async function main() {
       }
     })
     for (const key of BACKUP_ARTIFACT_KEYS) await chmod(paths[key], 0o600)
-    const identityAfter = await evidence(
-      connection.libpqEnv,
-      buildServerIdentitySql(),
-    )
-    const rolePolicyAfter = await evidence(
-      connection.libpqEnv,
-      buildRolePolicySql(),
-    )
-    const evidenceAfter = await evidence(connection.libpqEnv, evidenceSql)
-    const authEvidenceAfter = await evidence(
-      connection.libpqEnv,
-      buildAuthEvidenceSql(),
-    )
-    const sensitiveAuthAfter = await evidence(
-      connection.libpqEnv,
-      buildSensitiveAuthStateSql(),
-    )
-    const foreignKeyCatalogAfter = await assertForeignKeyIntegrity(
-      connection.libpqEnv,
-    )
+    const identityAfter = await evidence(buildServerIdentitySql())
+    const rolePolicyAfter = await evidence(buildRolePolicySql())
+    const evidenceAfter = await evidence(evidenceSql)
+    const authEvidenceAfter = await evidence(buildAuthEvidenceSql())
+    const sensitiveAuthAfter = await evidence(buildSensitiveAuthStateSql())
+    const foreignKeyCatalogAfter = await assertForeignKeyIntegrity()
     if (
       canonicalJson(identityBefore) !== canonicalJson(identityAfter) ||
       canonicalJson(rolePolicyBefore) !== canonicalJson(rolePolicyAfter) ||

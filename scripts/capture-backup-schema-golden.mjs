@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { chmod, readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -8,10 +8,12 @@ import {
   buildServerIdentitySql,
   canonicalJson,
   loadCriticalRelationContract,
-  postgresUrlToLibpqEnv,
-  redactedPostgresError,
   sha256,
 } from './critical-backup-contract.mjs'
+import {
+  inspectOwnedDatabaseContainer,
+  ownedPsql,
+} from './lib/local-container-postgres.mjs'
 import { validateSchemaGoldenReferenceProof } from './lib/schema-golden-reference-proof.mjs'
 import { loadSchemaGoldenBootstrapContract } from './lib/schema-golden-bootstrap-contract.mjs'
 import {
@@ -63,61 +65,8 @@ function git(args, cwd) {
   return result.stdout.trim()
 }
 
-async function evidence(connectionEnv, sql) {
-  const executable = resolveNativeExecutable('psql')
-  return new Promise((resolve, reject) => {
-    let stdout = ''
-    let stderr = ''
-    let settled = false
-    let timedOut = false
-    const child = spawn(
-      executable.command,
-      resolvedArguments(executable, [
-        '-X',
-        '--no-psqlrc',
-        '--tuples-only',
-        '--no-align',
-        '--set',
-        'ON_ERROR_STOP=1',
-      ]),
-      {
-        env: {
-          ...process.env,
-          ...connectionEnv,
-          PGCONNECT_TIMEOUT: '10',
-          PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
-        },
-        shell: false,
-        windowsHide: true,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      },
-    )
-    child.stdout.on('data', (chunk) => (stdout += chunk.toString()))
-    child.stderr.on('data', (chunk) => (stderr += chunk.toString()))
-    const timer = setTimeout(() => {
-      timedOut = true
-      child.kill('SIGTERM')
-    }, 300_000)
-    child.once('error', (error) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      reject(error)
-    })
-    child.once('exit', (code, signal) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      if (code !== 0 || signal || timedOut) {
-        reject(
-          new Error(
-            `Schema-golden capture failed; redacted error: ${redactedPostgresError(stderr)}`,
-          ),
-        )
-      } else resolve(JSON.parse(stdout.trim()))
-    })
-    child.stdin.end(sql)
-  })
+async function evidence(role, sql) {
+  return JSON.parse(await ownedPsql(role, sql))
 }
 
 async function main() {
@@ -127,13 +76,11 @@ async function main() {
     throw new Error('Schema-golden capture requires a clean Working Tree')
   }
   const output = await newExternalPath(workspace, requested.output)
-  const databaseUrl = process.env.CAPITAL_LAB_REFERENCE_DATABASE_URL
-  const peerReferenceDatabaseUrl =
-    process.env.CAPITAL_LAB_GOLDEN_PEER_REFERENCE_DATABASE_URL
-  if (!databaseUrl || !peerReferenceDatabaseUrl)
-    throw new Error(
-      'Two distinct Reference database URLs are required and never printed',
-    )
+  const reference = inspectOwnedDatabaseContainer('reference')
+  const peerReference = inspectOwnedDatabaseContainer('peer_reference')
+  if (reference.container === peerReference.container) {
+    throw new Error('Two distinct Reference database containers are required')
+  }
   const contractKind =
     requested.contract === 'pre' ? 'pre_activation' : 'post_activation'
   const contractPath = path.join(
@@ -144,17 +91,8 @@ async function main() {
   )
   const { contract, sha256: relationContractSha256 } =
     await loadCriticalRelationContract(contractPath, contractKind)
-  const referenceConnection = postgresUrlToLibpqEnv(databaseUrl, {
-    localOnly: true,
-  })
-  const peerReferenceConnection = postgresUrlToLibpqEnv(
-    peerReferenceDatabaseUrl,
-    {
-      localOnly: true,
-    },
-  )
   const actual = await evidence(
-    referenceConnection.libpqEnv,
+    'reference',
     buildSchemaGoldenEvidenceSql(contract),
   )
   if (
@@ -189,11 +127,11 @@ async function main() {
     throw new Error('Schema-golden reference proof is invalid JSON')
   }
   const referenceIdentity = await evidence(
-    referenceConnection.libpqEnv,
+    'reference',
     buildServerIdentitySql(),
   )
   const peerReferenceIdentity = await evidence(
-    peerReferenceConnection.libpqEnv,
+    'peer_reference',
     buildServerIdentitySql(),
   )
   const { contract: bootstrapContract, sha256: bootstrapContractSha256 } =
@@ -213,9 +151,9 @@ async function main() {
     peerReferenceIdentity,
   )
   if (
-    referenceProof.hostname !== referenceConnection.hostname ||
-    referenceProof.port !== referenceConnection.port ||
-    referenceProof.database !== referenceConnection.database
+    referenceProof.hostname !== '127.0.0.1' ||
+    referenceProof.port !== reference.port ||
+    referenceProof.database !== 'postgres'
   ) {
     throw new Error('Schema-golden reference proof target changed')
   }

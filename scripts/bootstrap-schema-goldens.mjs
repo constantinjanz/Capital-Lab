@@ -177,7 +177,7 @@ shadow_port = ${ports.shadow}
 major_version = 17
 
 [db.migrations]
-enabled = true
+enabled = false
 schema_paths = []
 
 [db.seed]
@@ -304,6 +304,29 @@ async function stopReference(build) {
     'supabase',
     ['stop', '--no-backup', `--workdir=${build.directory}`],
     { timeoutMs: 120_000 },
+  )
+}
+
+async function applyReferenceMigrations(build, workspace) {
+  requireSuccess(
+    await runProcess(
+      'node',
+      [
+        path.join(workspace, 'scripts', 'apply-local-migrations-via-psql.mjs'),
+        `--contract=${build.contract}`,
+        '--seed=omit',
+        '--target=reference',
+      ],
+      {
+        cwd: workspace,
+        env: {
+          ...process.env,
+          CAPITAL_LAB_REFERENCE_DATABASE_PORT: String(build.db),
+          CAPITAL_LAB_REFERENCE_RUN_ID: build.referenceRunId,
+        },
+      },
+    ),
+    'Reference migration replay',
   )
 }
 
@@ -499,6 +522,7 @@ async function main() {
       for (const build of pair) {
         await startReference(build, workspace)
         running.push(build)
+        await applyReferenceMigrations(build, workspace)
       }
       const captures = []
       const proofRows = []

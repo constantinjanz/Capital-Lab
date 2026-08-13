@@ -117,19 +117,35 @@ jobs:
         with:
           version: 2.113.0
       - run: supabase --version
-      - run: node scripts/run-ci-gate.mjs --id supabase-start -- node scripts/run-redacted-subprocess.mjs --id=supabase-start -- supabase start
+      - name: Create exact run-owned local CI stack
+        run: |
+          ci_run_id="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ci_workdir="${RUNNER_TEMP}/capital-lab-ci-${ci_run_id}"
+          node scripts/create-owned-local-ci-stack.mjs \
+            "--run-id=${ci_run_id}" "--output-dir=${ci_workdir}"
+          echo "CAPITAL_LAB_CI_RUN_ID=${ci_run_id}" >> "$GITHUB_ENV"
+          echo "CAPITAL_LAB_CI_WORKDIR=${ci_workdir}" >> "$GITHUB_ENV"
+      - run: node scripts/run-ci-gate.mjs --id supabase-start -- node scripts/run-redacted-subprocess.mjs --id=supabase-start -- supabase start "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
+      - name: Replay exact PRE migrations through psql simple-query mode
+        run: node scripts/run-ci-gate.mjs --id local-migration-replay-pre -- node scripts/apply-local-migrations-via-psql.mjs --contract=pre --seed=omit --target=ci
       - name: Rollback-only migration rehearsal
-        env:
-          CAPITAL_LAB_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: node scripts/run-ci-gate.mjs --id migration-rollback-rehearsal -- node scripts/run-local-rollback-migration-rehearsal.mjs
-      - run: node scripts/run-ci-gate.mjs --id database-reset -- supabase db reset
-      - run: node scripts/run-ci-gate.mjs --id database-pgtap -- supabase test db
+      - name: Seed-free reset of the exact run-owned stack
+        run: |
+          node scripts/run-ci-gate.mjs --id database-reset -- \
+            node scripts/reset-owned-local-ci-stack.mjs \
+            "--confirm=RESET OWNED CAPITAL LAB CI STACK postgres" \
+            "--run-id=${CAPITAL_LAB_CI_RUN_ID}" \
+            "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
+          node scripts/run-ci-gate.mjs --id database-reset-migrations -- \
+            node scripts/apply-local-migrations-via-psql.mjs \
+            --contract=post --seed=include --target=ci
+      - run: node scripts/run-ci-gate.mjs --id database-pgtap -- supabase test db "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
       - name: Seed-free pre- and post-activation backup and disposable restore
         shell: bash
         run: |
           set -euo pipefail
           artifact_root="$(mktemp -d "${RUNNER_TEMP}/capital-lab-artifacts.XXXXXX")"
-          hold_root="$(mktemp -d "${RUNNER_TEMP}/capital-lab-migrations.XXXXXX")"
           restore_run_id="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           target_workdir="${RUNNER_TEMP}/capital-lab-restore-${restore_run_id}"
           disposable_marker="$(node -e "process.stdout.write(require('node:crypto').randomUUID())")"
@@ -137,28 +153,14 @@ jobs:
           export CAPITAL_LAB_RESTORE_DISPOSABLE_MARKER="$disposable_marker"
           [[ "$restore_run_id" =~ ^run-[0-9]+-[0-9]+$ ]]
           [[ "$artifact_root" == "$RUNNER_TEMP"/capital-lab-artifacts.* ]]
-          [[ "$hold_root" == "$RUNNER_TEMP"/capital-lab-migrations.* ]]
           [[ "$target_workdir" == "$RUNNER_TEMP"/capital-lab-restore-run-* ]]
           node scripts/create-local-restore-stack.mjs "--run-id=${restore_run_id}" "--output-dir=${target_workdir}"
           target_running=false
-          restore_pending() {
-            local restore_failed=0
-            for file in "$hold_root"/*.sql; do
-              if [ -f "$file" ] && ! mv "$file" supabase/migrations/; then
-                restore_failed=1
-              fi
-            done
-            return "$restore_failed"
-          }
           cleanup() {
             prior_status=$?
             trap - EXIT
             set +e
             cleanup_failed=0
-            if ! restore_pending; then
-              echo 'Migration hold cleanup failed closed' >&2
-              cleanup_failed=1
-            fi
             if [ "$target_running" = true ]; then
               if ! supabase stop --no-backup --workdir "$target_workdir" >/dev/null 2>&1; then
                 echo 'Disposable restore stack cleanup failed closed' >&2
@@ -173,11 +175,6 @@ jobs:
             fi
             if [[ "$target_workdir" == "$RUNNER_TEMP"/capital-lab-restore-run-* ]]; then
               if ! rm -rf -- "$target_workdir"; then cleanup_failed=1; fi
-            else
-              cleanup_failed=1
-            fi
-            if [[ "$hold_root" == "$RUNNER_TEMP"/capital-lab-migrations.* ]]; then
-              if ! rm -rf -- "$hold_root"; then cleanup_failed=1; fi
             else
               cleanup_failed=1
             fi
@@ -209,19 +206,17 @@ jobs:
               return 1
             fi
           }
-          mv supabase/migrations/20260809150000_post_build_hosting_safety.sql "$hold_root"/
-          mv supabase/migrations/20260809150417_activation_readiness_follow_up.sql "$hold_root"/
-          mv supabase/migrations/20260812092043_fourth_activation_readiness_remediation.sql "$hold_root"/
-          mv supabase/migrations/20260812140953_fourth_activation_readiness_review_closure.sql "$hold_root"/
-          supabase db reset --no-seed
-          restore_pending
-          export CAPITAL_LAB_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+          node scripts/reset-owned-local-ci-stack.mjs \
+            "--confirm=RESET OWNED CAPITAL LAB CI STACK postgres" \
+            "--run-id=${CAPITAL_LAB_CI_RUN_ID}" \
+            "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
+          node scripts/apply-local-migrations-via-psql.mjs \
+            --contract=pre --seed=omit --target=ci
           node scripts/local-auth-restore-fixture.mjs --mode=prepare "--credentials=${artifact_root}/pre-auth.json"
           run_mvcc_export pre "${artifact_root}/pre" "${artifact_root}/pre-race-control"
-          test "$(PGPASSWORD=postgres psql -X --no-psqlrc --tuples-only --no-align -h 127.0.0.1 -p 54322 -U postgres -d postgres -c "select count(*) from private.application_settings where setting_key = 'local_mvcc_race_fixture_v1'")" = '0'
+          node scripts/assert-local-mvcc-fixture-clean.mjs
           node scripts/run-redacted-subprocess.mjs --id=restore-stack-b-pre-start -- supabase start "--workdir=${target_workdir}"
           target_running=true
-          export CAPITAL_LAB_RESTORE_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55322/postgres'
           export CAPITAL_LAB_LOCAL_DISPOSABLE_CONFIRM='RESET DISPOSABLE CAPITAL LAB RESTORE STACK B postgres'
           node scripts/prepare-seed-free-local-restore-target.mjs "--proof=${artifact_root}/pre-target-proof.json"
           export CAPITAL_LAB_RESTORE_CONFIRM_DISPOSABLE='seed-free-disposable-database-confirmed'
@@ -239,7 +234,12 @@ jobs:
           mv "${artifact_root}/pre/auth-data.original" "${artifact_root}/pre/auth-data.sql"
           supabase stop --no-backup --workdir "$target_workdir"
           target_running=false
-          supabase db reset --no-seed
+          node scripts/reset-owned-local-ci-stack.mjs \
+            "--confirm=RESET OWNED CAPITAL LAB CI STACK postgres" \
+            "--run-id=${CAPITAL_LAB_CI_RUN_ID}" \
+            "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
+          node scripts/apply-local-migrations-via-psql.mjs \
+            --contract=post --seed=omit --target=ci
           node scripts/local-auth-restore-fixture.mjs --mode=prepare "--credentials=${artifact_root}/post-auth.json"
           run_mvcc_export post "${artifact_root}/post" "${artifact_root}/post-race-control"
           node scripts/run-redacted-subprocess.mjs --id=restore-stack-b-post-start -- supabase start "--workdir=${target_workdir}"
@@ -250,6 +250,9 @@ jobs:
           node scripts/verify-backup-restore.mjs --contract=post "--manifest=${artifact_root}/post/manifest.json" "--expected-manifest-sha256=${post_hash}" "--target-proof=${artifact_root}/post-target-proof.json" "--expected-target-proof-sha256=${post_target_hash}"
           node scripts/local-auth-restore-fixture.mjs --mode=verify "--credentials=${artifact_root}/post-auth.json" "--supabase-workdir=${target_workdir}"
           node scripts/local-auth-restore-fixture.mjs --mode=faults "--credentials=${artifact_root}/post-auth.json" "--supabase-workdir=${target_workdir}"
+      - name: Stop exact run-owned local CI stack
+        if: always() && env.CAPITAL_LAB_CI_WORKDIR != ''
+        run: supabase stop --no-backup "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
       - name: Publish database evidence summary
         if: always()
         run: cat .ci-evidence/*.json >> "$GITHUB_STEP_SUMMARY"
@@ -313,7 +316,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Native Windows subprocess and path gates
-        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/lib/held-files.test.ts scripts/lib/safe-artifact-path.test.ts scripts/lib/credential-scan-safety.test.ts scripts/lib/schema-golden-reference-proof.test.ts scripts/lib/mvcc-race-control.test.ts scripts/run-activation-phase.test.ts scripts/run-database-tests.test.ts scripts/run-emergency-kill.test.ts scripts/run-redacted-subprocess.test.ts scripts/migration-rehearsal-contract.test.ts scripts/critical-backup-contract.test.ts scripts/local-supabase-target-proof.test.ts scripts/prepare-seed-free-local-restore-target.test.ts scripts/capture-backup-schema-golden.test.ts scripts/bootstrap-schema-goldens.test.ts scripts/verify-schema-golden-candidate-artifact.test.ts
+        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/lib/held-files.test.ts scripts/lib/safe-artifact-path.test.ts scripts/lib/credential-scan-safety.test.ts scripts/lib/schema-golden-reference-proof.test.ts scripts/lib/mvcc-race-control.test.ts scripts/run-activation-phase.test.ts scripts/run-database-tests.test.ts scripts/run-emergency-kill.test.ts scripts/run-redacted-subprocess.test.ts scripts/migration-rehearsal-contract.test.ts scripts/critical-backup-contract.test.ts scripts/local-supabase-target-proof.test.ts scripts/prepare-seed-free-local-restore-target.test.ts scripts/capture-backup-schema-golden.test.ts scripts/bootstrap-schema-goldens.test.ts scripts/verify-schema-golden-candidate-artifact.test.ts scripts/apply-local-migrations-via-psql.test.ts scripts/owned-local-ci-stack.test.ts
       - name: Parse every Windows-sensitive subprocess wrapper
         run: |
           node --check scripts/export-critical-tables.mjs
@@ -329,5 +332,9 @@ jobs:
           node --check scripts/prepare-schema-golden-reference-proof.mjs
           node --check scripts/capture-backup-schema-golden.mjs
           node --check scripts/bootstrap-schema-goldens.mjs
+          node --check scripts/apply-local-migrations-via-psql.mjs
+          node --check scripts/assert-local-mvcc-fixture-clean.mjs
+          node --check scripts/create-owned-local-ci-stack.mjs
+          node --check scripts/reset-owned-local-ci-stack.mjs
           node --check scripts/verify-schema-golden-candidate-artifact.mjs
           node --check scripts/run-emergency-bootstrap.mjs

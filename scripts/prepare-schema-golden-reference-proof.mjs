@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { chmod, readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -8,10 +8,12 @@ import {
   buildServerIdentitySql,
   canonicalJson,
   loadCriticalRelationContract,
-  postgresUrlToLibpqEnv,
-  redactedPostgresError,
   sha256,
 } from './critical-backup-contract.mjs'
+import {
+  inspectOwnedDatabaseContainer,
+  ownedPsql,
+} from './lib/local-container-postgres.mjs'
 import { buildSchemaGoldenReferenceProof } from './lib/schema-golden-reference-proof.mjs'
 import { loadSchemaGoldenBootstrapContract } from './lib/schema-golden-bootstrap-contract.mjs'
 import {
@@ -53,83 +55,8 @@ function git(args, cwd) {
   return result.stdout.trim()
 }
 
-async function evidence(connectionEnv, sql) {
-  const executable = resolveNativeExecutable('psql')
-  return new Promise((resolve, reject) => {
-    let stdout = ''
-    let stderr = ''
-    let settled = false
-    let timedOut = false
-    const child = spawn(
-      executable.command,
-      resolvedArguments(executable, [
-        '-X',
-        '--no-psqlrc',
-        '--tuples-only',
-        '--no-align',
-        '--set',
-        'ON_ERROR_STOP=1',
-      ]),
-      {
-        env: {
-          ...process.env,
-          ...connectionEnv,
-          PGCONNECT_TIMEOUT: '10',
-          PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
-        },
-        shell: false,
-        windowsHide: true,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      },
-    )
-    child.stdout.on('data', (chunk) => (stdout += chunk.toString()))
-    child.stderr.on('data', (chunk) => (stderr += chunk.toString()))
-    const timer = setTimeout(() => {
-      timedOut = true
-      child.kill('SIGTERM')
-    }, 300_000)
-    child.once('error', (error) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      reject(error)
-    })
-    child.once('exit', (code, signal) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      if (code !== 0 || signal || timedOut) {
-        reject(
-          new Error(
-            `Reference-proof query failed; redacted error: ${redactedPostgresError(stderr)}`,
-          ),
-        )
-      } else resolve(JSON.parse(stdout.trim()))
-    })
-    child.stdin.end(sql)
-  })
-}
-
-function inspectContainer(projectId) {
-  const executable = resolveNativeExecutable('docker')
-  const result = spawnSync(
-    executable.command,
-    resolvedArguments(executable, ['inspect', `supabase_db_${projectId}`]),
-    {
-      encoding: 'utf8',
-      shell: false,
-      timeout: 30_000,
-      windowsHide: true,
-    },
-  )
-  if (result.status !== 0 || result.signal || result.error) {
-    throw new Error('Reference-cluster container is unavailable')
-  }
-  const parsed = JSON.parse(result.stdout)
-  if (!Array.isArray(parsed) || parsed.length !== 1) {
-    throw new Error('Reference-cluster container is not unique')
-  }
-  return parsed[0]
+async function evidence(sql) {
+  return JSON.parse(await ownedPsql('reference', sql))
 }
 
 async function main() {
@@ -143,17 +70,8 @@ async function main() {
     throw new Error('Run-specific schema reference identity is required')
   }
   const projectId = `capital-lab-reference-${runId}`
-  const databaseUrl = process.env.CAPITAL_LAB_REFERENCE_DATABASE_URL
-  if (!databaseUrl)
-    throw new Error('Reference database URL is required and never printed')
-  const connection = postgresUrlToLibpqEnv(databaseUrl, { localOnly: true })
-  if (
-    connection.hostname !== '127.0.0.1' ||
-    !/^5[6-9][0-9]{3}$/u.test(connection.port) ||
-    connection.database !== 'postgres'
-  ) {
-    throw new Error('Schema reference database boundary is invalid')
-  }
+  const port = process.env.CAPITAL_LAB_REFERENCE_DATABASE_PORT
+  const target = inspectOwnedDatabaseContainer('reference')
   const contractKind =
     requested.contract === 'pre' ? 'pre_activation' : 'post_activation'
   const contractPath = path.join(
@@ -166,12 +84,8 @@ async function main() {
     await loadCriticalRelationContract(contractPath, contractKind)
   const { contract: bootstrapContract, sha256: bootstrapContractSha256 } =
     await loadSchemaGoldenBootstrapContract(workspace)
-  const actual = await evidence(
-    connection.libpqEnv,
-    buildSchemaGoldenEvidenceSql(contract),
-  )
+  const actual = await evidence(buildSchemaGoldenEvidenceSql(contract))
   const seedEvidence = await evidence(
-    connection.libpqEnv,
     `select jsonb_build_object(
       'authUsers', (select count(*)::text from auth.users),
       'applicationUsers', (select count(*)::text from public.app_users)
@@ -192,8 +106,8 @@ async function main() {
   ) {
     throw new Error('Reference cluster is seeded or not migration-exact')
   }
-  const identity = await evidence(connection.libpqEnv, buildServerIdentitySql())
-  const inspection = inspectContainer(projectId)
+  const identity = await evidence(buildServerIdentitySql())
+  const inspection = target.inspection
   const portBinding = inspection?.NetworkSettings?.Ports?.['5432/tcp']
   if (
     inspection?.Name !== `/supabase_db_${projectId}` ||
@@ -202,32 +116,35 @@ async function main() {
     !Array.isArray(portBinding) ||
     portBinding.length !== 1 ||
     portBinding[0]?.HostIp !== '127.0.0.1' ||
-    portBinding[0]?.HostPort !== connection.port
+    portBinding[0]?.HostPort !== port
   ) {
     throw new Error('Reference cluster container binding is invalid')
   }
-  const proof = buildSchemaGoldenReferenceProof({
-    contractKind,
-    runId,
-    projectId,
-    hostname: connection.hostname,
-    port: connection.port,
-    database: connection.database,
-    databaseRole: identity.databaseRole,
-    gitCommitSha: git(['rev-parse', 'HEAD'], workspace),
-    relationContractSha256,
-    migrationHistorySha256: actual.migrationHistorySha256,
-    serverFingerprint: sha256(identity.serverIdentity),
-    databaseFingerprint: sha256(identity.databaseIdentity),
-    containerFingerprint: sha256(inspection.Id),
-    containerImage: inspection.Config?.Image,
-    containerImageRegistry: bootstrapContract.postgresImageRegistry,
-    supabaseCliVersion: bootstrapContract.supabaseCliVersion,
-    bootstrapContractSha256,
-    seedFree: true,
-    builtFromReviewedMigrations: true,
-    capturedAt: new Date().toISOString(),
-  }, bootstrapContract)
+  const proof = buildSchemaGoldenReferenceProof(
+    {
+      contractKind,
+      runId,
+      projectId,
+      hostname: '127.0.0.1',
+      port,
+      database: 'postgres',
+      databaseRole: identity.databaseRole,
+      gitCommitSha: git(['rev-parse', 'HEAD'], workspace),
+      relationContractSha256,
+      migrationHistorySha256: actual.migrationHistorySha256,
+      serverFingerprint: sha256(identity.serverIdentity),
+      databaseFingerprint: sha256(identity.databaseIdentity),
+      containerFingerprint: sha256(inspection.Id),
+      containerImage: inspection.Config?.Image,
+      containerImageRegistry: bootstrapContract.postgresImageRegistry,
+      supabaseCliVersion: bootstrapContract.supabaseCliVersion,
+      bootstrapContractSha256,
+      seedFree: true,
+      builtFromReviewedMigrations: true,
+      capturedAt: new Date().toISOString(),
+    },
+    bootstrapContract,
+  )
   const output = await newExternalPath(workspace, requested.proof)
   const bytes = Buffer.from(`${canonicalJson(proof)}\n`)
   await writeFile(output, bytes, { mode: 0o600, flag: 'wx' })

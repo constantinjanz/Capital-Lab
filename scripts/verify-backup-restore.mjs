@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -22,12 +22,14 @@ import {
   fingerprintRolePolicy,
   loadCriticalRelationContract,
   loadSchemaGolden,
-  postgresUrlToLibpqEnv,
-  redactedPostgresError,
   roleRestoreRequired,
   sha256,
 } from './critical-backup-contract.mjs'
 import { validateRestoreTargetProof } from './lib/local-supabase-target-proof.mjs'
+import {
+  ownedPsql,
+  runOwnedPostgresTool,
+} from './lib/local-container-postgres.mjs'
 import {
   verifiedDirectChild,
   verifiedExternalFile,
@@ -37,9 +39,7 @@ import {
   resolveNativeExecutable,
 } from './lib/safe-process.mjs'
 
-const PROCESS_TIMEOUT_MS = 600_000
 const DISPOSABLE_CONFIRMATION = 'seed-free-disposable-database-confirmed'
-const RESTORE_DATABASE = 'postgres'
 
 function options() {
   const entries = process.argv.slice(2).map((argument) => {
@@ -82,77 +82,27 @@ function git(args, cwd) {
   return result.stdout.trim()
 }
 
-async function runPsql(connectionEnv, args, input) {
-  const executable = resolveNativeExecutable('psql')
-  return new Promise((resolve, reject) => {
-    let stdout = ''
-    let stderr = ''
-    let settled = false
-    let timedOut = false
-    const child = spawn(
-      executable.command,
-      resolvedArguments(executable, [
-        '-X',
-        '--no-psqlrc',
-        '--set',
-        'ON_ERROR_STOP=1',
-        ...args,
-      ]),
-      {
-        env: {
-          ...process.env,
-          ...connectionEnv,
-          PGCONNECT_TIMEOUT: '10',
-          PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=10000',
-        },
-        shell: false,
-        windowsHide: true,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      },
+async function runPsql(role, args, input) {
+  return (
+    await runOwnedPostgresTool(
+      role,
+      'psql',
+      ['--no-psqlrc', '--set=ON_ERROR_STOP=1', ...args],
+      input,
     )
-    child.stdout.on('data', (chunk) => (stdout += chunk.toString()))
-    child.stderr.on('data', (chunk) => (stderr += chunk.toString()))
-    const timer = setTimeout(() => {
-      timedOut = true
-      child.kill('SIGTERM')
-    }, PROCESS_TIMEOUT_MS)
-    child.once('error', (error) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      reject(error)
-    })
-    child.once('exit', (code, signal) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      if (code !== 0 || signal || timedOut) {
-        reject(
-          new Error(
-            `psql restore or evidence step failed; redacted database error: ${redactedPostgresError(stderr)}`,
-          ),
-        )
-      } else resolve(stdout)
-    })
-    child.stdin.end(input)
-  })
+  ).stdout
 }
 
-async function evidence(connectionEnv, sql) {
-  const output = await runPsql(
-    connectionEnv,
-    ['--tuples-only', '--no-align'],
-    sql,
-  )
-  return JSON.parse(output.trim())
+async function evidence(role, sql) {
+  return JSON.parse(await ownedPsql(role, sql))
 }
 
-async function assertForeignKeyIntegrity(connectionEnv) {
-  const catalog = await evidence(connectionEnv, buildForeignKeyCatalogSql())
+async function assertForeignKeyIntegrity(role) {
+  const catalog = await evidence(role, buildForeignKeyCatalogSql())
   assertForeignKeyCatalog(catalog)
   for (const specification of catalog.constraints) {
     const result = await evidence(
-      connectionEnv,
+      role,
       buildForeignKeyViolationSql(specification),
     )
     if (result.violationCount !== '0') {
@@ -201,30 +151,6 @@ async function main() {
       'Explicit seed-free disposable-database confirmation is required',
     )
   }
-  const restoreValue = process.env.CAPITAL_LAB_RESTORE_DATABASE_URL
-  const sourceValue = process.env.CAPITAL_LAB_DATABASE_URL
-  if (!restoreValue || !sourceValue)
-    throw new Error(
-      'Local source and restore database URLs are required and never printed',
-    )
-  const restoreConnection = postgresUrlToLibpqEnv(restoreValue, {
-    localOnly: true,
-  })
-  const sourceConnection = postgresUrlToLibpqEnv(sourceValue, {
-    localOnly: true,
-  })
-  if (
-    restoreConnection.database !== RESTORE_DATABASE ||
-    sourceConnection.database !== 'postgres' ||
-    sourceConnection.hostname !== '127.0.0.1' ||
-    sourceConnection.port !== '54322' ||
-    restoreConnection.hostname !== '127.0.0.1' ||
-    restoreConnection.port !== '55322'
-  ) {
-    throw new Error(
-      'Source A or retained disposable Supabase stack B target is invalid',
-    )
-  }
   const workspace = await realpath(process.cwd())
   if (git(['status', '--porcelain=v1', '--untracked-files=all'], workspace)) {
     throw new Error(
@@ -241,12 +167,9 @@ async function main() {
     throw new Error('Restore-target proof differs from its retained SHA-256')
   }
   const untrustedTargetProof = JSON.parse(targetProofBytes.toString('utf8'))
-  const targetIdentity = await evidence(
-    restoreConnection.libpqEnv,
-    buildServerIdentitySql(),
-  )
+  const targetIdentity = await evidence('restore', buildServerIdentitySql())
   const markerEvidence = await evidence(
-    restoreConnection.libpqEnv,
+    'restore',
     `select jsonb_build_object(
       'database', current_database(), 'databaseRole', current_user,
       'runId', marker.run_id, 'disposableMarker', marker.disposable_marker::text
@@ -260,12 +183,12 @@ async function main() {
     sha256(canonicalJson(markerEvidence)),
   )
   if (
-    targetProof.hostname !== restoreConnection.hostname ||
-    targetProof.port !== restoreConnection.port ||
-    targetProof.database !== restoreConnection.database ||
+    targetProof.hostname !== '127.0.0.1' ||
+    targetProof.port !== '55322' ||
+    targetProof.database !== 'postgres' ||
     targetProof.runId !== markerEvidence.runId ||
     targetProof.disposableMarker !== markerEvidence.disposableMarker ||
-    targetProof.databaseRole !== restoreConnection.libpqEnv.PGUSER
+    targetProof.databaseRole !== 'postgres'
   ) {
     throw new Error(
       'Restore URL differs from the retained stack B target proof',
@@ -349,25 +272,21 @@ async function main() {
       throw new Error('Backup artifact checksum mismatch')
     artifacts[key] = artifact
   }
-  const sourceIdentity = await evidence(
-    sourceConnection.libpqEnv,
-    buildServerIdentitySql(),
-  )
+  const sourceIdentity = await evidence('source', buildServerIdentitySql())
   const sourceEvidenceBefore = await evidence(
-    sourceConnection.libpqEnv,
+    'source',
     buildCriticalEvidenceSql(contract),
   )
   const sourceAuthEvidenceBefore = await evidence(
-    sourceConnection.libpqEnv,
+    'source',
     buildAuthEvidenceSql(),
   )
   const sourceSensitiveAuthBefore = await evidence(
-    sourceConnection.libpqEnv,
+    'source',
     buildSensitiveAuthStateSql(),
   )
-  const sourceForeignKeyCatalogBefore = await assertForeignKeyIntegrity(
-    sourceConnection.libpqEnv,
-  )
+  const sourceForeignKeyCatalogBefore =
+    await assertForeignKeyIntegrity('source')
   assertContractKeys(contract, sourceEvidenceBefore)
   assertRestoredEvidence(manifest, sourceEvidenceBefore)
   assertRestoredAuthEvidence(manifest, sourceAuthEvidenceBefore)
@@ -379,7 +298,7 @@ async function main() {
     throw new Error('Retained source and target cluster binding changed')
   }
   const preflight = await evidence(
-    restoreConnection.libpqEnv,
+    'restore',
     `select jsonb_build_object(
       'userRelations', (select count(*) from pg_catalog.pg_class as class
         join pg_catalog.pg_namespace as namespace on namespace.oid = class.relnamespace
@@ -400,7 +319,7 @@ async function main() {
     manifest.source.databaseFingerprint,
   )
   const targetRolePolicy = fingerprintRolePolicy(
-    await evidence(restoreConnection.libpqEnv, buildRolePolicySql()),
+    await evidence('restore', buildRolePolicySql()),
   )
   if (
     roleRestoreRequired(
@@ -409,61 +328,49 @@ async function main() {
       false,
     )
   ) {
-    await runPsql(restoreConnection.libpqEnv, ['--file', artifacts.roles])
+    await runPsql('restore', [], await readFile(artifacts.roles))
   }
-  await runPsql(restoreConnection.libpqEnv, [
-    '--single-transaction',
-    '--file',
+  for (const file of [
     artifacts.authSchema,
-  ])
-  await runPsql(restoreConnection.libpqEnv, [
-    '--single-transaction',
-    '--file',
     restorePreludePath,
-  ])
-  await runPsql(restoreConnection.libpqEnv, [
-    '--single-transaction',
-    '--file',
     artifacts.schema,
-  ])
-  await runPsql(restoreConnection.libpqEnv, [
-    '--single-transaction',
-    '--command',
-    'SET session_replication_role = replica',
-    '--file',
-    artifacts.authData,
-  ])
-  await runPsql(restoreConnection.libpqEnv, [
-    '--single-transaction',
-    '--command',
-    'SET session_replication_role = replica',
-    '--file',
-    artifacts.data,
-  ])
-  await runPsql(restoreConnection.libpqEnv, [
-    '--single-transaction',
-    '--file',
-    artifacts.historySchema,
-    '--file',
-    artifacts.historyData,
-  ])
+  ]) {
+    await runPsql('restore', ['--single-transaction'], await readFile(file))
+  }
+  for (const file of [artifacts.authData, artifacts.data]) {
+    await runPsql(
+      'restore',
+      ['--single-transaction'],
+      Buffer.concat([
+        Buffer.from('SET session_replication_role = replica;\n'),
+        await readFile(file),
+      ]),
+    )
+  }
+  await runPsql(
+    'restore',
+    ['--single-transaction'],
+    Buffer.concat([
+      await readFile(artifacts.historySchema),
+      Buffer.from('\n'),
+      await readFile(artifacts.historyData),
+    ]),
+  )
   const actualEvidence = await evidence(
-    restoreConnection.libpqEnv,
+    'restore',
     buildCriticalEvidenceSql(contract),
   )
   assertContractKeys(contract, actualEvidence)
   assertRestoredEvidence(manifest, actualEvidence)
   assertRestoredAuthEvidence(
     manifest,
-    await evidence(restoreConnection.libpqEnv, buildAuthEvidenceSql()),
+    await evidence('restore', buildAuthEvidenceSql()),
   )
   const restoredSensitiveAuth = await evidence(
-    restoreConnection.libpqEnv,
+    'restore',
     buildSensitiveAuthStateSql(),
   )
-  const restoredForeignKeyCatalog = await assertForeignKeyIntegrity(
-    restoreConnection.libpqEnv,
-  )
+  const restoredForeignKeyCatalog = await assertForeignKeyIntegrity('restore')
   if (
     canonicalJson(restoredSensitiveAuth) !==
       canonicalJson(sourceSensitiveAuthBefore) ||
@@ -479,27 +386,22 @@ async function main() {
       'Disposable restore unexpectedly reused the source database identity',
     )
   }
-  const sourceIdentityAfter = await evidence(
-    sourceConnection.libpqEnv,
-    buildServerIdentitySql(),
-  )
+  const sourceIdentityAfter = await evidence('source', buildServerIdentitySql())
   const sourceEvidenceAfter = await evidence(
-    sourceConnection.libpqEnv,
+    'source',
     buildCriticalEvidenceSql(contract),
   )
   const sourceAuthEvidenceAfter = await evidence(
-    sourceConnection.libpqEnv,
+    'source',
     buildAuthEvidenceSql(),
   )
   const sourceSensitiveAuthAfter = await evidence(
-    sourceConnection.libpqEnv,
+    'source',
     buildSensitiveAuthStateSql(),
   )
-  const sourceForeignKeyCatalogAfter = await assertForeignKeyIntegrity(
-    sourceConnection.libpqEnv,
-  )
+  const sourceForeignKeyCatalogAfter = await assertForeignKeyIntegrity('source')
   const markerEvidenceAfter = await evidence(
-    restoreConnection.libpqEnv,
+    'restore',
     `select jsonb_build_object(
       'database', current_database(), 'databaseRole', current_user,
       'runId', marker.run_id, 'disposableMarker', marker.disposable_marker::text
