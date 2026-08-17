@@ -11,9 +11,31 @@ import {
   restoreProjectId,
   validateRestoreContainerInspection,
 } from './local-supabase-target-proof.mjs'
+import {
+  diagnoseOwnedLocalDatabaseContainer,
+  diagnoseOwnedLocalDatabaseImage,
+  emitLocalContainerIdentityRejection,
+  localContainerInspectFailureDiagnostic,
+  LocalContainerImageIdentityRejection,
+} from './local-container-identity-diagnostic.mjs'
 import { resolvedArguments, resolveNativeExecutable } from './safe-process.mjs'
 
 const PROCESS_TIMEOUT_MS = 10 * 60 * 1000
+const COMMIT_SHA = /^[0-9a-f]{40}$/u
+
+function rejectLocalContainerIdentity(role, env, diagnostic) {
+  const error = new LocalContainerImageIdentityRejection(role, diagnostic)
+  if (COMMIT_SHA.test(env.CAPITAL_LAB_CI_COMMIT_SHA ?? '')) {
+    try {
+      emitLocalContainerIdentityRejection(error, env.CAPITAL_LAB_CI_COMMIT_SHA)
+    } catch {
+      throw new Error(
+        'Local container identity diagnostic persistence failed closed',
+      )
+    }
+  }
+  throw error
+}
 
 export function ownedDatabaseContainer(role, env = process.env) {
   if (role === 'source') {
@@ -61,36 +83,132 @@ export function ownedDatabaseContainer(role, env = process.env) {
 
 export function inspectOwnedDatabaseContainer(role, env = process.env) {
   const target = ownedDatabaseContainer(role, env)
-  const executable = resolveNativeExecutable('docker')
-  const result = spawnSync(
-    executable.command,
-    resolvedArguments(executable, ['inspect', target.container]),
-    { encoding: 'utf8', shell: false, timeout: 30_000, windowsHide: true },
-  )
-  if (result.status !== 0 || result.signal || result.error) {
-    throw new Error('Owned local database container proof is unavailable')
+  let executable
+  try {
+    executable = resolveNativeExecutable('docker')
+  } catch {
+    rejectLocalContainerIdentity(
+      role,
+      env,
+      localContainerInspectFailureDiagnostic(
+        'container_inspect',
+        'container_inspect_unavailable',
+        target,
+      ),
+    )
   }
-  const parsed = JSON.parse(result.stdout)
-  if (!Array.isArray(parsed) || parsed.length !== 1) {
-    throw new Error('Owned local database container is not unique')
+  let result
+  try {
+    result = spawnSync(
+      executable.command,
+      resolvedArguments(executable, ['inspect', target.container]),
+      { encoding: 'utf8', shell: false, timeout: 30_000, windowsHide: true },
+    )
+  } catch {
+    rejectLocalContainerIdentity(
+      role,
+      env,
+      localContainerInspectFailureDiagnostic(
+        'container_inspect',
+        'container_inspect_unavailable',
+        target,
+      ),
+    )
+  }
+  if (result.status !== 0 || result.signal || result.error) {
+    rejectLocalContainerIdentity(
+      role,
+      env,
+      localContainerInspectFailureDiagnostic(
+        'container_inspect',
+        'container_inspect_unavailable',
+        target,
+      ),
+    )
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(result.stdout)
+  } catch {
+    rejectLocalContainerIdentity(
+      role,
+      env,
+      localContainerInspectFailureDiagnostic(
+        'container_shape',
+        'container_json',
+        target,
+      ),
+    )
+  }
+  const containerDiagnostic = diagnoseOwnedLocalDatabaseContainer(
+    parsed,
+    target,
+  )
+  if (containerDiagnostic) {
+    rejectLocalContainerIdentity(role, env, containerDiagnostic)
   }
   const containerBinding = validateOwnedLocalDatabaseContainerBinding(
     parsed[0],
     target,
   )
-  const imageResult = spawnSync(
-    executable.command,
-    resolvedArguments(executable, [
-      'image',
-      'inspect',
-      containerBinding.containerImageId,
-    ]),
-    { encoding: 'utf8', shell: false, timeout: 30_000, windowsHide: true },
-  )
-  if (imageResult.status !== 0 || imageResult.signal || imageResult.error) {
-    throw new Error('Owned local database image proof is unavailable')
+  let imageResult
+  try {
+    imageResult = spawnSync(
+      executable.command,
+      resolvedArguments(executable, [
+        'image',
+        'inspect',
+        containerBinding.containerImageId,
+      ]),
+      { encoding: 'utf8', shell: false, timeout: 30_000, windowsHide: true },
+    )
+  } catch {
+    rejectLocalContainerIdentity(
+      role,
+      env,
+      localContainerInspectFailureDiagnostic(
+        'image_inspect',
+        'image_inspect_unavailable',
+        target,
+        parsed,
+      ),
+    )
   }
-  const imageParsed = JSON.parse(imageResult.stdout)
+  if (imageResult.status !== 0 || imageResult.signal || imageResult.error) {
+    rejectLocalContainerIdentity(
+      role,
+      env,
+      localContainerInspectFailureDiagnostic(
+        'image_inspect',
+        'image_inspect_unavailable',
+        target,
+        parsed,
+      ),
+    )
+  }
+  let imageParsed
+  try {
+    imageParsed = JSON.parse(imageResult.stdout)
+  } catch {
+    rejectLocalContainerIdentity(
+      role,
+      env,
+      localContainerInspectFailureDiagnostic(
+        'image_shape',
+        'image_json',
+        target,
+        parsed,
+      ),
+    )
+  }
+  const imageDiagnostic = diagnoseOwnedLocalDatabaseImage(
+    parsed[0],
+    imageParsed,
+    target,
+  )
+  if (imageDiagnostic) {
+    rejectLocalContainerIdentity(role, env, imageDiagnostic)
+  }
   let identity
   if (role === 'source') {
     identity = validateLocalCiContainerInspection(

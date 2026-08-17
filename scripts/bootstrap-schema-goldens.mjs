@@ -20,6 +20,7 @@ import {
 } from './critical-backup-contract.mjs'
 import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
 import { inspectOwnedDatabaseContainer } from './lib/local-container-postgres.mjs'
+import { parseLocalContainerIdentityRejection } from './lib/local-container-identity-diagnostic.mjs'
 import { localCiImageIdentityEvidence } from './lib/owned-local-ci-stack.mjs'
 import { diagnosticFromStructuredOutput } from './lib/redacted-supabase-diagnostic.mjs'
 import { loadSchemaGoldenBootstrapContract } from './lib/schema-golden-bootstrap-contract.mjs'
@@ -119,6 +120,12 @@ async function runProcess(command, args, options = {}) {
 
 function requireSuccess(outcome, label) {
   if (outcome.code !== 0 || outcome.signal || outcome.timedOut) {
+    const identityRejection = parseLocalContainerIdentityRejection(
+      outcome.stdout,
+    )
+    if (identityRejection) {
+      process.stdout.write(`${JSON.stringify(identityRejection)}\n`)
+    }
     throw new Error(`${label} failed closed`)
   }
   return outcome

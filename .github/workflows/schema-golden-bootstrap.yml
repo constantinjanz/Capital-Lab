@@ -57,6 +57,7 @@ jobs:
           version: 2.113.0
       - name: Build PRE and POST twice from fresh Reference clusters
         env:
+          CAPITAL_LAB_CI_COMMIT_SHA: ${{ inputs.expected_commit_sha || github.event.pull_request.head.sha }}
           EXPECTED_SHA: ${{ inputs.expected_commit_sha || github.event.pull_request.head.sha }}
         run: |
           mkdir -p .ci-evidence

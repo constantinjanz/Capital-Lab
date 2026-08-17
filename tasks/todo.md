@@ -2,6 +2,39 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## PR #21 diagnostic-only image-identity pass (2026-08-17)
+
+Safety status: exactly one diagnostic commit and one exact-head CI/Golden cycle;
+ephemeral local/CI stacks only. No identity-rule change, Golden/migration change,
+Hosted/Production access, deployment, activation, provider, broker, Canary, or
+trading action is authorized.
+
+- [x] Reconfirm Draft/open/unmerged PR #21 and exact clean isolated branch/PR
+      HEAD `ce00c7f69ab9b73fcefbfee2a651779bc440fda9`; preserve and re-fingerprint
+      the unrelated dirty checkout without changing it.
+- [x] Add one fixed-enum, public-OCI-only rejection contract shared by Database
+      and Golden container guards, while retaining the existing binding and
+      immutable image validators and preventing every PostgreSQL subprocess
+      after a failed guard.
+- [x] Cover all six failure stages, binding/IP/port variants, container/image
+      IDs, OS/architecture, missing/wrong/additional RepoDigests, bounded output,
+      synthetic-secret suppression, all four container roles, and unchanged
+      success paths. Focused verification: 5 files / 108 tests, changed-file
+      zero-warning ESLint, and strict TypeScript.
+- [x] Complete local formatting, zero-warning lint, strict TypeScript, Vitest,
+      PAPER-only, worktree-plus-100-ancestor credential, production build,
+      checksum, and `git diff --check` gates. Verified with 5 focused files /
+      108 tests; 104 complete Vitest files / 838 tests; changed-file Prettier;
+      full zero-warning ESLint; strict TypeScript; PAPER-only; credential scan
+      with zero findings; successful Next.js 16.3.0 production build; and clean
+      diff/checksum verification. The full Windows working-tree Prettier scan is
+      CRLF-contaminated by system `core.autocrlf=true`; the unchanged LF Git
+      bytes were already exact-head CI-green and the prospective LF commit tree
+      is verified separately without rewriting unrelated files.
+- [ ] Create and push exactly one normal commit D, then inspect exactly one
+      automatic exact-D CI run and one automatic exact-D Golden run. Stop after
+      recording the typed rejection evidence; do not implement a fix.
+
 ## PR #21 immutable image-identity closure (2026-08-17)
 
 Safety status: isolated repository/ephemeral CI only. No Hosted or Production

@@ -126,6 +126,95 @@ describe('owned local PostgreSQL subprocess image boundary', () => {
   })
 
   it.each([
+    [
+      'container_inspect',
+      [
+        {
+          error: undefined,
+          signal: null,
+          status: 1,
+          stdout: 'synthetic secret must stay private',
+        },
+      ],
+    ],
+    [
+      'container_shape',
+      [
+        {
+          error: undefined,
+          signal: null,
+          status: 0,
+          stdout: 'not-json synthetic secret',
+        },
+      ],
+    ],
+    [
+      'container_binding',
+      [
+        successfulInspect({
+          ...containerInspection(
+            'supabase_db_capital-lab-ci-run-12345-1',
+            '54322',
+          ),
+          Config: { Image: 'public.ecr.aws/supabase/postgres:17.6.1.158' },
+        }),
+      ],
+    ],
+    [
+      'image_inspect',
+      [
+        successfulInspect(
+          containerInspection(
+            'supabase_db_capital-lab-ci-run-12345-1',
+            '54322',
+          ),
+        ),
+        {
+          error: undefined,
+          signal: null,
+          status: 1,
+          stdout: 'synthetic secret must stay private',
+        },
+      ],
+    ],
+    [
+      'image_shape',
+      [
+        successfulInspect(
+          containerInspection(
+            'supabase_db_capital-lab-ci-run-12345-1',
+            '54322',
+          ),
+        ),
+        { error: undefined, signal: null, status: 0, stdout: '[]' },
+      ],
+    ],
+    [
+      'immutable_identity',
+      [
+        successfulInspect(
+          containerInspection(
+            'supabase_db_capital-lab-ci-run-12345-1',
+            '54322',
+          ),
+        ),
+        successfulInspect({ ...imageInspection, RepoDigests: [] }),
+      ],
+    ],
+  ] as const)(
+    'starts no psql process after %s rejection',
+    async (_stage, results) => {
+      for (const result of results) {
+        processMocks.spawnSync.mockReturnValueOnce(result)
+      }
+      await expect(
+        runOwnedPostgresTool('source', 'psql', ['--version'], undefined),
+      ).rejects.toThrow()
+      expect(processMocks.spawn).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([
     ['empty', []],
     [
       'multiple',
