@@ -1,11 +1,16 @@
 import { spawn, spawnSync } from 'node:child_process'
 
 import {
-  LOCAL_CI_IMAGE,
+  LOCAL_CI_DATABASE_PORT,
   localCiProjectId,
   validateLocalCiContainerInspection,
+  validateOwnedLocalDatabaseContainerBinding,
+  validateOwnedLocalDatabaseIdentity,
 } from './owned-local-ci-stack.mjs'
-import { restoreProjectId } from './local-supabase-target-proof.mjs'
+import {
+  restoreProjectId,
+  validateRestoreContainerInspection,
+} from './local-supabase-target-proof.mjs'
 import { resolvedArguments, resolveNativeExecutable } from './safe-process.mjs'
 
 const PROCESS_TIMEOUT_MS = 10 * 60 * 1000
@@ -15,6 +20,8 @@ export function ownedDatabaseContainer(role, env = process.env) {
     const runId = env.CAPITAL_LAB_CI_RUN_ID
     return {
       container: `supabase_db_${localCiProjectId(runId)}`,
+      port: LOCAL_CI_DATABASE_PORT,
+      projectId: localCiProjectId(runId),
       runId,
     }
   }
@@ -22,6 +29,8 @@ export function ownedDatabaseContainer(role, env = process.env) {
     const runId = env.CAPITAL_LAB_RESTORE_RUN_ID
     return {
       container: `supabase_db_${restoreProjectId(runId)}`,
+      port: '55322',
+      projectId: restoreProjectId(runId),
       runId,
     }
   }
@@ -43,6 +52,7 @@ export function ownedDatabaseContainer(role, env = process.env) {
     return {
       container: `supabase_db_capital-lab-reference-${runId}`,
       port,
+      projectId: `capital-lab-reference-${runId}`,
       runId,
     }
   }
@@ -64,32 +74,49 @@ export function inspectOwnedDatabaseContainer(role, env = process.env) {
   if (!Array.isArray(parsed) || parsed.length !== 1) {
     throw new Error('Owned local database container is not unique')
   }
-  if (role === 'source') {
-    validateLocalCiContainerInspection(parsed[0], target.runId)
-  } else if (
-    role === 'restore' &&
-    (parsed[0]?.Name !== `/${target.container}` ||
-      parsed[0]?.State?.Running !== true ||
-      parsed[0]?.Config?.Image !== LOCAL_CI_IMAGE ||
-      !/^[0-9a-f]{64}$/u.test(parsed[0]?.Id ?? '') ||
-      parsed[0]?.NetworkSettings?.Ports?.['5432/tcp']?.length !== 1 ||
-      parsed[0].NetworkSettings.Ports['5432/tcp'][0]?.HostIp !== '127.0.0.1' ||
-      parsed[0].NetworkSettings.Ports['5432/tcp'][0]?.HostPort !== '55322')
-  ) {
-    throw new Error('Owned restore database container identity is invalid')
-  } else if (
-    (role === 'reference' || role === 'peer_reference') &&
-    (parsed[0]?.Name !== `/${target.container}` ||
-      parsed[0]?.State?.Running !== true ||
-      parsed[0]?.Config?.Image !== LOCAL_CI_IMAGE ||
-      !/^[0-9a-f]{64}$/u.test(parsed[0]?.Id ?? '') ||
-      parsed[0]?.NetworkSettings?.Ports?.['5432/tcp']?.length !== 1 ||
-      parsed[0].NetworkSettings.Ports['5432/tcp'][0]?.HostIp !== '127.0.0.1' ||
-      parsed[0].NetworkSettings.Ports['5432/tcp'][0]?.HostPort !== target.port)
-  ) {
-    throw new Error('Owned Reference database container identity is invalid')
+  const containerBinding = validateOwnedLocalDatabaseContainerBinding(
+    parsed[0],
+    target,
+  )
+  const imageResult = spawnSync(
+    executable.command,
+    resolvedArguments(executable, [
+      'image',
+      'inspect',
+      containerBinding.containerImageId,
+    ]),
+    { encoding: 'utf8', shell: false, timeout: 30_000, windowsHide: true },
+  )
+  if (imageResult.status !== 0 || imageResult.signal || imageResult.error) {
+    throw new Error('Owned local database image proof is unavailable')
   }
-  return { ...target, inspection: parsed[0] }
+  const imageParsed = JSON.parse(imageResult.stdout)
+  let identity
+  if (role === 'source') {
+    identity = validateLocalCiContainerInspection(
+      parsed[0],
+      imageParsed,
+      target.runId,
+    )
+  } else if (role === 'restore') {
+    identity = validateRestoreContainerInspection(
+      parsed[0],
+      imageParsed,
+      target.runId,
+    )
+  } else {
+    identity = validateOwnedLocalDatabaseIdentity(
+      parsed[0],
+      imageParsed,
+      target,
+    )
+  }
+  return {
+    ...target,
+    identity,
+    imageInspection: imageParsed[0],
+    inspection: parsed[0],
+  }
 }
 
 export async function runOwnedPostgresTool(

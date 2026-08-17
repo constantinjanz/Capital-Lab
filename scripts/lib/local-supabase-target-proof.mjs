@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
 
+import { validateOwnedLocalDatabaseIdentity } from './owned-local-ci-stack.mjs'
+
 const HASH = /^[0-9a-f]{64}$/u
 const RUN_ID = /^[a-z0-9][a-z0-9-]{5,31}$/u
 const UUID =
@@ -28,27 +30,25 @@ export function restoreProjectId(runId) {
   return `capital-lab-restore-${runId}`
 }
 
-export function validateRestoreContainerInspection(inspection, runId) {
+export function validateRestoreContainerInspection(
+  inspection,
+  imageInspections,
+  runId,
+) {
   const projectId = restoreProjectId(runId)
-  const ports = inspection?.NetworkSettings?.Ports?.['5432/tcp']
-  const binding = Array.isArray(ports) && ports.length === 1 ? ports[0] : null
-  if (
-    inspection?.Name !== `/supabase_db_${projectId}` ||
-    inspection?.State?.Running !== true ||
-    typeof inspection?.Id !== 'string' ||
-    !/^[0-9a-f]{64}$/u.test(inspection.Id) ||
-    typeof inspection?.Config?.Image !== 'string' ||
-    !inspection.Config.Image.startsWith('public.ecr.aws/supabase/postgres:') ||
-    binding?.HostIp !== EXPECTED_HOST ||
-    binding?.HostPort !== EXPECTED_PORT
-  ) {
-    throw new Error('Disposable Supabase stack B container identity is invalid')
-  }
+  const validated = validateOwnedLocalDatabaseIdentity(
+    inspection,
+    imageInspections,
+    {
+      container: `supabase_db_${projectId}`,
+      port: EXPECTED_PORT,
+      projectId,
+    },
+  )
   return {
-    containerIdSha256: sha256(inspection.Id),
+    ...validated,
     database: EXPECTED_DATABASE,
     hostname: EXPECTED_HOST,
-    imageSha256: sha256(inspection.Config.Image),
     port: EXPECTED_PORT,
     projectId,
     runId,
@@ -68,12 +68,14 @@ function exactIdentity(identity) {
 
 export function buildRestoreTargetProof(
   inspection,
+  imageInspections,
   identity,
   binding,
   preparedAt,
 ) {
   const container = validateRestoreContainerInspection(
     inspection,
+    imageInspections,
     binding?.runId,
   )
   exactIdentity(identity)
@@ -96,7 +98,7 @@ export function buildRestoreTargetProof(
     disposableMarker: binding.disposableMarker,
     markerEvidenceSha256: binding.markerEvidenceSha256,
     preparedAt,
-    schemaVersion: 2,
+    schemaVersion: 3,
     serverFingerprint,
     sourceServerFingerprint: binding.sourceServerFingerprint,
   }
@@ -106,6 +108,7 @@ export function validateRestoreTargetProof(
   bytes,
   expectedSha256,
   inspection,
+  imageInspections,
   identity,
   markerEvidenceSha256,
 ) {
@@ -122,6 +125,7 @@ export function validateRestoreTargetProof(
       canonicalJson(
         buildRestoreTargetProof(
           inspection,
+          imageInspections,
           identity,
           {
             disposableMarker: proof.disposableMarker,

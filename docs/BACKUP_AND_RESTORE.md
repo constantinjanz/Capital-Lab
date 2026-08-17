@@ -18,9 +18,16 @@ schema drift into both databases cannot pass.
 Golden capture has a separate, fail-closed bootstrap closure. Manually dispatch
 `Schema Golden Bootstrap Candidate` with one exact clean commit SHA. The
 workflow uses Node 24 and Supabase CLI `2.113.0`, whose reviewed stack contract
-pins the exact official
-`public.ecr.aws/supabase/postgres:17.6.1.158` image. It never accepts a Hosted,
-Source, Backup, or Restore database URL.
+pins the exact official runtime reference
+`ghcr.io/supabase/postgres:17.6.1.158`, GHCR RepoDigest
+`sha256:99b1729aeb0bac314445024fc149fbd39306170b61dd50800ccf180327ab3459`,
+linux/amd64 config/image ID
+`sha256:1ea9ca2e6b7be9424fed2bb2ba1a550dac552ba60ac798688e38709feec15864`,
+OS and architecture. Every container is inspected by its immutable `.Image`
+ID before PostgreSQL runs. It never accepts a mutable tag alone, an ECR runtime
+alias, or a Hosted, Source, Backup, or Restore database URL. The reviewed
+`public.ecr.aws/supabase/postgres:17.6.1.158` reference remains provenance
+evidence only and is never an accepted runtime identity.
 
 For each contract the workflow creates two fresh seed-free Reference stacks
 with different project IDs, ports, container IDs, server identities, and

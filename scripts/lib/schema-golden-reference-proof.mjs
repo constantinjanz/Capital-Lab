@@ -3,6 +3,33 @@ import { createHash } from 'node:crypto'
 const HASH = /^[0-9a-f]{64}$/u
 const SHA = /^[0-9a-f]{40}$/u
 const RUN_ID = /^run-[a-z0-9][a-z0-9-]{5,48}$/u
+const PROOF_KEYS = [
+  'bootstrapContractSha256',
+  'builtFromReviewedMigrations',
+  'capturedAt',
+  'containerFingerprint',
+  'containerImage',
+  'containerImageArchitecture',
+  'containerImageId',
+  'containerImageOs',
+  'containerImageRegistry',
+  'containerImageRepoDigest',
+  'contractKind',
+  'database',
+  'databaseFingerprint',
+  'databaseRole',
+  'gitCommitSha',
+  'hostname',
+  'migrationHistorySha256',
+  'port',
+  'projectId',
+  'relationContractSha256',
+  'runId',
+  'schemaVersion',
+  'seedFree',
+  'serverFingerprint',
+  'supabaseCliVersion',
+]
 
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
@@ -17,7 +44,7 @@ function canonical(value) {
 
 export function buildSchemaGoldenReferenceProof(input, bootstrap) {
   const proof = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     contractKind: input.contractKind,
     runId: input.runId,
     projectId: input.projectId,
@@ -32,7 +59,11 @@ export function buildSchemaGoldenReferenceProof(input, bootstrap) {
     databaseFingerprint: input.databaseFingerprint,
     containerFingerprint: input.containerFingerprint,
     containerImage: input.containerImage,
+    containerImageArchitecture: input.containerImageArchitecture,
+    containerImageId: input.containerImageId,
+    containerImageOs: input.containerImageOs,
     containerImageRegistry: input.containerImageRegistry,
+    containerImageRepoDigest: input.containerImageRepoDigest,
     supabaseCliVersion: input.supabaseCliVersion,
     bootstrapContractSha256: input.bootstrapContractSha256,
     seedFree: input.seedFree,
@@ -48,7 +79,11 @@ export function buildSchemaGoldenReferenceProof(input, bootstrap) {
 
 function validateShape(proof, bootstrap) {
   if (
-    proof?.schemaVersion !== 2 ||
+    !proof ||
+    typeof proof !== 'object' ||
+    Array.isArray(proof) ||
+    Object.keys(proof).sort().join('\n') !== PROOF_KEYS.sort().join('\n') ||
+    proof.schemaVersion !== 3 ||
     !['pre_activation', 'post_activation'].includes(proof?.contractKind) ||
     !RUN_ID.test(proof?.runId ?? '') ||
     proof?.projectId !== `capital-lab-reference-${proof.runId}` ||
@@ -63,7 +98,12 @@ function validateShape(proof, bootstrap) {
     !HASH.test(proof?.databaseFingerprint ?? '') ||
     !HASH.test(proof?.containerFingerprint ?? '') ||
     proof?.containerImage !== bootstrap?.postgresImage ||
+    proof?.containerImageArchitecture !==
+      bootstrap?.postgresImageArchitecture ||
+    proof?.containerImageId !== bootstrap?.postgresImageId ||
+    proof?.containerImageOs !== bootstrap?.postgresImageOs ||
     proof?.containerImageRegistry !== bootstrap?.postgresImageRegistry ||
+    proof?.containerImageRepoDigest !== bootstrap?.postgresImageRepoDigest ||
     proof?.supabaseCliVersion !== bootstrap?.supabaseCliVersion ||
     !HASH.test(proof?.bootstrapContractSha256 ?? '') ||
     proof?.seedFree !== true ||

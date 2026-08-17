@@ -2,6 +2,40 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## PR #21 immutable image-identity closure (2026-08-17)
+
+Safety status: isolated repository/ephemeral CI only. No Hosted or Production
+database action, migration change, deployment promotion, provider, broker, or
+trading action is authorized.
+
+- [x] Preserve and fingerprint the unrelated dirty checkout; create a complete,
+      independent HTTPS clone at exact Draft-PR HEAD
+      `e2cdb89d4c50a6b77764469dcbb3073bb9d0183e`; verify clean history,
+      no alternates/promisor state, exact branch/PR refs, Draft/open/unmerged PR,
+      and a successful non-forced push dry-run.
+- [x] Pin and centrally enforce the reviewed GHCR runtime reference, immutable
+      RepoDigest, linux/amd64 manifest/config identity, OS and architecture for
+      Source, Restore, Reference and Peer-Reference containers before any
+      PostgreSQL subprocess.
+- [x] Extend the Golden bootstrap/reference/candidate provenance contracts with
+      the same repository-owned immutable identity and exact-key verification;
+      retain the Public-ECR reference as non-runtime provenance evidence only.
+- [x] Run focused negative tests plus formatting, zero-warning lint, strict
+      TypeScript, complete Vitest, PAPER-only, credential-history, production
+      build and `git diff --check` gates before code commit P.
+      Verified on Node `v24.14.0` with pnpm `10.33.2`: changed-file Prettier;
+      zero-warning ESLint; strict TypeScript; 9 focused files / 104 tests; the
+      complete 103-file / 796-test Vitest suite; PAPER-only scan; credential
+      scan over the Working Tree plus 100 ancestors with zero findings; and a
+      successful Next.js 16.3.0 production build. No local Docker evidence was
+      simulated; exact runtime evidence remains the first CI requirement.
+- [ ] Push exactly code commit P, accept only the expected missing-Golden
+      Disaster-Recovery failure, then verify and import exactly two reproducible
+      row-free Golden files in commit G.
+- [ ] Verify exact-G application/database/disaster-recovery/Windows/browser,
+      Golden rebuild reproducibility and Preview READY/`target=null` evidence;
+      keep PR #21 Draft/open/unmerged.
+
 ## PR #21 bounded CI closure pass (2026-08-12)
 
 Safety status: exactly one diagnostic cycle and at most two repair/CI cycles.

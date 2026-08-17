@@ -7,18 +7,34 @@ import {
   validateRestoreContainerInspection,
   validateRestoreTargetProof,
 } from './lib/local-supabase-target-proof.mjs'
+import {
+  LOCAL_CI_IMAGE,
+  LOCAL_CI_IMAGE_ARCHITECTURE,
+  LOCAL_CI_IMAGE_ID,
+  LOCAL_CI_IMAGE_OS,
+  LOCAL_CI_IMAGE_REPO_DIGEST,
+} from './lib/owned-local-ci-stack.mjs'
 
 const inspection = {
   Config: {
-    Image: 'public.ecr.aws/supabase/postgres:17.6.1.001',
+    Image: LOCAL_CI_IMAGE,
   },
   Id: 'a'.repeat(64),
+  Image: LOCAL_CI_IMAGE_ID,
   Name: '/supabase_db_capital-lab-restore-run-12345',
   NetworkSettings: {
     Ports: { '5432/tcp': [{ HostIp: '127.0.0.1', HostPort: '55322' }] },
   },
   State: { Running: true },
 }
+const imageInspections = [
+  {
+    Architecture: LOCAL_CI_IMAGE_ARCHITECTURE,
+    Id: LOCAL_CI_IMAGE_ID,
+    Os: LOCAL_CI_IMAGE_OS,
+    RepoDigests: [LOCAL_CI_IMAGE_REPO_DIGEST],
+  },
+]
 const identity = {
   databaseRole: 'postgres',
   databaseIdentity: '170000:postgres:target-system',
@@ -35,6 +51,7 @@ describe('disposable Supabase stack B target proof', () => {
   it('binds the exact running container, loopback port, image and database identity', () => {
     const proof = buildRestoreTargetProof(
       inspection,
+      imageInspections,
       identity,
       binding,
       new Date().toISOString(),
@@ -45,6 +62,7 @@ describe('disposable Supabase stack B target proof', () => {
         bytes,
         sha256(bytes),
         inspection,
+        imageInspections,
         identity,
         binding.markerEvidenceSha256,
       ),
@@ -76,14 +94,16 @@ describe('disposable Supabase stack B target proof', () => {
     expect(() =>
       validateRestoreContainerInspection(
         { ...inspection, ...mutation },
+        imageInspections,
         binding.runId,
       ),
-    ).toThrow(/container identity is invalid/)
+    ).toThrow(/container binding is invalid/)
   })
 
   it('rejects proof hash replacement and database identity drift', () => {
     const proof = buildRestoreTargetProof(
       inspection,
+      imageInspections,
       identity,
       binding,
       new Date().toISOString(),
@@ -94,6 +114,7 @@ describe('disposable Supabase stack B target proof', () => {
         bytes,
         'f'.repeat(64),
         inspection,
+        imageInspections,
         identity,
         binding.markerEvidenceSha256,
       ),
@@ -103,6 +124,7 @@ describe('disposable Supabase stack B target proof', () => {
         bytes,
         sha256(bytes),
         inspection,
+        imageInspections,
         {
           ...identity,
           serverIdentity: '170000:another-system',
@@ -116,6 +138,7 @@ describe('disposable Supabase stack B target proof', () => {
     expect(() =>
       buildRestoreTargetProof(
         inspection,
+        imageInspections,
         identity,
         {
           ...binding,
@@ -125,11 +148,16 @@ describe('disposable Supabase stack B target proof', () => {
       ),
     ).toThrow(/same PostgreSQL cluster/)
     expect(() =>
-      validateRestoreContainerInspection(inspection, 'wrong-run'),
-    ).toThrow(/container identity/)
+      validateRestoreContainerInspection(
+        inspection,
+        imageInspections,
+        'wrong-run',
+      ),
+    ).toThrow(/container binding/)
     expect(() =>
       buildRestoreTargetProof(
         inspection,
+        imageInspections,
         { ...identity, databaseRole: 'service_role' },
         binding,
         new Date().toISOString(),

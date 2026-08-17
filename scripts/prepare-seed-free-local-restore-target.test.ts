@@ -8,16 +8,32 @@ import {
   buildRestoreTargetProof,
   sha256,
 } from './lib/local-supabase-target-proof.mjs'
+import {
+  LOCAL_CI_IMAGE,
+  LOCAL_CI_IMAGE_ARCHITECTURE,
+  LOCAL_CI_IMAGE_ID,
+  LOCAL_CI_IMAGE_OS,
+  LOCAL_CI_IMAGE_REPO_DIGEST,
+} from './lib/owned-local-ci-stack.mjs'
 
 const inspection = {
-  Config: { Image: 'public.ecr.aws/supabase/postgres:17.6.1.001' },
+  Config: { Image: LOCAL_CI_IMAGE },
   Id: 'a'.repeat(64),
+  Image: LOCAL_CI_IMAGE_ID,
   Name: '/supabase_db_capital-lab-restore-run-12345',
   NetworkSettings: {
     Ports: { '5432/tcp': [{ HostIp: '127.0.0.1', HostPort: '55322' }] },
   },
   State: { Running: true },
 }
+const imageInspections = [
+  {
+    Architecture: LOCAL_CI_IMAGE_ARCHITECTURE,
+    Id: LOCAL_CI_IMAGE_ID,
+    Os: LOCAL_CI_IMAGE_OS,
+    RepoDigests: [LOCAL_CI_IMAGE_REPO_DIGEST],
+  },
+]
 const targetIdentity = {
   databaseRole: 'postgres',
   databaseIdentity: '170000:postgres:target-system',
@@ -40,11 +56,13 @@ function binding() {
   return {
     proof: buildRestoreTargetProof(
       inspection,
+      imageInspections,
       targetIdentity,
       proofBinding,
       preparedAt,
     ),
     inspection,
+    imageInspections,
     targetIdentity,
     proofBinding,
     preparedAt,
@@ -53,12 +71,19 @@ function binding() {
 }
 
 type BindingMutation = {
+  imageInspections?: typeof imageInspections
   proof?: Partial<ReturnType<typeof buildRestoreTargetProof>>
   target?: Partial<typeof target>
   proofBinding?: Partial<typeof proofBinding>
 }
 
 const invalidBindings: Array<[string, BindingMutation]> = [
+  [
+    'wrong immutable image identity',
+    {
+      imageInspections: [{ ...imageInspections[0], RepoDigests: [] }],
+    },
+  ],
   ['wrong database', { proof: { database: 'template1' } }],
   ['wrong port', { target: { port: '54322' } }],
   [

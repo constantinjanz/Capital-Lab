@@ -27,6 +27,7 @@ import {
 } from './critical-backup-contract.mjs'
 import { validateRestoreTargetProof } from './lib/local-supabase-target-proof.mjs'
 import {
+  inspectOwnedDatabaseContainer,
   ownedPsql,
   runOwnedPostgresTool,
 } from './lib/local-container-postgres.mjs'
@@ -114,33 +115,6 @@ async function assertForeignKeyIntegrity(role) {
   return catalog
 }
 
-function inspectRestoreContainer(projectId) {
-  if (!/^capital-lab-restore-[a-z0-9][a-z0-9-]{5,31}$/u.test(projectId ?? '')) {
-    throw new Error('Disposable Supabase stack B project identity is invalid')
-  }
-  const executable = resolveNativeExecutable('docker')
-  const result = spawnSync(
-    executable.command,
-    resolvedArguments(executable, ['inspect', `supabase_db_${projectId}`]),
-    {
-      encoding: 'utf8',
-      shell: false,
-      timeout: 30_000,
-      windowsHide: true,
-    },
-  )
-  if (result.status !== 0 || result.signal || result.error) {
-    throw new Error(
-      'Disposable Supabase stack B container proof is unavailable',
-    )
-  }
-  const parsed = JSON.parse(result.stdout)
-  if (!Array.isArray(parsed) || parsed.length !== 1) {
-    throw new Error('Disposable Supabase stack B container is not unique')
-  }
-  return parsed[0]
-}
-
 async function main() {
   const requested = options()
   if (
@@ -167,6 +141,7 @@ async function main() {
     throw new Error('Restore-target proof differs from its retained SHA-256')
   }
   const untrustedTargetProof = JSON.parse(targetProofBytes.toString('utf8'))
+  const targetContainer = inspectOwnedDatabaseContainer('restore')
   const targetIdentity = await evidence('restore', buildServerIdentitySql())
   const markerEvidence = await evidence(
     'restore',
@@ -178,7 +153,8 @@ async function main() {
   const targetProof = validateRestoreTargetProof(
     targetProofBytes,
     requested['expected-target-proof-sha256'],
-    inspectRestoreContainer(untrustedTargetProof.projectId),
+    targetContainer.inspection,
+    [targetContainer.imageInspection],
     targetIdentity,
     sha256(canonicalJson(markerEvidence)),
   )
@@ -186,6 +162,7 @@ async function main() {
     targetProof.hostname !== '127.0.0.1' ||
     targetProof.port !== '55322' ||
     targetProof.database !== 'postgres' ||
+    targetProof.projectId !== untrustedTargetProof.projectId ||
     targetProof.runId !== markerEvidence.runId ||
     targetProof.disposableMarker !== markerEvidence.disposableMarker ||
     targetProof.databaseRole !== 'postgres'

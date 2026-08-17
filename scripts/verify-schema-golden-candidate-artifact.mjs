@@ -58,7 +58,12 @@ export function validateSchemaGoldenCandidateProvenance(provenance, expected) {
       'gitCommitSha',
       'outputContainsRowData',
       'postgresImage',
+      'postgresImageArchitecture',
+      'postgresImageId',
+      'postgresImageOs',
       'postgresImageRegistry',
+      'postgresImageRepoDigest',
+      'postgresProvenanceImage',
       'schemaVersion',
       'supabaseCliVersion',
     ],
@@ -71,8 +76,16 @@ export function validateSchemaGoldenCandidateProvenance(provenance, expected) {
     provenance.gitCommitSha !== expected.gitCommitSha ||
     provenance.supabaseCliVersion !== expected.bootstrap.supabaseCliVersion ||
     provenance.postgresImage !== expected.bootstrap.postgresImage ||
+    provenance.postgresImageArchitecture !==
+      expected.bootstrap.postgresImageArchitecture ||
+    provenance.postgresImageId !== expected.bootstrap.postgresImageId ||
+    provenance.postgresImageOs !== expected.bootstrap.postgresImageOs ||
     provenance.postgresImageRegistry !==
       expected.bootstrap.postgresImageRegistry ||
+    provenance.postgresImageRepoDigest !==
+      expected.bootstrap.postgresImageRepoDigest ||
+    provenance.postgresProvenanceImage !==
+      expected.bootstrap.postgresProvenanceImage ||
     provenance.bootstrapContractSha256 !== expected.bootstrapContractSha256 ||
     provenance.outputContainsRowData !== false ||
     !SHA.test(evidenceSha256 ?? '') ||
@@ -126,6 +139,11 @@ export function validateSchemaGoldenCandidateProvenance(provenance, expected) {
         [
           'clusterId',
           'containerFingerprint',
+          'containerImage',
+          'containerImageArchitecture',
+          'containerImageId',
+          'containerImageOs',
+          'containerImageRepoDigest',
           'databaseFingerprint',
           'referenceEvidenceSha256',
           'referenceProofSha256',
@@ -137,6 +155,13 @@ export function validateSchemaGoldenCandidateProvenance(provenance, expected) {
         !/^capital-lab-reference-run-(?:pre|post)-(?:a|b)-[a-z0-9-]+$/u.test(
           build.clusterId ?? '',
         ) ||
+        build.containerImage !== expected.bootstrap.postgresImage ||
+        build.containerImageArchitecture !==
+          expected.bootstrap.postgresImageArchitecture ||
+        build.containerImageId !== expected.bootstrap.postgresImageId ||
+        build.containerImageOs !== expected.bootstrap.postgresImageOs ||
+        build.containerImageRepoDigest !==
+          expected.bootstrap.postgresImageRepoDigest ||
         [
           build.containerFingerprint,
           build.databaseFingerprint,

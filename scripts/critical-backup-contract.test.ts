@@ -306,7 +306,12 @@ describe('critical backup contract', () => {
       new URL('./prepare-seed-free-local-restore-target.mjs', import.meta.url),
       'utf8',
     )
-    expect(source).toContain('restoreProjectId(runId)')
+    const containerSource = readFileSync(
+      new URL('./lib/local-container-postgres.mjs', import.meta.url),
+      'utf8',
+    )
+    expect(containerSource).toContain('restoreProjectId(runId)')
+    expect(source).toContain("inspectOwnedDatabaseContainer('restore')")
     expect(source).toContain("target.port !== '55322'")
     expect(source).toContain(
       'sourceIdentity.serverIdentity === targetIdentity.serverIdentity',
@@ -315,7 +320,7 @@ describe('critical backup contract', () => {
     expect(source).toContain('capital_lab_restore.run_identity')
     expect(
       source.indexOf(
-        'const containerIdentity = validateRestoreContainerInspection',
+        "const targetContainer = inspectOwnedDatabaseContainer('restore')",
       ),
     ).toBeLessThan(source.indexOf('create schema capital_lab_restore'))
     expect(

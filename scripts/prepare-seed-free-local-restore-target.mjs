@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { chmod, readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -7,16 +7,17 @@ import { pathToFileURL } from 'node:url'
 import {
   buildServerIdentitySql,
   canonicalJson,
-  redactedPostgresError,
   sha256,
 } from './critical-backup-contract.mjs'
-import { ownedPsql } from './lib/local-container-postgres.mjs'
+import {
+  inspectOwnedDatabaseContainer,
+  ownedPsql,
+} from './lib/local-container-postgres.mjs'
 import {
   buildRestoreTargetProof,
   canonicalJson as canonicalProofJson,
-  restoreProjectId,
-  validateRestoreContainerInspection,
 } from './lib/local-supabase-target-proof.mjs'
+import { localCiImageIdentityEvidence } from './lib/owned-local-ci-stack.mjs'
 import {
   resolvedArguments,
   resolveNativeExecutable,
@@ -26,7 +27,6 @@ import {
   verifiedExternalFile,
 } from './lib/safe-artifact-path.mjs'
 
-const PROCESS_TIMEOUT_MS = 300_000
 const DISPOSABLE_CONFIRMATION =
   'RESET DISPOSABLE CAPITAL LAB RESTORE STACK B postgres'
 
@@ -52,74 +52,14 @@ function git(args, cwd) {
   return result.stdout.trim()
 }
 
-async function run(name, args, env, input, capture = false) {
-  const executable = resolveNativeExecutable(name)
-  return new Promise((resolve, reject) => {
-    let stdout = ''
-    let stderr = ''
-    let settled = false
-    let timedOut = false
-    const child = spawn(
-      executable.command,
-      resolvedArguments(executable, args),
-      {
-        env,
-        shell: false,
-        windowsHide: true,
-        stdio: ['pipe', capture ? 'pipe' : 'ignore', 'pipe'],
-      },
-    )
-    child.stdout?.on('data', (chunk) => (stdout += chunk.toString()))
-    child.stderr.on('data', (chunk) => (stderr += chunk.toString()))
-    const timer = setTimeout(() => {
-      timedOut = true
-      child.kill('SIGTERM')
-    }, PROCESS_TIMEOUT_MS)
-    child.once('error', (error) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      reject(error)
-    })
-    child.once('exit', (code, signal) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      if (code !== 0 || signal || timedOut) {
-        reject(
-          new Error(
-            `Disposable target preparation failed; redacted error: ${redactedPostgresError(stderr)}`,
-          ),
-        )
-      } else resolve(stdout)
-    })
-    child.stdin.end(input)
-  })
-}
-
 async function databaseEvidence(role, sql) {
   return JSON.parse(await ownedPsql(role, sql))
-}
-
-async function inspectRestoreContainer(runId) {
-  const projectId = restoreProjectId(runId)
-  const output = await run(
-    'docker',
-    ['inspect', `supabase_db_${projectId}`],
-    process.env,
-    undefined,
-    true,
-  )
-  const parsed = JSON.parse(output)
-  if (!Array.isArray(parsed) || parsed.length !== 1) {
-    throw new Error('Disposable Supabase stack B container is not unique')
-  }
-  return parsed[0]
 }
 
 export function validateDestructiveResetBinding({
   proof,
   inspection,
+  imageInspections,
   targetIdentity,
   proofBinding,
   preparedAt,
@@ -127,6 +67,7 @@ export function validateDestructiveResetBinding({
 }) {
   const canonical = buildRestoreTargetProof(
     inspection,
+    imageInspections,
     targetIdentity,
     proofBinding,
     preparedAt,
@@ -177,10 +118,12 @@ async function main() {
   }
   const proofPath = await newExternalPath(workspace, requested.proof)
   const target = { database: 'postgres', hostname: '127.0.0.1', port: '55322' }
-  const inspection = await inspectRestoreContainer(runId)
-  const containerIdentity = validateRestoreContainerInspection(
-    inspection,
-    runId,
+  const targetContainer = inspectOwnedDatabaseContainer('restore')
+  const inspection = targetContainer.inspection
+  const imageInspections = [targetContainer.imageInspection]
+  const containerIdentity = targetContainer.identity
+  process.stdout.write(
+    `${JSON.stringify({ status: 'local_container_image_identity_verified', role: 'restore', ...localCiImageIdentityEvidence(containerIdentity) })}\n`,
   )
   if (
     target.port !== '55322' ||
@@ -252,6 +195,7 @@ commit;
   }
   const proof = buildRestoreTargetProof(
     inspection,
+    imageInspections,
     targetIdentity,
     proofBinding,
     preparedAt,
@@ -269,6 +213,7 @@ commit;
     {
       proof,
       inspection,
+      imageInspections,
       targetIdentity,
       proofBinding,
       preparedAt,
@@ -307,9 +252,11 @@ commit;
   ) {
     throw new Error('Disposable target marker changed during preparation')
   }
-  const postResetInspection = await inspectRestoreContainer(runId)
+  const postResetContainer = inspectOwnedDatabaseContainer('restore')
+  const postResetInspection = postResetContainer.inspection
   const postResetProof = buildRestoreTargetProof(
     postResetInspection,
+    [postResetContainer.imageInspection],
     postResetIdentity,
     proofBinding,
     preparedAt,

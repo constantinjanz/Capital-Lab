@@ -5,6 +5,14 @@ import {
   validateSchemaGoldenReferenceProof,
 } from './schema-golden-reference-proof.mjs'
 import { sha256 } from '../critical-backup-contract.mjs'
+import {
+  LOCAL_CI_IMAGE,
+  LOCAL_CI_IMAGE_ARCHITECTURE,
+  LOCAL_CI_IMAGE_ID,
+  LOCAL_CI_IMAGE_OS,
+  LOCAL_CI_IMAGE_REGISTRY,
+  LOCAL_CI_IMAGE_REPO_DIGEST,
+} from './owned-local-ci-stack.mjs'
 
 const referenceIdentity = {
   databaseRole: 'postgres',
@@ -30,8 +38,12 @@ const base = {
   serverFingerprint: sha256(referenceIdentity.serverIdentity),
   databaseFingerprint: sha256(referenceIdentity.databaseIdentity),
   containerFingerprint: 'd'.repeat(64),
-  containerImage: 'public.ecr.aws/supabase/postgres:17.6.1.001',
-  containerImageRegistry: 'public.ecr.aws/supabase',
+  containerImage: LOCAL_CI_IMAGE,
+  containerImageArchitecture: LOCAL_CI_IMAGE_ARCHITECTURE,
+  containerImageId: LOCAL_CI_IMAGE_ID,
+  containerImageOs: LOCAL_CI_IMAGE_OS,
+  containerImageRegistry: LOCAL_CI_IMAGE_REGISTRY,
+  containerImageRepoDigest: LOCAL_CI_IMAGE_REPO_DIGEST,
   supabaseCliVersion: '2.113.0',
   bootstrapContractSha256: 'e'.repeat(64),
   seedFree: true,
@@ -41,7 +53,11 @@ const base = {
 const bootstrapContract = {
   contractVersion: 'capital-lab-schema-golden-bootstrap-v1',
   postgresImage: base.containerImage,
+  postgresImageArchitecture: base.containerImageArchitecture,
+  postgresImageId: base.containerImageId,
+  postgresImageOs: base.containerImageOs,
   postgresImageRegistry: base.containerImageRegistry,
+  postgresImageRepoDigest: base.containerImageRepoDigest,
   supabaseCliVersion: base.supabaseCliVersion,
 }
 const expected = {
@@ -74,6 +90,38 @@ const invalidProvenance: Array<
     referenceIdentity,
     peerReferenceIdentity,
     { contractKind: 'post_activation' },
+  ],
+  [
+    'ECR runtime reference',
+    referenceIdentity,
+    peerReferenceIdentity,
+    { containerImage: 'public.ecr.aws/supabase/postgres:17.6.1.158' },
+  ],
+  [
+    'wrong image ID',
+    referenceIdentity,
+    peerReferenceIdentity,
+    { containerImageId: `sha256:${'f'.repeat(64)}` },
+  ],
+  [
+    'wrong RepoDigest',
+    referenceIdentity,
+    peerReferenceIdentity,
+    {
+      containerImageRepoDigest: `ghcr.io/supabase/postgres@sha256:${'f'.repeat(64)}`,
+    },
+  ],
+  [
+    'wrong OS',
+    referenceIdentity,
+    peerReferenceIdentity,
+    { containerImageOs: 'windows' },
+  ],
+  [
+    'wrong architecture',
+    referenceIdentity,
+    peerReferenceIdentity,
+    { containerImageArchitecture: 'arm64' },
   ],
 ]
 

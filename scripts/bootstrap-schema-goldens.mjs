@@ -19,6 +19,8 @@ import {
   sha256,
 } from './critical-backup-contract.mjs'
 import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
+import { inspectOwnedDatabaseContainer } from './lib/local-container-postgres.mjs'
+import { localCiImageIdentityEvidence } from './lib/owned-local-ci-stack.mjs'
 import { diagnosticFromStructuredOutput } from './lib/redacted-supabase-diagnostic.mjs'
 import { loadSchemaGoldenBootstrapContract } from './lib/schema-golden-bootstrap-contract.mjs'
 import {
@@ -330,6 +332,18 @@ async function applyReferenceMigrations(build, workspace) {
   )
 }
 
+function verifyReferenceImageIdentity(build) {
+  const target = inspectOwnedDatabaseContainer('reference', {
+    ...process.env,
+    CAPITAL_LAB_REFERENCE_DATABASE_PORT: String(build.db),
+    CAPITAL_LAB_REFERENCE_RUN_ID: build.referenceRunId,
+  })
+  process.stdout.write(
+    `${JSON.stringify({ status: 'local_container_image_identity_verified', role: 'reference', runId: build.referenceRunId, ...localCiImageIdentityEvidence(target.identity) })}\n`,
+  )
+  return target.identity
+}
+
 async function prepareProof(build, workspace, proofPath) {
   requireSuccess(
     await runProcess(
@@ -347,7 +361,7 @@ async function prepareProof(build, workspace, proofPath) {
         cwd: workspace,
         env: {
           ...process.env,
-          CAPITAL_LAB_REFERENCE_DATABASE_URL: build.databaseUrl,
+          CAPITAL_LAB_REFERENCE_DATABASE_PORT: String(build.db),
           CAPITAL_LAB_REFERENCE_RUN_ID: build.referenceRunId,
         },
       },
@@ -374,8 +388,10 @@ async function captureGolden(build, peer, workspace, proofPath, outputPath) {
         cwd: workspace,
         env: {
           ...process.env,
-          CAPITAL_LAB_GOLDEN_PEER_REFERENCE_DATABASE_URL: peer.databaseUrl,
-          CAPITAL_LAB_REFERENCE_DATABASE_URL: build.databaseUrl,
+          CAPITAL_LAB_PEER_REFERENCE_DATABASE_PORT: String(peer.db),
+          CAPITAL_LAB_PEER_REFERENCE_RUN_ID: peer.referenceRunId,
+          CAPITAL_LAB_REFERENCE_DATABASE_PORT: String(build.db),
+          CAPITAL_LAB_REFERENCE_RUN_ID: build.referenceRunId,
         },
       },
     ),
@@ -405,6 +421,12 @@ export function buildBootstrapProvenance(input) {
     supabaseCliVersion: input.bootstrapContract.supabaseCliVersion,
     postgresImageRegistry: input.bootstrapContract.postgresImageRegistry,
     postgresImage: input.bootstrapContract.postgresImage,
+    postgresImageArchitecture:
+      input.bootstrapContract.postgresImageArchitecture,
+    postgresImageId: input.bootstrapContract.postgresImageId,
+    postgresImageOs: input.bootstrapContract.postgresImageOs,
+    postgresImageRepoDigest: input.bootstrapContract.postgresImageRepoDigest,
+    postgresProvenanceImage: input.bootstrapContract.postgresProvenanceImage,
     bootstrapContractSha256: input.bootstrapContractSha256,
     outputContainsRowData: false,
     contracts: input.contracts.map((entry) => ({
@@ -424,6 +446,11 @@ export function buildBootstrapProvenance(input) {
         serverFingerprint: build.serverFingerprint,
         databaseFingerprint: build.databaseFingerprint,
         containerFingerprint: build.containerFingerprint,
+        containerImage: build.containerImage,
+        containerImageArchitecture: build.containerImageArchitecture,
+        containerImageId: build.containerImageId,
+        containerImageOs: build.containerImageOs,
+        containerImageRepoDigest: build.containerImageRepoDigest,
       })),
     })),
   }
@@ -522,6 +549,7 @@ async function main() {
       for (const build of pair) {
         await startReference(build, workspace)
         running.push(build)
+        verifyReferenceImageIdentity(build)
         await applyReferenceMigrations(build, workspace)
       }
       const captures = []

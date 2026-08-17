@@ -7,6 +7,15 @@ import {
   referenceConfig,
   referencePortPlan,
 } from './bootstrap-schema-goldens.mjs'
+import {
+  LOCAL_CI_IMAGE,
+  LOCAL_CI_IMAGE_ARCHITECTURE,
+  LOCAL_CI_IMAGE_ID,
+  LOCAL_CI_IMAGE_OS,
+  LOCAL_CI_IMAGE_REGISTRY,
+  LOCAL_CI_IMAGE_REPO_DIGEST,
+  LOCAL_CI_PROVENANCE_IMAGE,
+} from './lib/owned-local-ci-stack.mjs'
 
 const sha = 'a'.repeat(40)
 const valid = [
@@ -82,8 +91,13 @@ describe('seed-free schema-Golden bootstrap closure', () => {
     const provenance = buildBootstrapProvenance({
       bootstrapContract: {
         contractVersion: 'capital-lab-schema-golden-bootstrap-v1',
-        postgresImage: 'public.ecr.aws/supabase/postgres:17.6.1.158',
-        postgresImageRegistry: 'public.ecr.aws/supabase',
+        postgresImage: LOCAL_CI_IMAGE,
+        postgresImageArchitecture: LOCAL_CI_IMAGE_ARCHITECTURE,
+        postgresImageId: LOCAL_CI_IMAGE_ID,
+        postgresImageOs: LOCAL_CI_IMAGE_OS,
+        postgresImageRegistry: LOCAL_CI_IMAGE_REGISTRY,
+        postgresImageRepoDigest: LOCAL_CI_IMAGE_REPO_DIGEST,
+        postgresProvenanceImage: LOCAL_CI_PROVENANCE_IMAGE,
         supabaseCliVersion: '2.113.0',
       },
       bootstrapContractSha256: hash,
@@ -109,6 +123,11 @@ describe('seed-free schema-Golden bootstrap closure', () => {
               serverFingerprint: hash,
               databaseFingerprint: hash,
               containerFingerprint: hash,
+              containerImage: LOCAL_CI_IMAGE,
+              containerImageArchitecture: LOCAL_CI_IMAGE_ARCHITECTURE,
+              containerImageId: LOCAL_CI_IMAGE_ID,
+              containerImageOs: LOCAL_CI_IMAGE_OS,
+              containerImageRepoDigest: LOCAL_CI_IMAGE_REPO_DIGEST,
             },
           ],
         },
@@ -116,6 +135,8 @@ describe('seed-free schema-Golden bootstrap closure', () => {
     })
     const serialized = JSON.stringify(provenance)
     expect(provenance.outputContainsRowData).toBe(false)
+    expect(provenance.postgresImageRepoDigest).toBe(LOCAL_CI_IMAGE_REPO_DIGEST)
+    expect(provenance.postgresProvenanceImage).toBe(LOCAL_CI_PROVENANCE_IMAGE)
     expect(serialized).not.toMatch(
       /postgresql:|password|authorization|bearer/iu,
     )

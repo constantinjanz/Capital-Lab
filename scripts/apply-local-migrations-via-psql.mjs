@@ -9,9 +9,11 @@ import {
 } from './critical-backup-contract.mjs'
 import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
 import {
+  inspectOwnedDatabaseContainer,
   ownedDatabaseContainer,
   runOwnedPostgresTool,
 } from './lib/local-container-postgres.mjs'
+import { localCiImageIdentityEvidence } from './lib/owned-local-ci-stack.mjs'
 
 export function parseLocalMigrationReplayOptions(argv) {
   const entries = argv.map((argument) => {
@@ -131,6 +133,10 @@ async function main() {
   const requested = parseLocalMigrationReplayOptions(process.argv.slice(2))
   const workspace = await realpath(process.cwd())
   const role = requested.target === 'ci' ? 'source' : 'reference'
+  const target = inspectOwnedDatabaseContainer(role)
+  process.stdout.write(
+    `${JSON.stringify({ status: 'local_container_image_identity_verified', role, ...localCiImageIdentityEvidence(target.identity) })}\n`,
+  )
   const kind =
     requested.contract === 'pre' ? 'pre_activation' : 'post_activation'
   const contractPath = path.join(

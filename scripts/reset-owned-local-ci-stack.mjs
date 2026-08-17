@@ -10,9 +10,9 @@ import {
 import {
   LOCAL_CI_RESET_CONFIRMATION,
   localCiConfig,
-  validateLocalCiContainerInspection,
   validateLocalCiMarker,
 } from './lib/owned-local-ci-stack.mjs'
+import { inspectOwnedDatabaseContainer } from './lib/local-container-postgres.mjs'
 import { verifiedExternalDirectory } from './lib/safe-artifact-path.mjs'
 import {
   resolvedArguments,
@@ -78,27 +78,6 @@ async function runPrivate(command, args, options = {}) {
   })
 }
 
-async function inspectOwnedContainer(runId) {
-  const projectId = `capital-lab-ci-${runId}`
-  const outcome = await runPrivate('docker', [
-    'inspect',
-    `supabase_db_${projectId}`,
-  ])
-  if (
-    outcome.code !== 0 ||
-    outcome.signal ||
-    outcome.timedOut ||
-    outcome.spawnError
-  ) {
-    throw new Error('Owned local CI container inspection failed closed')
-  }
-  const parsed = JSON.parse(outcome.stdout.toString('utf8'))
-  if (!Array.isArray(parsed) || parsed.length !== 1) {
-    throw new Error('Owned local CI database container is not unique')
-  }
-  return validateLocalCiContainerInspection(parsed[0], runId)
-}
-
 async function main() {
   const requested = parseOwnedResetOptions(process.argv.slice(2))
   const workspace = await realpath(process.cwd())
@@ -121,7 +100,14 @@ async function main() {
     throw new Error('Owned local CI stack marker is not canonical')
   }
   validateLocalCiMarker(marker, requested['run-id'], configBytes)
-  const before = await inspectOwnedContainer(requested['run-id'])
+  const identityEnvironment = {
+    ...process.env,
+    CAPITAL_LAB_CI_RUN_ID: requested['run-id'],
+  }
+  const before = inspectOwnedDatabaseContainer(
+    'source',
+    identityEnvironment,
+  ).identity
   const outcome = await runPrivate(
     'supabase',
     ['db', 'reset', '--no-seed', `--workdir=${workdir}`],
@@ -143,8 +129,18 @@ async function main() {
   ) {
     process.exit(1)
   }
-  const after = await inspectOwnedContainer(requested['run-id'])
-  if (before.projectId !== after.projectId || before.image !== after.image) {
+  const after = inspectOwnedDatabaseContainer(
+    'source',
+    identityEnvironment,
+  ).identity
+  if (
+    before.projectId !== after.projectId ||
+    before.runtimeImageReference !== after.runtimeImageReference ||
+    before.imageId !== after.imageId ||
+    before.imageRepoDigest !== after.imageRepoDigest ||
+    before.imageOs !== after.imageOs ||
+    before.imageArchitecture !== after.imageArchitecture
+  ) {
     throw new Error('Owned local CI target identity drifted during reset')
   }
 }

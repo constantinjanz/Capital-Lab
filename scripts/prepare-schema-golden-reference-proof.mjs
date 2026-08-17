@@ -14,6 +14,7 @@ import {
   inspectOwnedDatabaseContainer,
   ownedPsql,
 } from './lib/local-container-postgres.mjs'
+import { localCiImageIdentityEvidence } from './lib/owned-local-ci-stack.mjs'
 import { buildSchemaGoldenReferenceProof } from './lib/schema-golden-reference-proof.mjs'
 import { loadSchemaGoldenBootstrapContract } from './lib/schema-golden-bootstrap-contract.mjs'
 import {
@@ -72,6 +73,9 @@ async function main() {
   const projectId = `capital-lab-reference-${runId}`
   const port = process.env.CAPITAL_LAB_REFERENCE_DATABASE_PORT
   const target = inspectOwnedDatabaseContainer('reference')
+  process.stdout.write(
+    `${JSON.stringify({ status: 'local_container_image_identity_verified', role: 'reference', runId, ...localCiImageIdentityEvidence(target.identity) })}\n`,
+  )
   const contractKind =
     requested.contract === 'pre' ? 'pre_activation' : 'post_activation'
   const contractPath = path.join(
@@ -135,8 +139,12 @@ async function main() {
       serverFingerprint: sha256(identity.serverIdentity),
       databaseFingerprint: sha256(identity.databaseIdentity),
       containerFingerprint: sha256(inspection.Id),
-      containerImage: inspection.Config?.Image,
+      containerImage: target.identity.runtimeImageReference,
+      containerImageArchitecture: target.identity.imageArchitecture,
+      containerImageId: target.identity.imageId,
+      containerImageOs: target.identity.imageOs,
       containerImageRegistry: bootstrapContract.postgresImageRegistry,
+      containerImageRepoDigest: target.identity.imageRepoDigest,
       supabaseCliVersion: bootstrapContract.supabaseCliVersion,
       bootstrapContractSha256,
       seedFree: true,
