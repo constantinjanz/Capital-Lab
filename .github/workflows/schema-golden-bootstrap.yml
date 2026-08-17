@@ -1,6 +1,8 @@
 name: Schema Golden Bootstrap Candidate
 
 on:
+  pull_request:
+    types: [opened, synchronize]
   workflow_dispatch:
     inputs:
       expected_commit_sha:
@@ -12,22 +14,23 @@ permissions:
   contents: read
 
 concurrency:
-  group: schema-golden-bootstrap-${{ github.event.inputs.expected_commit_sha }}
+  group: schema-golden-bootstrap-${{ inputs.expected_commit_sha || github.event.pull_request.head.sha }}
   cancel-in-progress: false
 
 jobs:
   build-independent-candidate:
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == true && github.head_ref == 'codex/activation-readiness-follow-up')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
-          ref: ${{ github.event.inputs.expected_commit_sha }}
+          ref: ${{ inputs.expected_commit_sha || github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Verify exact clean reviewed commit
         env:
-          EXPECTED_SHA: ${{ github.event.inputs.expected_commit_sha }}
+          EXPECTED_SHA: ${{ inputs.expected_commit_sha || github.event.pull_request.head.sha }}
         run: |
           [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
@@ -54,7 +57,7 @@ jobs:
           version: 2.113.0
       - name: Build PRE and POST twice from fresh Reference clusters
         env:
-          EXPECTED_SHA: ${{ github.event.inputs.expected_commit_sha }}
+          EXPECTED_SHA: ${{ inputs.expected_commit_sha || github.event.pull_request.head.sha }}
         run: |
           mkdir -p .ci-evidence
           candidate="$RUNNER_TEMP/schema-golden-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -72,7 +75,7 @@ jobs:
       - name: Upload short-lived row-free candidate
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: schema-golden-candidate-${{ github.event.inputs.expected_commit_sha }}
+          name: schema-golden-candidate-${{ inputs.expected_commit_sha || github.event.pull_request.head.sha }}
           path: ${{ env.CAPITAL_LAB_GOLDEN_CANDIDATE }}
           include-hidden-files: false
           if-no-files-found: error

@@ -19,6 +19,13 @@ export function localCiProjectId(runId) {
   return `capital-lab-ci-${runId}`
 }
 
+export function validateLocalCiSqlTestName(name) {
+  if (!/^[a-z0-9][a-z0-9_]*\.sql$/u.test(name ?? '')) {
+    throw new Error('Supabase SQL test closure contains an unexpected entry')
+  }
+  return name
+}
+
 export function localCiConfig(runId) {
   const projectId = localCiProjectId(runId)
   return `project_id = "${projectId}"

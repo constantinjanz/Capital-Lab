@@ -21,7 +21,11 @@ Canary, broker, Vault, Cron, extension, migration-history, or trading action.
 - [ ] Build PRE and POST twice from four fresh, seed-free, migration-exact Reference clusters with unique identities/ports and exact CLI/image/contract provenance; compare normalized candidates byte-for-byte.
 - [x] Add a manual, secret-free Golden bootstrap workflow that uploads only two row-free candidates plus harmless provenance and never commits automatically.
 - [x] Keep application gates running independently while Golden/DR verification remains a required red job.
-- [ ] Push the diagnostic commit, inspect exactly one categorized `supabase start` result, and repair only its demonstrated cause.
+- [x] Push the diagnostic commit, inspect exactly one categorized `supabase start`
+      result, and repair only its demonstrated causes: the pinned CLI surfaced
+      SQLSTATE `42601`; the first run-owned-stack cycle then proved its copied
+      pgTAP filename allowlist excluded the repository's named SQL tests before
+      Supabase start. Preserve fail-closed evidence for that pre-start phase.
 - [x] Repair the demonstrated local SQLSTATE `42601` cause by starting an exact
       run-owned stack with CLI migrations disabled and replaying the checksummed
       PRE/POST contract through credential-free container `psql` simple-query

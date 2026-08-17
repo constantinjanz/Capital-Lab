@@ -7,6 +7,7 @@ import {
   localCiMarker,
   validateLocalCiContainerInspection,
   validateLocalCiMarker,
+  validateLocalCiSqlTestName,
 } from './lib/owned-local-ci-stack.mjs'
 import { ownedDatabaseContainer } from './lib/local-container-postgres.mjs'
 import { parseOwnedResetOptions } from './reset-owned-local-ci-stack.mjs'
@@ -30,6 +31,21 @@ describe('run-owned local CI Supabase stack', () => {
     )
     expect(config.toString('utf8')).toContain('[db.seed]\nenabled = false')
     expect(config.toString('utf8')).toContain('port = 54322')
+  })
+
+  it('copies both numbered and named pgTAP files but rejects unsafe entries', () => {
+    expect(validateLocalCiSqlTestName('0001_database_contract.sql')).toBe(
+      '0001_database_contract.sql',
+    )
+    expect(
+      validateLocalCiSqlTestName('activation_readiness_follow_up_test.sql'),
+    ).toBe('activation_readiness_follow_up_test.sql')
+    expect(() => validateLocalCiSqlTestName('../outside.sql')).toThrow(
+      /unexpected entry/u,
+    )
+    expect(() => validateLocalCiSqlTestName('README.md')).toThrow(
+      /unexpected entry/u,
+    )
   })
 
   it('binds the marker to exact config bytes and the disposable run', () => {

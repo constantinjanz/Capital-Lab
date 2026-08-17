@@ -121,8 +121,9 @@ jobs:
         run: |
           ci_run_id="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           ci_workdir="${RUNNER_TEMP}/capital-lab-ci-${ci_run_id}"
-          node scripts/create-owned-local-ci-stack.mjs \
-            "--run-id=${ci_run_id}" "--output-dir=${ci_workdir}"
+          node scripts/run-ci-gate.mjs --id create-owned-local-ci-stack -- \
+            node scripts/create-owned-local-ci-stack.mjs \
+              "--run-id=${ci_run_id}" "--output-dir=${ci_workdir}"
           echo "CAPITAL_LAB_CI_RUN_ID=${ci_run_id}" >> "$GITHUB_ENV"
           echo "CAPITAL_LAB_CI_WORKDIR=${ci_workdir}" >> "$GITHUB_ENV"
       - run: node scripts/run-ci-gate.mjs --id supabase-start -- node scripts/run-redacted-subprocess.mjs --id=supabase-start -- supabase start "--workdir=${CAPITAL_LAB_CI_WORKDIR}"

@@ -8,7 +8,11 @@ import {
 } from 'node:fs/promises'
 import path from 'node:path'
 
-import { localCiConfig, localCiMarker } from './lib/owned-local-ci-stack.mjs'
+import {
+  localCiConfig,
+  localCiMarker,
+  validateLocalCiSqlTestName,
+} from './lib/owned-local-ci-stack.mjs'
 import {
   newExternalPath,
   verifiedExternalDirectory,
@@ -33,9 +37,10 @@ async function copySqlTests(workspace, output) {
   await mkdir(target, { recursive: true, mode: 0o700 })
   const entries = await readdir(source, { withFileTypes: true })
   for (const entry of entries) {
-    if (!entry.isFile() || !/^\d{4}_[a-z0-9_]+\.sql$/u.test(entry.name)) {
+    if (!entry.isFile()) {
       throw new Error('Supabase SQL test closure contains an unexpected entry')
     }
+    validateLocalCiSqlTestName(entry.name)
     const bytes = await readFile(path.join(source, entry.name))
     await writeFile(path.join(target, entry.name), bytes, {
       flag: 'wx',
