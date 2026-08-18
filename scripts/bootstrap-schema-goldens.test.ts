@@ -4,6 +4,7 @@ import {
   assertReproducibleGolden,
   buildBootstrapProvenance,
   parseSchemaGoldenBootstrapOptions,
+  propagateLocalMigrationReplayDiagnostic,
   referenceConfig,
   referencePortPlan,
 } from './bootstrap-schema-goldens.mjs'
@@ -177,5 +178,81 @@ describe('seed-free schema-Golden bootstrap closure', () => {
       canonicalReferenceRunId(`run-${'z'.repeat(29)}`, 'post', 'b'),
     ).toThrow()
     expect(() => canonicalReferenceProjectId('run-pre-a-unsafe_1')).toThrow()
+  })
+
+  it('propagates only the validated Reference replay diagnosis', () => {
+    const secret = [
+      'postgresql',
+      '://postgres:',
+      'fake-password',
+      '@127.0.0.1:59999/postgres',
+    ].join('')
+    const diagnostic = {
+      schemaVersion: 1,
+      status: 'local_migration_replay_boundary_observed',
+      stage: 'history_preflight',
+      role: 'reference',
+      contract: 'pre',
+      psqlQueryCompleted: true,
+      historySchemaExists: false,
+      historyRelationExists: false,
+    }
+    const writes: string[] = []
+    const propagated = propagateLocalMigrationReplayDiagnostic(
+      Buffer.from(
+        `${secret}\n${JSON.stringify(diagnostic)}\ntoken=fake-child-token\n`,
+      ),
+      { contract: 'pre' },
+      {
+        write: (value: string) => {
+          writes.push(value)
+          return true
+        },
+      },
+    )
+    expect(propagated).toEqual(diagnostic)
+    expect(writes).toEqual([`${JSON.stringify(diagnostic)}\n`])
+    expect(writes.join('')).not.toContain(secret)
+    expect(writes.join('')).not.toContain('fake-child-token')
+  })
+
+  it('rejects context drift and emits no diagnosis after identity rejection', () => {
+    const diagnostic = {
+      schemaVersion: 1,
+      status: 'local_migration_replay_boundary_observed',
+      stage: 'history_preflight',
+      role: 'reference',
+      contract: 'post',
+      psqlQueryCompleted: true,
+      historySchemaExists: false,
+      historyRelationExists: false,
+    }
+    const writes: string[] = []
+    expect(() =>
+      propagateLocalMigrationReplayDiagnostic(
+        JSON.stringify(diagnostic),
+        { contract: 'pre' },
+        {
+          write: (value: string) => {
+            writes.push(value)
+            return true
+          },
+        },
+      ),
+    ).toThrow(/context is invalid/u)
+    expect(
+      propagateLocalMigrationReplayDiagnostic(
+        JSON.stringify(diagnostic),
+        { contract: 'post' },
+        {
+          identityRejected: true,
+          write: (value: string) => {
+            writes.push(value)
+            return true
+          },
+        },
+      ),
+    ).toBeNull()
+    expect(writes).toEqual([])
   })
 })

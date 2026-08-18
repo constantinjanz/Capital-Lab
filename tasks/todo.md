@@ -2,6 +2,52 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## EXACT-E diagnostic-only migration-boundary pass (2026-08-18)
+
+Safety status: exactly one normal diagnostic commit E from
+`756e399674165ed5f73842d8864564a517872572`, followed by exactly one non-force
+push and only automatic exact-E runs. No replay repair, Golden import or change,
+migration/history mutation, Hosted/Production access, deployment promotion,
+provider/broker/Canary/trading call, rerun, cancel, or second iteration is
+authorized.
+
+- [x] Fail closed on the exact clean isolated C checkout, exact parent/branch/PR
+      refs, Draft/open/unmerged PR #21, authenticated GitHub transport, one
+      successful non-destructive push dry-run, and three terminal Exact-C runs.
+      The unrelated dirty checkout remained untouched.
+- [x] Add the strict read-only migration-history preflight observation after
+      verified local image identity and before the unchanged history contract;
+      propagate only the validated typed object through CI and Golden wrappers.
+- [x] Cover the complete exact-key/enum/Boolean/roundtrip, raw-output secrecy,
+      child-output filtering, exit-status preservation, identity ordering, and
+      read-only SQL matrix.
+- [x] Run focused tests and every repository-defined Application gate, update
+      and verify the prospective final-byte checksum manifest, and record exact
+      results here.
+- [ ] Create exactly commit E with message
+      `ci: observe migration replay boundary`, push once without force, await
+      only automatic Exact-E runs, inventory all evidence/artifacts/Preview,
+      confirm non-execution, and stop.
+
+Pre-commit verification on Node `v24.14.0` and pnpm `10.33.2`: four focused
+files / 49 tests; changed-file Prettier; changed-file zero-warning ESLint;
+strict TypeScript; PAPER-only; and the working-tree plus 100-ancestor credential
+scan with zero findings all passed. The complete Windows checkout command
+`pnpm verify` first stopped at full-tree Prettier because the known
+`core.autocrlf=true` checkout converted 335 otherwise unchanged files. A
+temporary clean clone with `core.autocrlf=false`, exact C history, and only the
+nine authorized prospective changes then passed the unmodified `pnpm verify`
+command completely: full-tree Prettier, zero-warning ESLint, strict TypeScript,
+107 Vitest files / 887 tests, PAPER-only, the bounded credential scan with zero
+findings, and the successful Next.js 16.3.0 production build. Its 805 packages
+were installed lockfile-frozen and offline with zero downloads, and the entire
+temporary clone was removed after verification.
+
+The status-aware prospective-index checksum calculation used real merge base
+`70ed610d5e0e5c08bf523d0d160a7b76f5fe2e51`, canonical staged Git blobs, and
+the repository verifier functions; it passed with exactly 173 sorted entries.
+The normal exact-HEAD checksum verifier remains mandatory immediately after E.
+
 ## PR #21 final bounded closure pass (2026-08-18)
 
 Safety status: exactly one Repair commit C and, only after complete Exact-C

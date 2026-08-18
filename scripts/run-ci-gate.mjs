@@ -6,9 +6,19 @@ import {
   resolveNativeExecutable,
   resolvedArguments,
 } from './lib/safe-process.mjs'
+import { parseLocalContainerIdentityRejection } from './lib/local-container-identity-diagnostic.mjs'
+import {
+  requireLocalMigrationReplayDiagnostic,
+  serializeLocalMigrationReplayDiagnostic,
+} from './lib/local-migration-replay-diagnostic.mjs'
 import { redactedDiagnosticForCi } from './lib/redacted-supabase-diagnostic.mjs'
 
 const PROCESS_TIMEOUT_MS = 20 * 60 * 1000
+const MIGRATION_REPLAY_GATE_CONTEXT = new Map([
+  ['database-reset-migrations', { contract: 'post', role: 'source' }],
+  ['local-migration-replay-pre', { contract: 'pre', role: 'source' }],
+  ['schema-golden-bootstrap', { contract: 'pre', role: 'reference' }],
+])
 
 const separatorIndex = process.argv.indexOf('--')
 const idIndex = process.argv.indexOf('--id')
@@ -31,7 +41,9 @@ if (!/^[a-z0-9][a-z0-9_-]*$/.test(id)) {
 const command = process.argv[separatorIndex + 1]
 const args = process.argv.slice(separatorIndex + 2)
 const startedAt = new Date().toISOString()
-let combinedOutput = ''
+let childStdout = ''
+let childStderr = ''
+const migrationReplayContext = MIGRATION_REPLAY_GATE_CONTEXT.get(id)
 
 let resolved
 try {
@@ -50,13 +62,13 @@ const child = spawn(resolved.command, resolvedArguments(resolved, args), {
 
 child.stdout.on('data', (chunk) => {
   const text = chunk.toString()
-  combinedOutput += text
-  process.stdout.write(text)
+  childStdout += text
+  if (!migrationReplayContext) process.stdout.write(text)
 })
 child.stderr.on('data', (chunk) => {
   const text = chunk.toString()
-  combinedOutput += text
-  process.stderr.write(text)
+  childStderr += text
+  if (!migrationReplayContext) process.stderr.write(text)
 })
 
 const outcome = await new Promise((resolve) => {
@@ -79,9 +91,39 @@ const outcome = await new Promise((resolve) => {
     resolve({ exitCode: code ?? 1, signal, timedOut })
   })
 })
-const exitCode = outcome.timedOut || outcome.signal ? 124 : outcome.exitCode
+let exitCode = outcome.timedOut || outcome.signal ? 124 : outcome.exitCode
+let localMigrationReplayDiagnostic
+if (migrationReplayContext) {
+  try {
+    const identityRejection = parseLocalContainerIdentityRejection(childStdout)
+    if (identityRejection) {
+      if (
+        identityRejection.role !== migrationReplayContext.role ||
+        identityRejection.commitSha !== process.env.CAPITAL_LAB_CI_COMMIT_SHA
+      ) {
+        throw new Error('Container identity rejection context is invalid')
+      }
+      if (exitCode === 0) exitCode = 1
+      process.stdout.write(`${JSON.stringify(identityRejection)}\n`)
+    } else {
+      const diagnostic = requireLocalMigrationReplayDiagnostic(childStdout)
+      if (
+        diagnostic.role !== migrationReplayContext.role ||
+        diagnostic.contract !== migrationReplayContext.contract
+      ) {
+        throw new Error('Migration replay diagnostic context is invalid')
+      }
+      const serialized = serializeLocalMigrationReplayDiagnostic(diagnostic)
+      localMigrationReplayDiagnostic = diagnostic
+      process.stdout.write(serialized)
+    }
+  } catch {
+    if (exitCode === 0) exitCode = 1
+    process.stderr.write('Migration replay boundary evidence failed closed.\n')
+  }
+}
 
-const normalizedOutput = combinedOutput.replace(
+const normalizedOutput = `${childStdout}\n${childStderr}`.replace(
   /\u001b\[[0-?]*[ -/]*[@-~]/g,
   '',
 )
@@ -115,6 +157,9 @@ const redactedDiagnostic = redactedDiagnosticForCi(id, normalizedOutput, {
   timedOut: outcome.timedOut,
 })
 if (redactedDiagnostic) evidence.redactedDiagnostic = redactedDiagnostic
+if (localMigrationReplayDiagnostic) {
+  evidence.localMigrationReplayDiagnostic = localMigrationReplayDiagnostic
+}
 
 const evidenceDirectory = path.join(process.cwd(), '.ci-evidence')
 await mkdir(evidenceDirectory, { recursive: true })

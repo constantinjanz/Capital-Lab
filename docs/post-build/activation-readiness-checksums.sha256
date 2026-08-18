@@ -16,11 +16,11 @@ f5542e6395ccb9d42200b7ce18cbf898357f57811639707c02da96791e2d3f74  M  playwright.
 e46065913f7975eb1e3f89c86c6c649c674873af3f16ba82e20309d2166fe457  M  README.md
 c53112e9a9b75e028ac01df4f8df8b62b922d2b3565270b41d1d1b3e5fcc007e  A  scripts/activation-artifacts.test.ts
 71e19c9f235cfb3e18fac6c9cb41cfda741fb7e6d92dbbc77594f40b9387c2fc  A  scripts/activation-phase-contract.mjs
-50d844355db9d0214d0dcde93d445d408764b609684bc14446da646e84b96fe6  A  scripts/apply-local-migrations-via-psql.mjs
-f1911c9156b36b99e18c79d9d05b0c573a862b171fcbc0e9b701d1aa0c15427c  A  scripts/apply-local-migrations-via-psql.test.ts
+cde64fce349a39308de14b15dbf91a6b2bfc8656cd49bf4c08ab0e3b19d896d8  A  scripts/apply-local-migrations-via-psql.mjs
+d4f67818a1b8308043da4b109673ba8f89094d0570f484c4ff1e9ce71523fcad  A  scripts/apply-local-migrations-via-psql.test.ts
 be94477381b83fce33dc212abc4f72972eab45d886c517692675f90009220b50  A  scripts/assert-local-mvcc-fixture-clean.mjs
-bad1312dc99f839ec9a133231e108d811587f4434268c7b052bdd64e53cdae7b  A  scripts/bootstrap-schema-goldens.mjs
-5af42e6a77670ac03e8283295b3dc4a1d8073fe4b475c6e272f944507ef40365  A  scripts/bootstrap-schema-goldens.test.ts
+1e13e18fe3faa04a7646140606e45a32ebee3efcddbf8d898cc72a8e9be6e8d5  A  scripts/bootstrap-schema-goldens.mjs
+a45f0df6bf071ec52ba785aaf056973337c735898667d7843d024aa4ff33a351  A  scripts/bootstrap-schema-goldens.test.ts
 1a01b93b977c51eca1a50eeae942bf2c797ad81313966796c3c368d77c21f9a6  A  scripts/capture-backup-schema-golden.mjs
 ab6da825803e3629b68ef5b3be1138d9dd08c6124de5a882400b38f464a38406  A  scripts/capture-backup-schema-golden.test.ts
 378ea25b3b9c30bcfb469f48b345d87bb2254c372f67bfb282310c10cf0ce1ba  A  scripts/check-credential-patterns.mjs
@@ -45,6 +45,8 @@ f25cf47ad8441df01544cbaf87e4a78497761ceff3085dbcbd16ab6cd2505cef  A  scripts/lib
 83a761906fe1c4e8edd5d7f671c398e1221e5057a7fa1207068211462ae16cc1  A  scripts/lib/local-container-identity-diagnostic.mjs
 963223cab6899a69410d41274a18ffec79c86d57b7357b436d9742a90ef9e323  A  scripts/lib/local-container-identity-diagnostic.test.ts
 efeda65176b682c2fe8880877ddcd06b9b265137ead39dd55bfb0c3dd179ed54  A  scripts/lib/local-container-postgres.mjs
+e763deedcdbad6d8c8a79727785ed6694c30ddecda76f01f2aca692dbaf657df  A  scripts/lib/local-migration-replay-diagnostic.mjs
+6b14f94d6d5951d6dbc3476df2d2c350986b5bd7a56f01f846a61f805c6f7e57  A  scripts/lib/local-migration-replay-diagnostic.test.ts
 63c96da865d9b292cc24ec203681aa264e0bdb4016ae11a62838363502b467eb  A  scripts/lib/local-supabase-target-proof.mjs
 7a413d35e28128d5599735d4022000fa5522e009ddf7a5f415dbb1b7531d703c  A  scripts/lib/mvcc-race-control.mjs
 061f1a3346558c5cf996e396f6fdd0fb266cf04ed5d2def496b4bb23eed30f80  A  scripts/lib/mvcc-race-control.test.ts
@@ -72,7 +74,8 @@ eccbcd36f098be48f46f06c15b49bde2a53ec36aa8a800ea056322a32dd090cd  A  scripts/pre
 12f68e1b5e28e20a4c778ad6c6f2037acbe88d2c18e4ccce54c96993ad4d861e  A  scripts/reset-owned-local-ci-stack.mjs
 8df5a2d8b8f16b12a04096008c18013dc511c933f441fd024638be3f1fc2afad  A  scripts/run-activation-phase.mjs
 068899c0de3b031cdcfbd269f79e1fc7adfa54e638ebea89534ec9d1747fe2db  A  scripts/run-activation-phase.test.ts
-506223a1ff9ac64250edfa0fccd9f2384704d9b18b2fb6a1de0fcfaec2e66564  A  scripts/run-ci-gate.mjs
+4c8d94965dc4d2adbec92bc7e0dc1195ae11ed1e983fce990fe7ff14bb25380e  A  scripts/run-ci-gate.mjs
+227076a026f7c5eab18c7189af71208a7214b872bc23fdcc527175344f1cac16  A  scripts/run-ci-gate.test.ts
 72f691ec2d2d801262a2e870a6c54468188641d5a7296e44ff080ecf449043c8  M  scripts/run-database-tests.mjs
 106737a5f729fa159ae1308084aebf2895421870dc69457989039f2196f23302  A  scripts/run-database-tests.test.ts
 2cf3d11c430a36b067ba6566895ba0508b73b97fd1957806b341281c55033e5f  A  scripts/run-emergency-bootstrap.mjs
@@ -166,5 +169,5 @@ e8382eb73227eb4a227eb1036daaa7e7c1d5826f4234ee3f86516980f8f136fe  A  supabase/mi
 6da865063daad288147d783f52ecafb2eec2d0b61f6c2a4f133eb4d06408ea6e  A  supabase/tests/activation_readiness_follow_up_test.sql
 a3c973b24e93519cba8209fb89af67de1b6981c592fb8c7b888c27b5153f9d10  M  supabase/tests/post_build_hosting_safety_test.sql
 72e3e2b6c33220c0a28be7455f11198f345ee17ea90eafb07563b6612adcbd7f  M  tasks/lessons.md
-4894c1bf6648b36e4bf17b560e42528db163900d1c1ee23b474346c3fb4a9ee8  M  tasks/todo.md
+9b37a67c11b39c563de7c1a5e6ab1d358cc1dde59ba32ab8a7fae7e027aa8672  M  tasks/todo.md
 5682b50deced79ecaeec8102e140dce60d5110bf9910a72ee2c2907de8ee0078  M  vitest.config.ts

@@ -22,6 +22,10 @@ import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.m
 import { inspectOwnedDatabaseContainer } from './lib/local-container-postgres.mjs'
 import { parseLocalContainerIdentityRejection } from './lib/local-container-identity-diagnostic.mjs'
 import {
+  requireLocalMigrationReplayDiagnostic,
+  serializeLocalMigrationReplayDiagnostic,
+} from './lib/local-migration-replay-diagnostic.mjs'
+import {
   canonicalReferenceProjectId,
   canonicalReferenceRunId,
   localCiImageIdentityEvidence,
@@ -362,26 +366,48 @@ async function stopReference(build, workspace) {
 }
 
 async function applyReferenceMigrations(build, workspace) {
-  requireSuccess(
-    await runProcess(
-      'node',
-      [
-        path.join(workspace, 'scripts', 'apply-local-migrations-via-psql.mjs'),
-        `--contract=${build.contract}`,
-        '--seed=omit',
-        '--target=reference',
-      ],
-      {
-        cwd: workspace,
-        env: {
-          ...process.env,
-          CAPITAL_LAB_REFERENCE_DATABASE_PORT: String(build.db),
-          CAPITAL_LAB_REFERENCE_RUN_ID: build.referenceRunId,
-        },
+  const outcome = await runProcess(
+    'node',
+    [
+      path.join(workspace, 'scripts', 'apply-local-migrations-via-psql.mjs'),
+      `--contract=${build.contract}`,
+      '--seed=omit',
+      '--target=reference',
+    ],
+    {
+      cwd: workspace,
+      env: {
+        ...process.env,
+        CAPITAL_LAB_REFERENCE_DATABASE_PORT: String(build.db),
+        CAPITAL_LAB_REFERENCE_RUN_ID: build.referenceRunId,
       },
-    ),
-    'Reference migration replay',
+    },
   )
+  const identityRejection = parseLocalContainerIdentityRejection(outcome.stdout)
+  propagateLocalMigrationReplayDiagnostic(outcome.stdout, build, {
+    identityRejected: identityRejection !== null,
+  })
+  requireSuccess(outcome, 'Reference migration replay')
+}
+
+export function propagateLocalMigrationReplayDiagnostic(
+  output,
+  expected,
+  {
+    identityRejected = false,
+    write = (value) => process.stdout.write(value),
+  } = {},
+) {
+  if (identityRejected) return null
+  const diagnostic = requireLocalMigrationReplayDiagnostic(output)
+  if (
+    diagnostic.role !== 'reference' ||
+    diagnostic.contract !== expected.contract
+  ) {
+    throw new Error('Reference migration replay diagnostic context is invalid')
+  }
+  write(serializeLocalMigrationReplayDiagnostic(diagnostic))
+  return diagnostic
 }
 
 function verifyReferenceImageIdentity(build) {

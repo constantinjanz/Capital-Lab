@@ -13,6 +13,11 @@ import {
   ownedDatabaseContainer,
   runOwnedPostgresTool,
 } from './lib/local-container-postgres.mjs'
+import {
+  buildLocalMigrationReplayDiagnostic,
+  HISTORY_PREFLIGHT_SQL,
+  serializeLocalMigrationReplayDiagnostic,
+} from './lib/local-migration-replay-diagnostic.mjs'
 import { localCiImageIdentityEvidence } from './lib/owned-local-ci-stack.mjs'
 
 export function parseLocalMigrationReplayOptions(argv) {
@@ -74,6 +79,20 @@ async function runPsql(role, input, capture = false) {
 async function queryJson(role, sql) {
   const outcome = await runPsql(role, sql, true)
   return JSON.parse(outcome.stdout.trim())
+}
+
+export async function observeLocalMigrationReplayBoundary(
+  role,
+  contract,
+  { query = queryJson, write = (value) => process.stdout.write(value) } = {},
+) {
+  const diagnostic = buildLocalMigrationReplayDiagnostic({
+    role,
+    contract,
+    queryResult: await query(role, HISTORY_PREFLIGHT_SQL),
+  })
+  write(serializeLocalMigrationReplayDiagnostic(diagnostic))
+  return diagnostic
 }
 
 const HISTORY_CONTRACT_SQL = `select jsonb_build_object(
@@ -146,6 +165,7 @@ async function main() {
     `${requested.contract}-activation.v1.json`,
   )
   const { contract } = await loadCriticalRelationContract(contractPath, kind)
+  await observeLocalMigrationReplayBoundary(role, requested.contract)
   const before = await queryJson(role, HISTORY_CONTRACT_SQL)
   if (canonicalJson(before) !== canonicalJson(EXPECTED_HISTORY_CONTRACT)) {
     throw new Error(
