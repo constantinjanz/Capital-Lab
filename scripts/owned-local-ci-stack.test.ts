@@ -7,6 +7,7 @@ import {
   LOCAL_CI_IMAGE_OS,
   LOCAL_CI_IMAGE_REPO_DIGEST,
   LOCAL_CI_RESET_CONFIRMATION,
+  canonicalReferenceProjectId,
   localCiImageIdentityEvidence,
   localCiConfig,
   localCiMarker,
@@ -256,7 +257,7 @@ describe('run-owned local CI Supabase stack', () => {
         CAPITAL_LAB_REFERENCE_DATABASE_PORT: '56001',
         CAPITAL_LAB_REFERENCE_RUN_ID: 'run-pre-a-12345-1',
       }).container,
-    ).toBe('supabase_db_capital-lab-reference-run-pre-a-12345-1')
+    ).toBe(`supabase_db_${canonicalReferenceProjectId('run-pre-a-12345-1')}`)
     expect(() =>
       ownedDatabaseContainer('reference', {
         ...process.env,

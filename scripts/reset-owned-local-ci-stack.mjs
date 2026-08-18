@@ -13,6 +13,10 @@ import {
   validateLocalCiMarker,
 } from './lib/owned-local-ci-stack.mjs'
 import { inspectOwnedDatabaseContainer } from './lib/local-container-postgres.mjs'
+import {
+  inspectOwnedLocalSupabaseNetwork,
+  ownedLocalSupabaseNetworkSpec,
+} from './lib/owned-local-supabase-network.mjs'
 import { verifiedExternalDirectory } from './lib/safe-artifact-path.mjs'
 import {
   resolvedArguments,
@@ -104,13 +108,26 @@ async function main() {
     ...process.env,
     CAPITAL_LAB_CI_RUN_ID: requested['run-id'],
   }
-  const before = inspectOwnedDatabaseContainer(
+  const beforeTarget = inspectOwnedDatabaseContainer(
     'source',
     identityEnvironment,
-  ).identity
+  )
+  const networkSpec = ownedLocalSupabaseNetworkSpec(
+    'source',
+    beforeTarget,
+    process.env.CAPITAL_LAB_CI_COMMIT_SHA,
+  )
+  inspectOwnedLocalSupabaseNetwork(networkSpec, 'running')
+  const before = beforeTarget.identity
   const outcome = await runPrivate(
     'supabase',
-    ['db', 'reset', '--no-seed', `--workdir=${workdir}`],
+    [
+      'db',
+      'reset',
+      '--no-seed',
+      `--workdir=${workdir}`,
+      `--network-id=${networkSpec.networkName}`,
+    ],
     { cwd: workspace },
   )
   const diagnostic = validateRedactedSupabaseDiagnostic(
@@ -133,6 +150,7 @@ async function main() {
     'source',
     identityEnvironment,
   ).identity
+  inspectOwnedLocalSupabaseNetwork(networkSpec, 'running')
   if (
     before.projectId !== after.projectId ||
     before.runtimeImageReference !== after.runtimeImageReference ||

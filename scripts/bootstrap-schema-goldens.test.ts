@@ -15,6 +15,8 @@ import {
   LOCAL_CI_IMAGE_REGISTRY,
   LOCAL_CI_IMAGE_REPO_DIGEST,
   LOCAL_CI_PROVENANCE_IMAGE,
+  canonicalReferenceProjectId,
+  canonicalReferenceRunId,
 } from './lib/owned-local-ci-stack.mjs'
 
 const sha = 'a'.repeat(40)
@@ -64,12 +66,15 @@ describe('seed-free schema-Golden bootstrap closure', () => {
   })
 
   it('creates a seed-free service-minimal reference config', () => {
-    const config = referenceConfig('capital-lab-reference-run-pre-a-12345-1', {
-      api: 56000,
-      db: 56001,
-      shadow: 56002,
-      studio: 56003,
-    })
+    const config = referenceConfig(
+      canonicalReferenceProjectId('run-pre-a-12345-1'),
+      {
+        api: 56000,
+        db: 56001,
+        shadow: 56002,
+        studio: 56003,
+      },
+    )
     expect(config).toContain('[db.seed]\nenabled = false\nsql_paths = []')
     expect(config).toContain('[db.migrations]\nenabled = false')
     expect(config).not.toContain('seed.sql')
@@ -117,7 +122,7 @@ describe('seed-free schema-Golden bootstrap closure', () => {
           goldenSha256: hash,
           builds: [
             {
-              projectId: 'capital-lab-reference-run-pre-a-12345-1',
+              projectId: canonicalReferenceProjectId('run-pre-a-12345-1'),
               evidenceSha256: hash,
               referenceProofSha256: hash,
               serverFingerprint: hash,
@@ -140,6 +145,37 @@ describe('seed-free schema-Golden bootstrap closure', () => {
     expect(serialized).not.toMatch(
       /postgresql:|password|authorization|bearer/iu,
     )
-    expect(provenance.contracts[0].builds[0].clusterId).toContain('reference')
+    expect(provenance.contracts[0].builds[0].clusterId).toMatch(
+      /^capital-lab-ref-pre-a-[0-9a-f]{16}$/u,
+    )
+  })
+
+  it('derives bounded canonical Reference identities from contract and replica context', () => {
+    const preA = canonicalReferenceRunId('run-12345-1', 'pre', 'a')
+    const identities = [
+      canonicalReferenceProjectId(preA),
+      canonicalReferenceProjectId(
+        canonicalReferenceRunId('run-12345-1', 'pre', 'b'),
+      ),
+      canonicalReferenceProjectId(
+        canonicalReferenceRunId('run-12345-1', 'post', 'a'),
+      ),
+      canonicalReferenceProjectId(
+        canonicalReferenceRunId('run-12345-1', 'post', 'b'),
+      ),
+    ]
+    expect(canonicalReferenceProjectId(preA)).toBe(identities[0])
+    expect(new Set(identities).size).toBe(4)
+    expect(identities.every((value) => value.length <= 40)).toBe(true)
+    expect(identities.every((value) => /^[a-z0-9-]+$/u.test(value))).toBe(true)
+    expect(identities[0]).toMatch(/^capital-lab-ref-pre-a-[0-9a-f]{16}$/u)
+    const boundary = canonicalReferenceProjectId(
+      canonicalReferenceRunId(`run-${'z'.repeat(28)}`, 'post', 'b'),
+    )
+    expect(boundary.length).toBeLessThanOrEqual(40)
+    expect(() =>
+      canonicalReferenceRunId(`run-${'z'.repeat(29)}`, 'post', 'b'),
+    ).toThrow()
+    expect(() => canonicalReferenceProjectId('run-pre-a-unsafe_1')).toThrow()
   })
 })

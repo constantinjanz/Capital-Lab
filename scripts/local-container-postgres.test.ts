@@ -6,6 +6,7 @@ import {
   LOCAL_CI_IMAGE_ID,
   LOCAL_CI_IMAGE_OS,
   LOCAL_CI_IMAGE_REPO_DIGEST,
+  canonicalReferenceProjectId,
 } from './lib/owned-local-ci-stack.mjs'
 
 const processMocks = vi.hoisted(() => ({
@@ -13,6 +14,7 @@ const processMocks = vi.hoisted(() => ({
   spawnSync: vi.fn(),
 }))
 const originalSourceRunId = process.env.CAPITAL_LAB_CI_RUN_ID
+const originalCommitSha = process.env.CAPITAL_LAB_CI_COMMIT_SHA
 
 vi.mock('node:child_process', () => processMocks)
 vi.mock('./lib/safe-process.mjs', () => ({
@@ -24,6 +26,7 @@ import {
   inspectOwnedDatabaseContainer,
   runOwnedPostgresTool,
 } from './lib/local-container-postgres.mjs'
+import { LocalContainerImageIdentityRejection } from './lib/local-container-identity-diagnostic.mjs'
 
 const imageInspection = {
   Architecture: LOCAL_CI_IMAGE_ARCHITECTURE,
@@ -54,9 +57,26 @@ function successfulInspect(value: unknown) {
   }
 }
 
+async function rejectedIdentity(promise: Promise<unknown>) {
+  const error = await promise.catch((caught: unknown) => caught)
+  expect(error).toBeInstanceOf(LocalContainerImageIdentityRejection)
+  return error as LocalContainerImageIdentityRejection
+}
+
+function thrownIdentity(run: () => unknown) {
+  try {
+    run()
+  } catch (error) {
+    expect(error).toBeInstanceOf(LocalContainerImageIdentityRejection)
+    return error as LocalContainerImageIdentityRejection
+  }
+  throw new Error('Expected local container identity rejection')
+}
+
 describe('owned local PostgreSQL subprocess image boundary', () => {
   beforeEach(() => {
     process.env.CAPITAL_LAB_CI_RUN_ID = 'run-12345-1'
+    delete process.env.CAPITAL_LAB_CI_COMMIT_SHA
     processMocks.spawn.mockReset()
     processMocks.spawnSync.mockReset()
   })
@@ -65,6 +85,9 @@ describe('owned local PostgreSQL subprocess image boundary', () => {
     if (originalSourceRunId === undefined)
       delete process.env.CAPITAL_LAB_CI_RUN_ID
     else process.env.CAPITAL_LAB_CI_RUN_ID = originalSourceRunId
+    if (originalCommitSha === undefined)
+      delete process.env.CAPITAL_LAB_CI_COMMIT_SHA
+    else process.env.CAPITAL_LAB_CI_COMMIT_SHA = originalCommitSha
   })
 
   it('resolves image inspection only through the container immutable Image ID', () => {
@@ -97,9 +120,13 @@ describe('owned local PostgreSQL subprocess image boundary', () => {
     }
     processMocks.spawnSync.mockReturnValueOnce(successfulInspect(container))
 
-    await expect(
+    const error = await rejectedIdentity(
       runOwnedPostgresTool('source', 'psql', ['--version'], undefined),
-    ).rejects.toThrow(/container binding/u)
+    )
+    expect(error.identityDiagnostic).toMatchObject({
+      failure_stage: 'container_binding',
+      mismatch_fields: ['config_image'],
+    })
     expect(processMocks.spawnSync).toHaveBeenCalledTimes(1)
     expect(processMocks.spawn).not.toHaveBeenCalled()
   })
@@ -118,9 +145,13 @@ describe('owned local PostgreSQL subprocess image boundary', () => {
         }),
       )
 
-    await expect(
+    const error = await rejectedIdentity(
       runOwnedPostgresTool('source', 'psql', ['--version'], undefined),
-    ).rejects.toThrow(/immutable image identity/u)
+    )
+    expect(error.identityDiagnostic).toMatchObject({
+      failure_stage: 'immutable_identity',
+      mismatch_fields: ['expected_repo_digest_missing', 'repo_digest_count'],
+    })
     expect(processMocks.spawnSync).toHaveBeenCalledTimes(2)
     expect(processMocks.spawn).not.toHaveBeenCalled()
   })
@@ -203,13 +234,28 @@ describe('owned local PostgreSQL subprocess image boundary', () => {
     ],
   ] as const)(
     'starts no psql process after %s rejection',
-    async (_stage, results) => {
+    async (stage, results) => {
       for (const result of results) {
         processMocks.spawnSync.mockReturnValueOnce(result)
       }
-      await expect(
+      const error = await rejectedIdentity(
         runOwnedPostgresTool('source', 'psql', ['--version'], undefined),
-      ).rejects.toThrow()
+      )
+      const expectedMismatches = {
+        container_inspect: ['container_inspect_unavailable'],
+        container_shape: ['container_json'],
+        container_binding: ['config_image'],
+        image_inspect: ['image_inspect_unavailable'],
+        image_shape: ['image_result_count'],
+        immutable_identity: [
+          'expected_repo_digest_missing',
+          'repo_digest_count',
+        ],
+      } as const
+      expect(error.identityDiagnostic).toMatchObject({
+        failure_stage: stage,
+        mismatch_fields: expectedMismatches[stage],
+      })
       expect(processMocks.spawn).not.toHaveBeenCalled()
     },
   )
@@ -233,9 +279,13 @@ describe('owned local PostgreSQL subprocess image boundary', () => {
         stdout: JSON.stringify(containers),
       })
 
-      await expect(
+      const error = await rejectedIdentity(
         runOwnedPostgresTool('source', 'psql', ['--version'], undefined),
-      ).rejects.toThrow(/container is not unique/u)
+      )
+      expect(error.identityDiagnostic).toMatchObject({
+        failure_stage: 'container_shape',
+        mismatch_fields: ['container_result_count'],
+      })
       expect(processMocks.spawnSync).toHaveBeenCalledTimes(1)
       expect(processMocks.spawn).not.toHaveBeenCalled()
     },
@@ -256,7 +306,7 @@ describe('owned local PostgreSQL subprocess image boundary', () => {
         CAPITAL_LAB_REFERENCE_DATABASE_PORT: '56001',
         CAPITAL_LAB_REFERENCE_RUN_ID: 'run-pre-a-12345-1',
       },
-      'supabase_db_capital-lab-reference-run-pre-a-12345-1',
+      `supabase_db_${canonicalReferenceProjectId('run-pre-a-12345-1')}`,
       '56001',
     ],
     [
@@ -265,7 +315,7 @@ describe('owned local PostgreSQL subprocess image boundary', () => {
         CAPITAL_LAB_PEER_REFERENCE_DATABASE_PORT: '56005',
         CAPITAL_LAB_PEER_REFERENCE_RUN_ID: 'run-pre-b-12345-1',
       },
-      'supabase_db_capital-lab-reference-run-pre-b-12345-1',
+      `supabase_db_${canonicalReferenceProjectId('run-pre-b-12345-1')}`,
       '56005',
     ],
   ] as const)(
@@ -291,9 +341,13 @@ describe('owned local PostgreSQL subprocess image boundary', () => {
           CAPITAL_LAB_CI_RUN_ID: 'run-12345-1',
         }).identity,
       ).toMatchObject({ imageId: LOCAL_CI_IMAGE_ID })
-      expect(() =>
+      const error = thrownIdentity(() =>
         inspectOwnedDatabaseContainer(role, { ...process.env, ...env }),
-      ).toThrow(/immutable image identity/u)
+      )
+      expect(error.identityDiagnostic).toMatchObject({
+        failure_stage: 'immutable_identity',
+        mismatch_fields: ['container_image_id'],
+      })
       expect(processMocks.spawn).not.toHaveBeenCalled()
     },
   )

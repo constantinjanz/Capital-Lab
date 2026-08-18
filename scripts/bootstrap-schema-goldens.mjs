@@ -21,7 +21,11 @@ import {
 import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
 import { inspectOwnedDatabaseContainer } from './lib/local-container-postgres.mjs'
 import { parseLocalContainerIdentityRejection } from './lib/local-container-identity-diagnostic.mjs'
-import { localCiImageIdentityEvidence } from './lib/owned-local-ci-stack.mjs'
+import {
+  canonicalReferenceProjectId,
+  canonicalReferenceRunId,
+  localCiImageIdentityEvidence,
+} from './lib/owned-local-ci-stack.mjs'
 import { diagnosticFromStructuredOutput } from './lib/redacted-supabase-diagnostic.mjs'
 import { loadSchemaGoldenBootstrapContract } from './lib/schema-golden-bootstrap-contract.mjs'
 import {
@@ -164,11 +168,7 @@ export function referencePortPlan(runId) {
 }
 
 export function referenceConfig(projectId, ports) {
-  if (
-    !/^capital-lab-reference-run-(?:pre|post)-(?:a|b)-[a-z0-9-]{3,28}$/u.test(
-      projectId,
-    )
-  ) {
+  if (!/^capital-lab-ref-(?:pre|post)-(?:a|b)-[0-9a-f]{16}$/u.test(projectId)) {
     throw new Error('Reference project identity is invalid')
   }
   return `project_id = "${projectId}"
@@ -242,9 +242,12 @@ async function verifiedMigrationInputs(workspace, short, contract) {
 }
 
 async function createReferenceWorkdir(root, build, runId, migrations) {
-  const suffix = runId.slice(4)
-  const referenceRunId = `run-${build.contract}-${build.replica}-${suffix}`
-  const projectId = `capital-lab-reference-${referenceRunId}`
+  const referenceRunId = canonicalReferenceRunId(
+    runId,
+    build.contract,
+    build.replica,
+  )
+  const projectId = canonicalReferenceProjectId(referenceRunId)
   const directory = path.join(root, `${build.contract}-${build.replica}`)
   const migrationDirectory = path.join(directory, 'supabase', 'migrations')
   await mkdir(migrationDirectory, { recursive: true, mode: 0o700 })
@@ -275,12 +278,20 @@ async function startReference(build, workspace) {
     [
       path.join(workspace, 'scripts', 'run-redacted-subprocess.mjs'),
       `--id=golden-${build.contract}-${build.replica}-start`,
+      '--role=reference',
       '--',
       'supabase',
       'start',
       `--workdir=${build.directory}`,
     ],
-    { cwd: workspace },
+    {
+      cwd: workspace,
+      env: {
+        ...process.env,
+        CAPITAL_LAB_REFERENCE_DATABASE_PORT: String(build.db),
+        CAPITAL_LAB_REFERENCE_RUN_ID: build.referenceRunId,
+      },
+    },
   )
   const diagnostic = diagnosticFromStructuredOutput(
     outcome.stdout.toString('utf8'),
@@ -308,11 +319,45 @@ async function startReference(build, workspace) {
   return diagnostic
 }
 
-async function stopReference(build) {
+async function createReferenceNetwork(build, workspace) {
   return runProcess(
-    'supabase',
-    ['stop', '--no-backup', `--workdir=${build.directory}`],
-    { timeoutMs: 120_000 },
+    'node',
+    [
+      path.join(
+        workspace,
+        'scripts',
+        'create-owned-local-supabase-network.mjs',
+      ),
+      '--role=reference',
+    ],
+    {
+      cwd: workspace,
+      env: {
+        ...process.env,
+        CAPITAL_LAB_REFERENCE_DATABASE_PORT: String(build.db),
+        CAPITAL_LAB_REFERENCE_RUN_ID: build.referenceRunId,
+      },
+    },
+  )
+}
+
+async function stopReference(build, workspace) {
+  return runProcess(
+    'node',
+    [
+      path.join(workspace, 'scripts', 'cleanup-owned-local-supabase-stack.mjs'),
+      '--role=reference',
+      `--workdir=${build.directory}`,
+    ],
+    {
+      timeoutMs: 180_000,
+      cwd: workspace,
+      env: {
+        ...process.env,
+        CAPITAL_LAB_REFERENCE_DATABASE_PORT: String(build.db),
+        CAPITAL_LAB_REFERENCE_RUN_ID: build.referenceRunId,
+      },
+    },
   )
 }
 
@@ -554,8 +599,12 @@ async function main() {
     for (const short of ['pre', 'post']) {
       const pair = builds.filter((build) => build.contract === short)
       for (const build of pair) {
-        await startReference(build, workspace)
+        requireSuccess(
+          await createReferenceNetwork(build, workspace),
+          'Reference network creation',
+        )
         running.push(build)
+        await startReference(build, workspace)
         verifyReferenceImageIdentity(build)
         await applyReferenceMigrations(build, workspace)
       }
@@ -612,7 +661,10 @@ async function main() {
         builds: proofRows,
       })
       for (const build of [...pair].reverse()) {
-        requireSuccess(await stopReference(build), 'Reference stack cleanup')
+        requireSuccess(
+          await stopReference(build, workspace),
+          'Reference stack cleanup',
+        )
         running.splice(running.indexOf(build), 1)
       }
     }
@@ -636,7 +688,7 @@ async function main() {
     let cleanupFailed = false
     for (const build of [...running].reverse()) {
       try {
-        const outcome = await stopReference(build)
+        const outcome = await stopReference(build, workspace)
         if (outcome.code !== 0 || outcome.signal || outcome.timedOut)
           cleanupFailed = true
       } catch {

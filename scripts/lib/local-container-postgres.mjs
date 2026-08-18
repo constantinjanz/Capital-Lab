@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process'
 
 import {
   LOCAL_CI_DATABASE_PORT,
+  canonicalReferenceProjectId,
   localCiProjectId,
   validateLocalCiContainerInspection,
   validateOwnedLocalDatabaseContainerBinding,
@@ -72,9 +73,9 @@ export function ownedDatabaseContainer(role, env = process.env) {
       throw new Error('Local Reference database identity is invalid')
     }
     return {
-      container: `supabase_db_capital-lab-reference-${runId}`,
+      container: `supabase_db_${canonicalReferenceProjectId(runId)}`,
       port,
-      projectId: `capital-lab-reference-${runId}`,
+      projectId: canonicalReferenceProjectId(runId),
       runId,
     }
   }

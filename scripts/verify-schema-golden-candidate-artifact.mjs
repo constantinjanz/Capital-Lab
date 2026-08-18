@@ -132,6 +132,7 @@ export function validateSchemaGoldenCandidateProvenance(provenance, expected) {
       throw new Error('Golden contract provenance is invalid')
     }
     const clusterIds = new Set()
+    const replicas = new Set()
     const containerFingerprints = new Set()
     for (const build of contract.builds) {
       exactKeys(
@@ -151,10 +152,12 @@ export function validateSchemaGoldenCandidateProvenance(provenance, expected) {
         ],
         'Reference build provenance',
       )
+      const clusterMatch = new RegExp(
+        `^capital-lab-ref-${contract.contractKind === 'pre_activation' ? 'pre' : 'post'}-([ab])-[0-9a-f]{16}$`,
+        'u',
+      ).exec(build.clusterId ?? '')
       if (
-        !/^capital-lab-reference-run-(?:pre|post)-(?:a|b)-[a-z0-9-]+$/u.test(
-          build.clusterId ?? '',
-        ) ||
+        !clusterMatch ||
         build.containerImage !== expected.bootstrap.postgresImage ||
         build.containerImageArchitecture !==
           expected.bootstrap.postgresImageArchitecture ||
@@ -173,9 +176,14 @@ export function validateSchemaGoldenCandidateProvenance(provenance, expected) {
         throw new Error('Reference build identity is invalid')
       }
       clusterIds.add(build.clusterId)
+      replicas.add(clusterMatch[1])
       containerFingerprints.add(build.containerFingerprint)
     }
-    if (clusterIds.size !== 2 || containerFingerprints.size !== 2) {
+    if (
+      clusterIds.size !== 2 ||
+      replicas.size !== 2 ||
+      containerFingerprints.size !== 2
+    ) {
       throw new Error('Reference builds are not independently isolated')
     }
     byKind.set(contract.contractKind, contract)

@@ -398,6 +398,90 @@ describe('local container identity diagnostic contract', () => {
     expect(line).not.toMatch(/PASSWORD|Labels|Config\.Env/u)
   })
 
+  it('keeps the first evidence bytes and first log when a second write fails closed', () => {
+    const diagnostic = diagnoseOwnedLocalDatabaseContainer(
+      [
+        {
+          ...validContainer,
+          Config: {
+            Image: 'public.ecr.aws/supabase/postgres:17.6.1.158',
+          },
+        },
+      ],
+      expected,
+    )
+    const error = new LocalContainerImageIdentityRejection(
+      'source',
+      diagnostic!,
+    )
+    const directory = tempDirectory()
+    const logs: string[] = []
+    const options = {
+      cwd: directory,
+      write: (value: string) => {
+        logs.push(value)
+        return true
+      },
+    }
+    const first = emitLocalContainerIdentityRejection(
+      error,
+      'd'.repeat(40),
+      options,
+    )
+    expect(parseLocalContainerIdentityRejection(first)).toMatchObject({
+      commitSha: 'd'.repeat(40),
+      failure_stage: 'container_binding',
+      mismatch_fields: ['config_image'],
+      status: 'local_container_image_identity_rejected',
+    })
+    expect(() =>
+      emitLocalContainerIdentityRejection(error, 'd'.repeat(40), options),
+    ).toThrow()
+    const evidence = readFileSync(
+      path.join(
+        directory,
+        '.ci-evidence',
+        'local-container-image-identity-rejected.json',
+      ),
+      'utf8',
+    )
+    expect(evidence).toBe(first)
+    expect(logs).toEqual([first])
+  })
+
+  it('emits neither evidence nor a log for an invalid commit SHA', () => {
+    const diagnostic = diagnoseOwnedLocalDatabaseContainer(
+      [{ ...validContainer, State: { Running: false } }],
+      expected,
+    )
+    const error = new LocalContainerImageIdentityRejection(
+      'source',
+      diagnostic!,
+    )
+    const directory = tempDirectory()
+    const logs: string[] = []
+    expect(() =>
+      emitLocalContainerIdentityRejection(error, 'invalid', {
+        cwd: directory,
+        write: (value: string) => {
+          logs.push(value)
+          return true
+        },
+      }),
+    ).toThrow(/evidence is invalid/u)
+    expect(logs).toEqual([])
+    expect(() =>
+      readFileSync(
+        path.join(
+          directory,
+          '.ci-evidence',
+          'local-container-image-identity-rejected.json',
+        ),
+        'utf8',
+      ),
+    ).toThrow()
+  })
+
   it('keeps the established success path diagnostic-free', () => {
     expect(
       diagnoseOwnedLocalDatabaseContainer([validContainer], expected),

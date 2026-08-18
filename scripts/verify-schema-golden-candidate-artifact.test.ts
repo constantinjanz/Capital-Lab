@@ -13,6 +13,7 @@ import {
   LOCAL_CI_IMAGE_REGISTRY,
   LOCAL_CI_IMAGE_REPO_DIGEST,
   LOCAL_CI_PROVENANCE_IMAGE,
+  canonicalReferenceProjectId,
 } from './lib/owned-local-ci-stack.mjs'
 
 const commit = 'a'.repeat(40)
@@ -55,7 +56,9 @@ function provenance() {
       schemaEvidenceSha256: hash,
       goldenSha256: hash,
       builds: ['a', 'b'].map((replica, index) => ({
-        clusterId: `capital-lab-reference-run-${kind.startsWith('pre') ? 'pre' : 'post'}-${replica}-12345-1`,
+        clusterId: canonicalReferenceProjectId(
+          `run-${kind.startsWith('pre') ? 'pre' : 'post'}-${replica}-12345-1`,
+        ),
         referenceEvidenceSha256: `${index + 1}`.repeat(64),
         referenceProofSha256: `${index + 3}`.repeat(64),
         serverFingerprint: `${index + 5}`.repeat(64),

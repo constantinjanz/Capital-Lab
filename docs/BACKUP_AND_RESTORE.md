@@ -35,7 +35,14 @@ database identities. PRE receives exactly the 32 frozen PRE migrations; POST
 receives the complete 36-migration set. Each migration is checked against its
 contract checksum before the first stack starts. The two independently
 captured candidates must be byte-identical. Cleanup is limited to run-owned
-containers and directories and runs on every exit path.
+containers, networks, and directories and runs on every exit path. Reference
+project IDs are deterministic, CLI-compatible, at most 40 characters, and bind
+the PRE/POST contract, A/B replica, run identity, and a 64-bit hash. Every
+Source, Restore, and Reference stack starts only on its own labeled Docker
+bridge whose exact `com.docker.network.bridge.host_binding_ipv4=127.0.0.1`
+option is verified before use. Cleanup re-verifies the network owner, requires
+zero attached containers after stack stop, removes that exact network ID, and
+proves that neither its ID nor name remains.
 
 The one-day artifact contains exactly:
 

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 
 const RUN_ID = /^run-[a-z0-9][a-z0-9-]{4,31}$/u
+const REFERENCE_RUN_ID = /^run-(pre|post)-(a|b)-([a-z0-9][a-z0-9-]{4,27})$/u
 const HASH = /^[0-9a-f]{64}$/u
 
 export const LOCAL_CI_DATABASE_PORT = '54322'
@@ -26,6 +27,35 @@ export function sha256(value) {
 export function localCiProjectId(runId) {
   if (!RUN_ID.test(runId ?? '')) throw new Error('Local CI run ID is invalid')
   return `capital-lab-ci-${runId}`
+}
+
+export function canonicalReferenceRunId(rootRunId, contract, replica) {
+  if (
+    !RUN_ID.test(rootRunId ?? '') ||
+    !['pre', 'post'].includes(contract) ||
+    !['a', 'b'].includes(replica)
+  ) {
+    throw new Error('Reference run identity is invalid')
+  }
+  const runId = `run-${contract}-${replica}-${rootRunId.slice(4)}`
+  if (!REFERENCE_RUN_ID.test(runId)) {
+    throw new Error('Reference run identity is invalid')
+  }
+  return runId
+}
+
+export function canonicalReferenceProjectId(runId) {
+  const match = REFERENCE_RUN_ID.exec(runId ?? '')
+  if (!match) throw new Error('Reference run identity is invalid')
+  const [, contract, replica] = match
+  const entropy = sha256(
+    `capital-lab-schema-golden-reference-v1:${runId}`,
+  ).slice(0, 16)
+  const projectId = `capital-lab-ref-${contract}-${replica}-${entropy}`
+  if (projectId.length > 40 || !/^[a-z0-9][a-z0-9-]+$/u.test(projectId)) {
+    throw new Error('Canonical Reference project identity is invalid')
+  }
+  return projectId
 }
 
 export function validateLocalCiSqlTestName(name) {

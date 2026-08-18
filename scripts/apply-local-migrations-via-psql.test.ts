@@ -6,6 +6,7 @@ import {
   migrationIdentity,
   parseLocalMigrationReplayOptions,
 } from './apply-local-migrations-via-psql.mjs'
+import { canonicalReferenceProjectId } from './lib/owned-local-ci-stack.mjs'
 
 describe('checksummed local psql migration replay', () => {
   it('accepts only exact contract, seed and target arguments', () => {
@@ -38,7 +39,7 @@ describe('checksummed local psql migration replay', () => {
       'supabase_db_capital-lab-ci-run-12345-1',
     )
     expect(migrationContainerName('reference', 'run-pre-a-12345-1')).toBe(
-      'supabase_db_capital-lab-reference-run-pre-a-12345-1',
+      `supabase_db_${canonicalReferenceProjectId('run-pre-a-12345-1')}`,
     )
     for (const value of ['run-x', 'pre-a-12345', 'run-pre-c-12345']) {
       expect(() => migrationContainerName('reference', value)).toThrow()

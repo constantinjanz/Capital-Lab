@@ -14,7 +14,10 @@ import {
   inspectOwnedDatabaseContainer,
   ownedPsql,
 } from './lib/local-container-postgres.mjs'
-import { localCiImageIdentityEvidence } from './lib/owned-local-ci-stack.mjs'
+import {
+  canonicalReferenceProjectId,
+  localCiImageIdentityEvidence,
+} from './lib/owned-local-ci-stack.mjs'
 import { buildSchemaGoldenReferenceProof } from './lib/schema-golden-reference-proof.mjs'
 import { loadSchemaGoldenBootstrapContract } from './lib/schema-golden-bootstrap-contract.mjs'
 import {
@@ -70,7 +73,7 @@ async function main() {
   if (!/^run-[a-z0-9][a-z0-9-]{5,48}$/u.test(runId ?? '')) {
     throw new Error('Run-specific schema reference identity is required')
   }
-  const projectId = `capital-lab-reference-${runId}`
+  const projectId = canonicalReferenceProjectId(runId)
   const port = process.env.CAPITAL_LAB_REFERENCE_DATABASE_PORT
   const target = inspectOwnedDatabaseContainer('reference')
   process.stdout.write(

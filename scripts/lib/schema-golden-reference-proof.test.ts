@@ -12,6 +12,7 @@ import {
   LOCAL_CI_IMAGE_OS,
   LOCAL_CI_IMAGE_REGISTRY,
   LOCAL_CI_IMAGE_REPO_DIGEST,
+  canonicalReferenceProjectId,
 } from './owned-local-ci-stack.mjs'
 
 const referenceIdentity = {
@@ -26,8 +27,8 @@ const peerReferenceIdentity = {
 }
 const base = {
   contractKind: 'pre_activation',
-  runId: 'run-reference1',
-  projectId: 'capital-lab-reference-run-reference1',
+  runId: 'run-pre-a-reference1',
+  projectId: canonicalReferenceProjectId('run-pre-a-reference1'),
   hostname: '127.0.0.1',
   port: '56322',
   database: 'postgres',

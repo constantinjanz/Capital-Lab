@@ -2,6 +2,50 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## PR #21 final bounded closure pass (2026-08-18)
+
+Safety status: exactly one Repair commit C and, only after complete Exact-C
+acceptance, at most one Golden import commit G. Ephemeral local/CI Supabase
+stacks only. No Hosted/Production database action, migration change, workflow
+rerun/cancel, deployment promotion, provider, broker, Canary, or trading action
+is authorized.
+
+- [x] Reconfirm the clean, complete isolated clone, exact local/remote/PR HEAD
+      `19ca1b591bc220a22865c7ad6da7ca2361822cd8`, Draft/open/unmerged PR #21,
+      authenticated non-forced push dry-run, and terminal Exact-D Push-CI. The
+      unrelated dirty checkout remained untouched.
+- [x] Isolate negative image-identity unit tests from the real CI commit SHA,
+      require typed rejection stage/field assertions and zero downstream
+      PostgreSQL processes, and prove the fixed evidence file is immutable on a
+      second write and absent for invalid commit identity.
+- [x] Add centrally derived, run-owned Docker bridge networks with exact
+      loopback binding, run/commit/role ownership, attachment checks, immutable
+      network-ID use, and revalidated fail-closed cleanup. Pass the same verified
+      network through Source, Restore, Reference and Peer-Reference starts and
+      resets without weakening the existing container/image guard.
+- [x] Canonicalize Reference project IDs before configuration to at most 40
+      CLI-compatible characters with deterministic 64-bit hash entropy and
+      exact PRE/POST plus A/B separation; derive configuration, container,
+      network and Golden proof identity from that single value.
+- [x] Complete local verification: 9 focused files / 137 tests; full bounded
+      Vitest run 105 files / 853 tests; native Windows catalog 22 files / 219
+      tests; changed-file Prettier; zero-warning ESLint; strict TypeScript;
+      PAPER-only; worktree-plus-100-ancestor credential scan with zero findings;
+      all 21 Windows-sensitive wrappers parsed; successful Next.js 16.3.0
+      production build; and `git diff --check`. A first unconstrained full-suite
+      attempt passed 100 files / 833 tests but exhausted five unrelated worker
+      startup slots; the single bounded four-worker rerun passed completely.
+      The full Windows working-tree Prettier scan reports only the known
+      `core.autocrlf=true` checkout conversion; changed bytes and the prospective
+      canonical LF Git tree are verified without rewriting unrelated files.
+- [ ] Create and push exactly one normal Repair commit C, then wait for every
+      automatic Exact-C Push-CI, PR-CI, Golden and Preview result. Import Goldens
+      only if every stated C acceptance criterion is met except the declared
+      Missing-Golden ENOENT.
+- [ ] If and only if C is accepted, import exactly the two verified candidate
+      Golden files plus their two mechanical checksum entries in one direct
+      child G, then complete Exact-G acceptance without rerun or further repair.
+
 ## PR #21 diagnostic-only image-identity pass (2026-08-17)
 
 Safety status: exactly one diagnostic commit and one exact-head CI/Golden cycle;

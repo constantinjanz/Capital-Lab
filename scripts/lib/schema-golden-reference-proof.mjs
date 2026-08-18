@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
 
+import { canonicalReferenceProjectId } from './owned-local-ci-stack.mjs'
+
 const HASH = /^[0-9a-f]{64}$/u
 const SHA = /^[0-9a-f]{40}$/u
 const RUN_ID = /^run-[a-z0-9][a-z0-9-]{5,48}$/u
@@ -86,7 +88,7 @@ function validateShape(proof, bootstrap) {
     proof.schemaVersion !== 3 ||
     !['pre_activation', 'post_activation'].includes(proof?.contractKind) ||
     !RUN_ID.test(proof?.runId ?? '') ||
-    proof?.projectId !== `capital-lab-reference-${proof.runId}` ||
+    proof?.projectId !== canonicalReferenceProjectId(proof.runId) ||
     proof?.hostname !== '127.0.0.1' ||
     !/^5[6-9][0-9]{3}$/u.test(proof?.port ?? '') ||
     proof?.database !== 'postgres' ||

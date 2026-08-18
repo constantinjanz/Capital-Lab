@@ -1,8 +1,14 @@
 import { spawn } from 'node:child_process'
-import { realpath } from 'node:fs/promises'
+import { readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { ownedDatabaseContainer } from './lib/local-container-postgres.mjs'
+import {
+  inspectOwnedLocalSupabaseNetwork,
+  ownedLocalSupabaseNetworkSpec,
+  safeOwnedLocalSupabaseNetworkEvidence,
+} from './lib/owned-local-supabase-network.mjs'
 import {
   resolvedArguments,
   resolveNativeExecutable,
@@ -45,37 +51,60 @@ export function redactSensitiveText(value) {
 
 function parseArguments(argv) {
   const separator = argv.indexOf('--')
-  if (separator !== 1 || !argv[0]?.startsWith('--id=')) {
+  if (
+    separator !== 2 ||
+    !argv[0]?.startsWith('--id=') ||
+    !argv[1]?.startsWith('--role=')
+  ) {
     throw new Error(
-      'Required: --id=<safe-id> -- supabase start [--workdir=<path>]',
+      'Required: --id=<safe-id> --role=<owned-role> -- supabase start --workdir=<path>',
     )
   }
   const id = argv[0].slice('--id='.length)
+  const role = argv[1].slice('--role='.length)
   const command = argv[separator + 1]
   const args = argv.slice(separator + 2)
-  if (!SAFE_ID.test(id) || command !== 'supabase' || args[0] !== 'start') {
+  if (
+    !SAFE_ID.test(id) ||
+    !['reference', 'restore', 'source'].includes(role) ||
+    command !== 'supabase' ||
+    args[0] !== 'start'
+  ) {
     throw new Error('Redacted subprocess is outside the exact allowlist')
   }
-  if (
-    args.length > 2 ||
-    (args.length === 2 && !args[1].startsWith('--workdir='))
-  ) {
+  if (args.length !== 2 || !args[1].startsWith('--workdir=')) {
     throw new Error('Supabase start arguments are outside the exact allowlist')
   }
-  return { args, command, id }
+  return { args, command, id, role }
 }
 
-async function canonicalizeArguments(args) {
-  if (args.length === 1) return args
+async function canonicalizeArguments(args, target) {
   const requested = args[1].slice('--workdir='.length)
   const resolved = await realpath(path.resolve(requested))
+  const config = await readFile(
+    path.join(resolved, 'supabase', 'config.toml'),
+    'utf8',
+  )
+  if (!config.startsWith(`project_id = "${target.projectId}"\n`)) {
+    throw new Error('Supabase start project identity is invalid')
+  }
   return ['start', `--workdir=${resolved}`]
 }
 
 export async function runRedacted(argv = process.argv.slice(2)) {
   const requested = parseArguments(argv)
   const executable = resolveNativeExecutable(requested.command)
-  const args = await canonicalizeArguments(requested.args)
+  const target = ownedDatabaseContainer(requested.role)
+  const networkSpec = ownedLocalSupabaseNetworkSpec(
+    requested.role,
+    target,
+    process.env.CAPITAL_LAB_CI_COMMIT_SHA,
+  )
+  inspectOwnedLocalSupabaseNetwork(networkSpec, 'empty')
+  const args = [
+    ...(await canonicalizeArguments(requested.args, target)),
+    `--network-id=${networkSpec.networkName}`,
+  ]
   const outcome = await new Promise((resolve) => {
     let settled = false
     let timedOut = false
@@ -132,9 +161,15 @@ export async function runRedacted(argv = process.argv.slice(2)) {
     outcome,
   )
   process.stdout.write(`${JSON.stringify(diagnostic)}\n`)
-  return diagnostic.exit_code === 0 && !diagnostic.timeout && !diagnostic.signal
-    ? 0
-    : 1
+  if (diagnostic.exit_code !== 0 || diagnostic.timeout || diagnostic.signal) {
+    return 1
+  }
+  const networkEvidence = safeOwnedLocalSupabaseNetworkEvidence(
+    'owned_local_supabase_network_verified',
+    inspectOwnedLocalSupabaseNetwork(networkSpec, 'running'),
+  )
+  process.stdout.write(`${JSON.stringify(networkEvidence)}\n`)
+  return 0
 }
 
 if (

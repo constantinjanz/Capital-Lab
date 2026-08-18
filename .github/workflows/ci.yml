@@ -126,7 +126,9 @@ jobs:
               "--run-id=${ci_run_id}" "--output-dir=${ci_workdir}"
           echo "CAPITAL_LAB_CI_RUN_ID=${ci_run_id}" >> "$GITHUB_ENV"
           echo "CAPITAL_LAB_CI_WORKDIR=${ci_workdir}" >> "$GITHUB_ENV"
-      - run: node scripts/run-ci-gate.mjs --id supabase-start -- node scripts/run-redacted-subprocess.mjs --id=supabase-start -- supabase start "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
+      - name: Create exact run-owned source network
+        run: node scripts/run-ci-gate.mjs --id create-owned-local-ci-network -- node scripts/create-owned-local-supabase-network.mjs --role=source
+      - run: node scripts/run-ci-gate.mjs --id supabase-start -- node scripts/run-redacted-subprocess.mjs --id=supabase-start --role=source -- supabase start "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
       - name: Replay exact PRE migrations through psql simple-query mode
         run: node scripts/run-ci-gate.mjs --id local-migration-replay-pre -- node scripts/apply-local-migrations-via-psql.mjs --contract=pre --seed=omit --target=ci
       - name: Rollback-only migration rehearsal
@@ -156,14 +158,14 @@ jobs:
           [[ "$artifact_root" == "$RUNNER_TEMP"/capital-lab-artifacts.* ]]
           [[ "$target_workdir" == "$RUNNER_TEMP"/capital-lab-restore-run-* ]]
           node scripts/create-local-restore-stack.mjs "--run-id=${restore_run_id}" "--output-dir=${target_workdir}"
-          target_running=false
+          target_owned=false
           cleanup() {
             prior_status=$?
             trap - EXIT
             set +e
             cleanup_failed=0
-            if [ "$target_running" = true ]; then
-              if ! supabase stop --no-backup --workdir "$target_workdir" >/dev/null 2>&1; then
+            if [ "$target_owned" = true ]; then
+              if ! node scripts/cleanup-owned-local-supabase-stack.mjs --role=restore "--workdir=${target_workdir}"; then
                 echo 'Disposable restore stack cleanup failed closed' >&2
                 cleanup_failed=1
               fi
@@ -216,8 +218,9 @@ jobs:
           node scripts/local-auth-restore-fixture.mjs --mode=prepare "--credentials=${artifact_root}/pre-auth.json"
           run_mvcc_export pre "${artifact_root}/pre" "${artifact_root}/pre-race-control"
           node scripts/assert-local-mvcc-fixture-clean.mjs
-          node scripts/run-redacted-subprocess.mjs --id=restore-stack-b-pre-start -- supabase start "--workdir=${target_workdir}"
-          target_running=true
+          node scripts/create-owned-local-supabase-network.mjs --role=restore
+          target_owned=true
+          node scripts/run-redacted-subprocess.mjs --id=restore-stack-b-pre-start --role=restore -- supabase start "--workdir=${target_workdir}"
           export CAPITAL_LAB_LOCAL_DISPOSABLE_CONFIRM='RESET DISPOSABLE CAPITAL LAB RESTORE STACK B postgres'
           node scripts/prepare-seed-free-local-restore-target.mjs "--proof=${artifact_root}/pre-target-proof.json"
           export CAPITAL_LAB_RESTORE_CONFIRM_DISPOSABLE='seed-free-disposable-database-confirmed'
@@ -233,8 +236,8 @@ jobs:
             exit 1
           fi
           mv "${artifact_root}/pre/auth-data.original" "${artifact_root}/pre/auth-data.sql"
-          supabase stop --no-backup --workdir "$target_workdir"
-          target_running=false
+          node scripts/cleanup-owned-local-supabase-stack.mjs --role=restore "--workdir=${target_workdir}"
+          target_owned=false
           node scripts/reset-owned-local-ci-stack.mjs \
             "--confirm=RESET OWNED CAPITAL LAB CI STACK postgres" \
             "--run-id=${CAPITAL_LAB_CI_RUN_ID}" \
@@ -243,8 +246,9 @@ jobs:
             --contract=post --seed=omit --target=ci
           node scripts/local-auth-restore-fixture.mjs --mode=prepare "--credentials=${artifact_root}/post-auth.json"
           run_mvcc_export post "${artifact_root}/post" "${artifact_root}/post-race-control"
-          node scripts/run-redacted-subprocess.mjs --id=restore-stack-b-post-start -- supabase start "--workdir=${target_workdir}"
-          target_running=true
+          node scripts/create-owned-local-supabase-network.mjs --role=restore
+          target_owned=true
+          node scripts/run-redacted-subprocess.mjs --id=restore-stack-b-post-start --role=restore -- supabase start "--workdir=${target_workdir}"
           node scripts/prepare-seed-free-local-restore-target.mjs "--proof=${artifact_root}/post-target-proof.json"
           post_hash="$(sha256sum "${artifact_root}/post/manifest.json" | cut -d' ' -f1)"
           post_target_hash="$(sha256sum "${artifact_root}/post-target-proof.json" | cut -d' ' -f1)"
@@ -253,7 +257,7 @@ jobs:
           node scripts/local-auth-restore-fixture.mjs --mode=faults "--credentials=${artifact_root}/post-auth.json" "--supabase-workdir=${target_workdir}"
       - name: Stop exact run-owned local CI stack
         if: always() && env.CAPITAL_LAB_CI_WORKDIR != ''
-        run: supabase stop --no-backup "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
+        run: node scripts/cleanup-owned-local-supabase-stack.mjs --role=source "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
       - name: Publish database evidence summary
         if: always()
         run: cat .ci-evidence/*.json >> "$GITHUB_STEP_SUMMARY"
@@ -317,7 +321,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Native Windows subprocess and path gates
-        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/lib/held-files.test.ts scripts/lib/safe-artifact-path.test.ts scripts/lib/credential-scan-safety.test.ts scripts/lib/schema-golden-reference-proof.test.ts scripts/lib/mvcc-race-control.test.ts scripts/lib/local-container-identity-diagnostic.test.ts scripts/run-activation-phase.test.ts scripts/run-database-tests.test.ts scripts/run-emergency-kill.test.ts scripts/run-redacted-subprocess.test.ts scripts/migration-rehearsal-contract.test.ts scripts/critical-backup-contract.test.ts scripts/local-container-postgres.test.ts scripts/local-supabase-target-proof.test.ts scripts/prepare-seed-free-local-restore-target.test.ts scripts/capture-backup-schema-golden.test.ts scripts/bootstrap-schema-goldens.test.ts scripts/verify-schema-golden-candidate-artifact.test.ts scripts/apply-local-migrations-via-psql.test.ts scripts/owned-local-ci-stack.test.ts
+        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/lib/held-files.test.ts scripts/lib/safe-artifact-path.test.ts scripts/lib/credential-scan-safety.test.ts scripts/lib/schema-golden-reference-proof.test.ts scripts/lib/mvcc-race-control.test.ts scripts/lib/local-container-identity-diagnostic.test.ts scripts/lib/owned-local-supabase-network.test.ts scripts/run-activation-phase.test.ts scripts/run-database-tests.test.ts scripts/run-emergency-kill.test.ts scripts/run-redacted-subprocess.test.ts scripts/migration-rehearsal-contract.test.ts scripts/critical-backup-contract.test.ts scripts/local-container-postgres.test.ts scripts/local-supabase-target-proof.test.ts scripts/prepare-seed-free-local-restore-target.test.ts scripts/capture-backup-schema-golden.test.ts scripts/bootstrap-schema-goldens.test.ts scripts/verify-schema-golden-candidate-artifact.test.ts scripts/apply-local-migrations-via-psql.test.ts scripts/owned-local-ci-stack.test.ts
       - name: Parse every Windows-sensitive subprocess wrapper
         run: |
           node --check scripts/export-critical-tables.mjs
@@ -336,6 +340,8 @@ jobs:
           node --check scripts/apply-local-migrations-via-psql.mjs
           node --check scripts/assert-local-mvcc-fixture-clean.mjs
           node --check scripts/create-owned-local-ci-stack.mjs
+          node --check scripts/create-owned-local-supabase-network.mjs
+          node --check scripts/cleanup-owned-local-supabase-stack.mjs
           node --check scripts/reset-owned-local-ci-stack.mjs
           node --check scripts/verify-schema-golden-candidate-artifact.mjs
           node --check scripts/run-emergency-bootstrap.mjs
