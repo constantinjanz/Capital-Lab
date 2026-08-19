@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import {
@@ -8,8 +8,10 @@ import {
 } from './lib/safe-process.mjs'
 import { parseLocalContainerIdentityRejection } from './lib/local-container-identity-diagnostic.mjs'
 import {
+  parseSchemaGoldenReferenceMigrationReplayObservations,
   requireLocalMigrationReplayDiagnostic,
   serializeLocalMigrationReplayDiagnostic,
+  serializeSchemaGoldenReferenceMigrationReplayObservation,
 } from './lib/local-migration-replay-diagnostic.mjs'
 import { redactedDiagnosticForCi } from './lib/redacted-supabase-diagnostic.mjs'
 
@@ -17,8 +19,50 @@ const PROCESS_TIMEOUT_MS = 20 * 60 * 1000
 const MIGRATION_REPLAY_GATE_CONTEXT = new Map([
   ['database-reset-migrations', { contract: 'post', role: 'source' }],
   ['local-migration-replay-pre', { contract: 'pre', role: 'source' }],
-  ['schema-golden-bootstrap', { contract: 'pre', role: 'reference' }],
 ])
+const SCHEMA_GOLDEN_BOOTSTRAP_GATE = 'schema-golden-bootstrap'
+const IDENTITY_REJECTION_STATUS = 'local_container_image_identity_rejected'
+
+function semanticJsonStatusCandidates(output, status) {
+  const candidates = []
+  for (const line of String(output ?? '').split(/\r?\n/u)) {
+    try {
+      const value = JSON.parse(line)
+      if (value?.status === status) candidates.push({ line, value })
+    } catch {
+      // The strict typed parser handles malformed literal candidates.
+    }
+  }
+  return candidates
+}
+
+async function readOptionalFile(filename) {
+  try {
+    return await readFile(filename, 'utf8')
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null
+    throw error
+  }
+}
+
+async function suppressInvalidIdentityRejectionEvidence(filename) {
+  const evidenceDirectory = path.dirname(filename)
+  const quarantineDirectory = path.join(
+    path.dirname(evidenceDirectory),
+    `.schema-golden-replay-rejected-${process.pid}-${Date.now()}`,
+  )
+  try {
+    await rename(evidenceDirectory, quarantineDirectory)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
+  await mkdir(evidenceDirectory, { recursive: true })
+  try {
+    await rm(quarantineDirectory, { force: true, recursive: true })
+  } catch {
+    // The quarantined path is outside the uploaded evidence glob.
+  }
+}
 
 const separatorIndex = process.argv.indexOf('--')
 const idIndex = process.argv.indexOf('--id')
@@ -44,6 +88,15 @@ const startedAt = new Date().toISOString()
 let childStdout = ''
 let childStderr = ''
 const migrationReplayContext = MIGRATION_REPLAY_GATE_CONTEXT.get(id)
+const schemaGoldenBootstrapGate = id === SCHEMA_GOLDEN_BOOTSTRAP_GATE
+const bufferedGate = Boolean(
+  migrationReplayContext || schemaGoldenBootstrapGate,
+)
+const identityRejectionEvidencePath = path.join(
+  process.cwd(),
+  '.ci-evidence',
+  'local-container-image-identity-rejected.json',
+)
 
 let resolved
 try {
@@ -63,12 +116,12 @@ const child = spawn(resolved.command, resolvedArguments(resolved, args), {
 child.stdout.on('data', (chunk) => {
   const text = chunk.toString()
   childStdout += text
-  if (!migrationReplayContext) process.stdout.write(text)
+  if (!bufferedGate) process.stdout.write(text)
 })
 child.stderr.on('data', (chunk) => {
   const text = chunk.toString()
   childStderr += text
-  if (!migrationReplayContext) process.stderr.write(text)
+  if (!bufferedGate) process.stderr.write(text)
 })
 
 const outcome = await new Promise((resolve) => {
@@ -93,6 +146,7 @@ const outcome = await new Promise((resolve) => {
 })
 let exitCode = outcome.timedOut || outcome.signal ? 124 : outcome.exitCode
 let localMigrationReplayDiagnostic
+let schemaGoldenReferenceMigrationReplayObservations
 if (migrationReplayContext) {
   try {
     const identityRejection = parseLocalContainerIdentityRejection(childStdout)
@@ -120,6 +174,68 @@ if (migrationReplayContext) {
   } catch {
     if (exitCode === 0) exitCode = 1
     process.stderr.write('Migration replay boundary evidence failed closed.\n')
+  }
+} else if (schemaGoldenBootstrapGate) {
+  try {
+    const semanticIdentityRejections = semanticJsonStatusCandidates(
+      childStdout,
+      IDENTITY_REJECTION_STATUS,
+    )
+    const identityRejection = parseLocalContainerIdentityRejection(childStdout)
+    if (
+      semanticIdentityRejections.length !== (identityRejection ? 1 : 0) ||
+      (identityRejection &&
+        semanticIdentityRejections[0].line !==
+          JSON.stringify(identityRejection))
+    ) {
+      throw new Error('Container identity rejection output is invalid')
+    }
+    const persistedIdentityRejection = await readOptionalFile(
+      identityRejectionEvidencePath,
+    )
+    if (
+      persistedIdentityRejection !== null &&
+      (!identityRejection ||
+        persistedIdentityRejection !== `${JSON.stringify(identityRejection)}\n`)
+    ) {
+      throw new Error('Container identity rejection evidence is invalid')
+    }
+    if (identityRejection) {
+      if (
+        identityRejection.role !== 'reference' ||
+        identityRejection.commitSha !== process.env.CAPITAL_LAB_CI_COMMIT_SHA
+      ) {
+        throw new Error('Container identity rejection context is invalid')
+      }
+      if (exitCode === 0) exitCode = 1
+      process.stdout.write(`${JSON.stringify(identityRejection)}\n`)
+    } else {
+      const observations =
+        parseSchemaGoldenReferenceMigrationReplayObservations(childStdout)
+      if (exitCode === 0 && observations.length !== 4) {
+        throw new Error('Schema Golden replay sequence is incomplete')
+      }
+      if (observations.length > 0) {
+        schemaGoldenReferenceMigrationReplayObservations = observations
+        for (const observation of observations) {
+          process.stdout.write(
+            serializeSchemaGoldenReferenceMigrationReplayObservation(
+              observation,
+            ),
+          )
+        }
+      }
+    }
+  } catch {
+    if (exitCode === 0) exitCode = 1
+    process.stderr.write('Schema Golden replay evidence failed closed.\n')
+    try {
+      await suppressInvalidIdentityRejectionEvidence(
+        identityRejectionEvidencePath,
+      )
+    } catch {
+      // Keep the fixed fail-closed report even if the filesystem is unusable.
+    }
   }
 }
 
@@ -159,6 +275,10 @@ const redactedDiagnostic = redactedDiagnosticForCi(id, normalizedOutput, {
 if (redactedDiagnostic) evidence.redactedDiagnostic = redactedDiagnostic
 if (localMigrationReplayDiagnostic) {
   evidence.localMigrationReplayDiagnostic = localMigrationReplayDiagnostic
+}
+if (schemaGoldenReferenceMigrationReplayObservations) {
+  evidence.schemaGoldenReferenceMigrationReplayObservations =
+    schemaGoldenReferenceMigrationReplayObservations
 }
 
 const evidenceDirectory = path.join(process.cwd(), '.ci-evidence')

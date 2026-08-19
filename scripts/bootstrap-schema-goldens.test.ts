@@ -180,43 +180,59 @@ describe('seed-free schema-Golden bootstrap closure', () => {
     expect(() => canonicalReferenceProjectId('run-pre-a-unsafe_1')).toThrow()
   })
 
-  it('propagates only the validated Reference replay diagnosis', () => {
-    const secret = [
-      'postgresql',
-      '://postgres:',
-      'fake-password',
-      '@127.0.0.1:59999/postgres',
-    ].join('')
-    const diagnostic = {
-      schemaVersion: 1,
-      status: 'local_migration_replay_boundary_observed',
-      stage: 'history_preflight',
-      role: 'reference',
-      contract: 'pre',
-      psqlQueryCompleted: true,
-      historySchemaExists: false,
-      historyRelationExists: false,
-    }
-    const writes: string[] = []
-    const propagated = propagateLocalMigrationReplayDiagnostic(
-      Buffer.from(
-        `${secret}\n${JSON.stringify(diagnostic)}\ntoken=fake-child-token\n`,
-      ),
-      { contract: 'pre' },
-      {
-        write: (value: string) => {
-          writes.push(value)
-          return true
+  it.each([
+    ['pre', 'a'],
+    ['pre', 'b'],
+    ['post', 'a'],
+    ['post', 'b'],
+  ] as const)(
+    'propagates only the validated replica-bound %s/%s envelope',
+    (contract, replica) => {
+      const secret = [
+        'postgresql',
+        '://postgres:',
+        'fake-password',
+        '@127.0.0.1:59999/postgres',
+      ].join('')
+      const diagnostic = {
+        schemaVersion: 1,
+        status: 'local_migration_replay_boundary_observed',
+        stage: 'history_preflight',
+        role: 'reference',
+        contract,
+        psqlQueryCompleted: true,
+        historySchemaExists: false,
+        historyRelationExists: false,
+      }
+      const writes: string[] = []
+      const propagated = propagateLocalMigrationReplayDiagnostic(
+        Buffer.from(
+          `${secret}\n${JSON.stringify(diagnostic)}\ntoken=fake-child-token\n`,
+        ),
+        { contract, replica },
+        {
+          write: (value: string) => {
+            writes.push(value)
+            return true
+          },
         },
-      },
-    )
-    expect(propagated).toEqual(diagnostic)
-    expect(writes).toEqual([`${JSON.stringify(diagnostic)}\n`])
-    expect(writes.join('')).not.toContain(secret)
-    expect(writes.join('')).not.toContain('fake-child-token')
-  })
+      )
+      const expected = {
+        schemaVersion: 1,
+        status: 'schema_golden_reference_migration_replay_observed',
+        contract,
+        replica,
+        localMigrationReplayDiagnostic: diagnostic,
+      }
+      expect(propagated).toEqual(expected)
+      expect(writes).toEqual([`${JSON.stringify(expected)}\n`])
+      expect(JSON.parse(writes[0])).not.toEqual(diagnostic)
+      expect(writes.join('')).not.toContain(secret)
+      expect(writes.join('')).not.toContain('fake-child-token')
+    },
+  )
 
-  it('rejects context drift and emits no diagnosis after identity rejection', () => {
+  it('rejects context or replica drift and emits nothing after identity rejection', () => {
     const diagnostic = {
       schemaVersion: 1,
       status: 'local_migration_replay_boundary_observed',
@@ -231,7 +247,7 @@ describe('seed-free schema-Golden bootstrap closure', () => {
     expect(() =>
       propagateLocalMigrationReplayDiagnostic(
         JSON.stringify(diagnostic),
-        { contract: 'pre' },
+        { contract: 'pre', replica: 'a' },
         {
           write: (value: string) => {
             writes.push(value)
@@ -240,10 +256,22 @@ describe('seed-free schema-Golden bootstrap closure', () => {
         },
       ),
     ).toThrow(/context is invalid/u)
+    expect(() =>
+      propagateLocalMigrationReplayDiagnostic(
+        JSON.stringify({ ...diagnostic, contract: 'pre' }),
+        { contract: 'pre', replica: 'c' },
+        {
+          write: (value: string) => {
+            writes.push(value)
+            return true
+          },
+        },
+      ),
+    ).toThrow(/observation is invalid/u)
     expect(
       propagateLocalMigrationReplayDiagnostic(
         JSON.stringify(diagnostic),
-        { contract: 'post' },
+        { contract: 'post', replica: 'a' },
         {
           identityRejected: true,
           write: (value: string) => {
@@ -255,4 +283,30 @@ describe('seed-free schema-Golden bootstrap closure', () => {
     ).toBeNull()
     expect(writes).toEqual([])
   })
+
+  it.each([
+    ['existing schema', true, false],
+    ['existing relation', false, true],
+    ['existing schema and relation', true, true],
+  ] as const)(
+    'rejects Reference envelope with %s',
+    (_label, historySchemaExists, historyRelationExists) => {
+      const diagnostic = {
+        schemaVersion: 1,
+        status: 'local_migration_replay_boundary_observed',
+        stage: 'history_preflight',
+        role: 'reference',
+        contract: 'pre',
+        psqlQueryCompleted: true,
+        historySchemaExists,
+        historyRelationExists,
+      }
+      expect(() =>
+        propagateLocalMigrationReplayDiagnostic(JSON.stringify(diagnostic), {
+          contract: 'pre',
+          replica: 'a',
+        }),
+      ).toThrow(/observation is invalid/u)
+    },
+  )
 })

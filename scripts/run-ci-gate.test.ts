@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import {
+  existsSync,
+  linkSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -24,6 +32,22 @@ const diagnostic = {
   historySchemaExists: false,
   historyRelationExists: false,
 }
+const referenceSequence = [
+  ['pre', 'a'],
+  ['pre', 'b'],
+  ['post', 'a'],
+  ['post', 'b'],
+].map(([contract, replica]) => ({
+  schemaVersion: 1,
+  status: 'schema_golden_reference_migration_replay_observed',
+  contract,
+  replica,
+  localMigrationReplayDiagnostic: {
+    ...diagnostic,
+    role: 'reference',
+    contract,
+  },
+}))
 
 function tempDirectory() {
   const directory = mkdtempSync(
@@ -168,5 +192,585 @@ describe('CI gate migration replay diagnostic', () => {
     expect(outcome.stdout).not.toContain(
       'local_migration_replay_boundary_observed',
     )
+  })
+})
+
+describe('CI gate schema-Golden Reference replay sequence', () => {
+  function runGoldenGate(
+    directory: string,
+    output: string,
+    childExitCode: number,
+    commitSha = 'f'.repeat(40),
+    persistedIdentityEvidence:
+      string | { nestedIdentityEvidence: string } | null = null,
+  ) {
+    const stdoutSecret = [
+      'postgresql',
+      '://postgres:',
+      'fake-golden-password',
+      '@127.0.0.1:59999/postgres',
+    ].join('')
+    const identityEvidencePath = path.join(
+      directory,
+      '.ci-evidence',
+      'local-container-image-identity-rejected.json',
+    )
+    const child = [
+      ...(persistedIdentityEvidence === null
+        ? []
+        : typeof persistedIdentityEvidence === 'string'
+          ? [
+              "require('node:fs').mkdirSync('.ci-evidence',{recursive:true})",
+              `require('node:fs').writeFileSync(${JSON.stringify(identityEvidencePath)},${JSON.stringify(persistedIdentityEvidence)})`,
+            ]
+          : [
+              "require('node:fs').mkdirSync('.ci-evidence',{recursive:true})",
+              `require('node:fs').mkdirSync(${JSON.stringify(identityEvidencePath)})`,
+              `require('node:fs').writeFileSync(${JSON.stringify(path.join(identityEvidencePath, 'raw.json'))},${JSON.stringify(persistedIdentityEvidence.nestedIdentityEvidence)})`,
+            ]),
+      `process.stdout.write(${JSON.stringify(`raw ${stdoutSecret}\n${output}token=fake-child-token\n`)})`,
+      "process.stderr.write('Authorization: Bearer fake-golden-secret')",
+      `process.exit(${childExitCode})`,
+    ].join(';')
+    const outcome = spawnSync(
+      process.execPath,
+      [runner, '--id', 'schema-golden-bootstrap', '--', 'node', '-e', child],
+      {
+        cwd: directory,
+        encoding: 'utf8',
+        env: { ...process.env, CAPITAL_LAB_CI_COMMIT_SHA: commitSha },
+      },
+    )
+    const evidenceText = readFileSync(
+      path.join(directory, '.ci-evidence', 'schema-golden-bootstrap.json'),
+      'utf8',
+    )
+    return {
+      evidence: JSON.parse(evidenceText),
+      evidenceText,
+      identityEvidencePath,
+      outcome,
+      secrets: [stdoutSecret, 'fake-child-token', 'fake-golden-secret'],
+    }
+  }
+
+  function serialized(values = referenceSequence) {
+    return `${values.map((value) => JSON.stringify(value)).join('\n')}\n`
+  }
+
+  it('accepts exactly pre/a, pre/b, post/a, post/b on child success', () => {
+    const directory = tempDirectory()
+    const result = runGoldenGate(directory, serialized(), 0)
+    expect(result.outcome.status).toBe(0)
+    expect(result.outcome.stdout).toBe(serialized())
+    expect(result.outcome.stderr).toBe('')
+    expect(result.evidence).toMatchObject({
+      exitCode: 0,
+      schemaGoldenReferenceMigrationReplayObservations: referenceSequence,
+    })
+    expect(result.evidence.localMigrationReplayDiagnostic).toBeUndefined()
+    for (const secret of result.secrets) {
+      expect(
+        `${result.outcome.stdout}${result.outcome.stderr}${result.evidenceText}`,
+      ).not.toContain(secret)
+    }
+  })
+
+  it.each([0, 1, 2, 3, 4])(
+    'preserves nonzero child exit with exact prefix length %i',
+    (length) => {
+      const directory = tempDirectory()
+      const prefix = referenceSequence.slice(0, length)
+      const result = runGoldenGate(directory, serialized(prefix), 7)
+      expect(result.outcome.status).toBe(7)
+      expect(result.outcome.stderr).toBe('')
+      expect(result.outcome.stdout).toBe(length === 0 ? '' : serialized(prefix))
+      if (length === 0) {
+        expect(
+          result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+        ).toBeUndefined()
+      } else {
+        expect(
+          result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+        ).toEqual(prefix)
+      }
+    },
+  )
+
+  it.each([0, 1, 2, 3])(
+    'turns child success with incomplete prefix length %i into failure',
+    (length) => {
+      const directory = tempDirectory()
+      const result = runGoldenGate(
+        directory,
+        serialized(referenceSequence.slice(0, length)),
+        0,
+      )
+      expect(result.outcome.status).toBe(1)
+      expect(result.outcome.stdout).toBe('')
+      expect(result.outcome.stderr).toBe(
+        'Schema Golden replay evidence failed closed.\n',
+      )
+      expect(
+        result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+      ).toBeUndefined()
+    },
+  )
+
+  it.each([
+    ['duplicate', [referenceSequence[0], referenceSequence[0]], 0, 1],
+    ['swapped', [referenceSequence[1], referenceSequence[0]], 9, 9],
+    ['fifth', [...referenceSequence, referenceSequence[3]], 0, 1],
+    ['wrong replica', [{ ...referenceSequence[0], replica: 'c' }], 9, 9],
+    ['contract drift', [{ ...referenceSequence[0], contract: 'post' }], 9, 9],
+    [
+      'nested role drift',
+      [
+        {
+          ...referenceSequence[0],
+          localMigrationReplayDiagnostic: {
+            ...referenceSequence[0].localMigrationReplayDiagnostic,
+            role: 'source',
+          },
+        },
+      ],
+      9,
+      9,
+    ],
+    [
+      'nested Boolean drift',
+      [
+        {
+          ...referenceSequence[0],
+          localMigrationReplayDiagnostic: {
+            ...referenceSequence[0].localMigrationReplayDiagnostic,
+            historyRelationExists: true,
+          },
+        },
+      ],
+      9,
+      9,
+    ],
+  ] as const)(
+    'rejects %s sequence without persisting it',
+    (_label, values, childExitCode, expectedExitCode) => {
+      const directory = tempDirectory()
+      const result = runGoldenGate(
+        directory,
+        serialized([...values]),
+        childExitCode,
+      )
+      expect(result.outcome.status).toBe(expectedExitCode)
+      expect(result.outcome.stdout).toBe('')
+      expect(result.outcome.stderr).toBe(
+        'Schema Golden replay evidence failed closed.\n',
+      )
+      expect(
+        result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+      ).toBeUndefined()
+    },
+  )
+
+  it('gives a valid exact-commit Reference identity rejection priority', () => {
+    const directory = tempDirectory()
+    const commitSha = 'f'.repeat(40)
+    const rejection = serializeLocalContainerIdentityRejection(
+      new LocalContainerImageIdentityRejection(
+        'reference',
+        localContainerInspectFailureDiagnostic(
+          'container_inspect',
+          'container_inspect_unavailable',
+          {
+            container: 'supabase_db_capital-lab-ref-pre-a-0123456789abcdef',
+            port: '56001',
+            projectId: 'capital-lab-ref-pre-a-0123456789abcdef',
+          },
+        ),
+      ),
+      commitSha,
+    )
+    const result = runGoldenGate(
+      directory,
+      `${serialized()}${rejection}`,
+      1,
+      commitSha,
+      rejection,
+    )
+    expect(result.outcome.status).toBe(1)
+    expect(result.outcome.stdout).toBe(rejection)
+    expect(result.outcome.stderr).toBe('')
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+    ).toBeUndefined()
+    expect(result.evidence.localMigrationReplayDiagnostic).toBeUndefined()
+    expect(readFileSync(result.identityEvidencePath, 'utf8')).toBe(rejection)
+  })
+
+  it.each([
+    ['wrong role', 'source', 'f'.repeat(40)],
+    ['wrong commit', 'reference', 'e'.repeat(40)],
+  ] as const)(
+    'rejects identity rejection with %s and suppresses every envelope',
+    (_label, role, rejectionCommit) => {
+      const directory = tempDirectory()
+      const expectedCommit = 'f'.repeat(40)
+      const rejection = serializeLocalContainerIdentityRejection(
+        new LocalContainerImageIdentityRejection(
+          role,
+          localContainerInspectFailureDiagnostic(
+            'container_inspect',
+            'container_inspect_unavailable',
+            {
+              container: 'supabase_db_capital-lab-ref-pre-a-0123456789abcdef',
+              port: '56001',
+              projectId: 'capital-lab-ref-pre-a-0123456789abcdef',
+            },
+          ),
+        ),
+        rejectionCommit,
+      )
+      const result = runGoldenGate(
+        directory,
+        `${serialized()}${rejection}`,
+        8,
+        expectedCommit,
+        rejection,
+      )
+      expect(result.outcome.status).toBe(8)
+      expect(result.outcome.stdout).toBe('')
+      expect(result.outcome.stderr).toBe(
+        'Schema Golden replay evidence failed closed.\n',
+      )
+      expect(
+        result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+      ).toBeUndefined()
+      expect(result.evidenceText).not.toContain(
+        'local_container_image_identity_rejected',
+      )
+      expect(existsSync(result.identityEvidencePath)).toBe(false)
+    },
+  )
+
+  it('rejects a JSON-escaped fifth envelope as noncanonical', () => {
+    const directory = tempDirectory()
+    const escapedFifth = JSON.stringify(referenceSequence[3]).replace(
+      'schema_golden_reference_migration_replay_observed',
+      'schema_golden_reference_migration_replay_observe\\u0064',
+    )
+    const result = runGoldenGate(
+      directory,
+      `${serialized()}${escapedFifth}\n`,
+      0,
+    )
+    expect(result.outcome.status).toBe(1)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Schema Golden replay evidence failed closed.\n',
+    )
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+    ).toBeUndefined()
+  })
+
+  it.each([
+    ['wrong', 'wrong'],
+    ['missing', undefined],
+  ] as const)(
+    'rejects an envelope-shaped fifth output with %s status',
+    (_label, status) => {
+      const directory = tempDirectory()
+      const fifth = { ...referenceSequence[3], status }
+      if (status === undefined) delete fifth.status
+      const result = runGoldenGate(
+        directory,
+        `${serialized()}${JSON.stringify(fifth)}\n`,
+        0,
+      )
+      expect(result.outcome.status).toBe(1)
+      expect(result.outcome.stdout).toBe('')
+      expect(result.outcome.stderr).toBe(
+        'Schema Golden replay evidence failed closed.\n',
+      )
+      expect(
+        result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+      ).toBeUndefined()
+    },
+  )
+
+  it('rejects a syntactically malformed fifth envelope without a status', () => {
+    const directory = tempDirectory()
+    const result = runGoldenGate(
+      directory,
+      `${serialized()}{"replic\\u0061":"b","localMigrationReplayDiagnosti\\u0063":\n`,
+      0,
+    )
+    expect(result.outcome.status).toBe(1)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Schema Golden replay evidence failed closed.\n',
+    )
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+    ).toBeUndefined()
+  })
+
+  it('rejects a syntactically malformed multiline fifth envelope', () => {
+    const directory = tempDirectory()
+    const result = runGoldenGate(
+      directory,
+      `${serialized()}{\n  "status":"wrong",\n  "replica":"b",\n  "localMigrationReplayDiagnostic":\n}\n`,
+      0,
+    )
+    expect(result.outcome.status).toBe(1)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Schema Golden replay evidence failed closed.\n',
+    )
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+    ).toBeUndefined()
+  })
+
+  it.each([
+    [
+      'an unmatched log quote before a fifth object',
+      'noise "\n{\n  "status":"wrong",\n  "replica":"b",\n  "localMigrationReplayDiagnostic":\n}\n',
+    ],
+    [
+      'an unclosed escaped expected-status object',
+      '{"status":"schema_golden_reference_migration_replay_observe\\u0064","localMigrationReplayDiagnostic":{\n',
+    ],
+    [
+      'an unclosed escaped expected-status string',
+      '{"statu\\u0073":"schema_golden_reference_migration_replay_observe\\u0064',
+    ],
+  ])('rejects %s', (_label, malformed) => {
+    const directory = tempDirectory()
+    const result = runGoldenGate(directory, `${serialized()}${malformed}`, 0)
+    expect(result.outcome.status).toBe(1)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Schema Golden replay evidence failed closed.\n',
+    )
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+    ).toBeUndefined()
+  })
+
+  it('quarantines invalid identity evidence when the exact path is not a file', () => {
+    const directory = tempDirectory()
+    const expectedCommit = 'f'.repeat(40)
+    const rejection = serializeLocalContainerIdentityRejection(
+      new LocalContainerImageIdentityRejection(
+        'source',
+        localContainerInspectFailureDiagnostic(
+          'container_inspect',
+          'container_inspect_unavailable',
+          {
+            container: 'supabase_db_capital-lab-ref-pre-a-0123456789abcdef',
+            port: '56001',
+            projectId: 'capital-lab-ref-pre-a-0123456789abcdef',
+          },
+        ),
+      ),
+      expectedCommit,
+    )
+    const result = runGoldenGate(
+      directory,
+      `${serialized()}${rejection}`,
+      8,
+      expectedCommit,
+      { nestedIdentityEvidence: rejection },
+    )
+    expect(result.outcome.status).toBe(8)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Schema Golden replay evidence failed closed.\n',
+    )
+    expect(existsSync(result.identityEvidencePath)).toBe(false)
+    expect(result.evidenceText).not.toContain(
+      'local_container_image_identity_rejected',
+    )
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+    ).toBeUndefined()
+  })
+
+  it('removes a linked invalid identity path without changing its peer', () => {
+    const directory = tempDirectory()
+    const expectedCommit = 'f'.repeat(40)
+    const rejection = serializeLocalContainerIdentityRejection(
+      new LocalContainerImageIdentityRejection(
+        'source',
+        localContainerInspectFailureDiagnostic(
+          'container_inspect',
+          'container_inspect_unavailable',
+          {
+            container: 'supabase_db_capital-lab-ref-pre-a-0123456789abcdef',
+            port: '56001',
+            projectId: 'capital-lab-ref-pre-a-0123456789abcdef',
+          },
+        ),
+      ),
+      expectedCommit,
+    )
+    const evidenceDirectory = path.join(directory, '.ci-evidence')
+    const identityEvidencePath = path.join(
+      evidenceDirectory,
+      'local-container-image-identity-rejected.json',
+    )
+    const outsidePath = path.join(directory, 'outside-identity.json')
+    mkdirSync(evidenceDirectory)
+    writeFileSync(outsidePath, rejection)
+    linkSync(outsidePath, identityEvidencePath)
+    const result = runGoldenGate(
+      directory,
+      `${serialized()}${rejection}`,
+      8,
+      expectedCommit,
+    )
+    expect(result.outcome.status).toBe(8)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Schema Golden replay evidence failed closed.\n',
+    )
+    expect(existsSync(identityEvidencePath)).toBe(false)
+    expect(readFileSync(outsidePath, 'utf8')).toBe(rejection)
+    expect(result.evidenceText).not.toContain(
+      'local_container_image_identity_rejected',
+    )
+  })
+
+  it('quarantines every uploadable hardlink to invalid identity evidence', () => {
+    const directory = tempDirectory()
+    const expectedCommit = 'f'.repeat(40)
+    const rejection = serializeLocalContainerIdentityRejection(
+      new LocalContainerImageIdentityRejection(
+        'source',
+        localContainerInspectFailureDiagnostic(
+          'container_inspect',
+          'container_inspect_unavailable',
+          {
+            container: 'supabase_db_capital-lab-ref-pre-a-0123456789abcdef',
+            port: '56001',
+            projectId: 'capital-lab-ref-pre-a-0123456789abcdef',
+          },
+        ),
+      ),
+      expectedCommit,
+    )
+    const evidenceDirectory = path.join(directory, '.ci-evidence')
+    const peerPath = path.join(
+      evidenceDirectory,
+      'alternate-invalid-rejection.json',
+    )
+    const identityEvidencePath = path.join(
+      evidenceDirectory,
+      'local-container-image-identity-rejected.json',
+    )
+    mkdirSync(evidenceDirectory)
+    writeFileSync(peerPath, rejection)
+    linkSync(peerPath, identityEvidencePath)
+    const result = runGoldenGate(
+      directory,
+      `${serialized()}${rejection}`,
+      8,
+      expectedCommit,
+    )
+    expect(result.outcome.status).toBe(8)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Schema Golden replay evidence failed closed.\n',
+    )
+    expect(existsSync(identityEvidencePath)).toBe(false)
+    expect(existsSync(peerPath)).toBe(false)
+    expect(result.evidenceText).not.toContain(
+      'local_container_image_identity_rejected',
+    )
+  })
+
+  it('quarantines an alternate invalid rejection file from the upload glob', () => {
+    const directory = tempDirectory()
+    const expectedCommit = 'f'.repeat(40)
+    const rejection = serializeLocalContainerIdentityRejection(
+      new LocalContainerImageIdentityRejection(
+        'source',
+        localContainerInspectFailureDiagnostic(
+          'container_inspect',
+          'container_inspect_unavailable',
+          {
+            container: 'supabase_db_capital-lab-ref-pre-a-0123456789abcdef',
+            port: '56001',
+            projectId: 'capital-lab-ref-pre-a-0123456789abcdef',
+          },
+        ),
+      ),
+      expectedCommit,
+    )
+    const evidenceDirectory = path.join(directory, '.ci-evidence')
+    const alternatePath = path.join(
+      evidenceDirectory,
+      'alternate-invalid-rejection.json',
+    )
+    mkdirSync(evidenceDirectory)
+    writeFileSync(alternatePath, rejection)
+    const result = runGoldenGate(
+      directory,
+      `${serialized()}${rejection}`,
+      8,
+      expectedCommit,
+    )
+    expect(result.outcome.status).toBe(8)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Schema Golden replay evidence failed closed.\n',
+    )
+    expect(existsSync(alternatePath)).toBe(false)
+    expect(result.evidenceText).not.toContain(
+      'local_container_image_identity_rejected',
+    )
+  })
+
+  it('detects an escaped wrong-context identity rejection and removes its file', () => {
+    const directory = tempDirectory()
+    const expectedCommit = 'f'.repeat(40)
+    const rejection = serializeLocalContainerIdentityRejection(
+      new LocalContainerImageIdentityRejection(
+        'source',
+        localContainerInspectFailureDiagnostic(
+          'container_inspect',
+          'container_inspect_unavailable',
+          {
+            container: 'supabase_db_capital-lab-ref-pre-a-0123456789abcdef',
+            port: '56001',
+            projectId: 'capital-lab-ref-pre-a-0123456789abcdef',
+          },
+        ),
+      ),
+      expectedCommit,
+    )
+    const escapedRejection = rejection.replace(
+      'local_container_image_identity_rejected',
+      'local_container_image_identity_rejecte\\u0064',
+    )
+    const result = runGoldenGate(
+      directory,
+      `${serialized()}${escapedRejection}`,
+      8,
+      expectedCommit,
+      rejection,
+    )
+    expect(result.outcome.status).toBe(8)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Schema Golden replay evidence failed closed.\n',
+    )
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+    ).toBeUndefined()
+    expect(result.evidenceText).not.toContain(
+      'local_container_image_identity_rejected',
+    )
+    expect(existsSync(result.identityEvidencePath)).toBe(false)
   })
 })

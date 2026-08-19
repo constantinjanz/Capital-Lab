@@ -1,8 +1,13 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  bootstrapLocalMigrationHistoryBoundary,
+  EXPECTED_HISTORY_CONTRACT,
+  HISTORY_BOOTSTRAP_SQL,
+  HISTORY_CONTRACT_SQL,
   historyInsertSql,
   migrationContainerName,
   migrationIdentity,
@@ -11,6 +16,17 @@ import {
 } from './apply-local-migrations-via-psql.mjs'
 import { HISTORY_PREFLIGHT_SQL } from './lib/local-migration-replay-diagnostic.mjs'
 import { canonicalReferenceProjectId } from './lib/owned-local-ci-stack.mjs'
+
+const eligibleDiagnostic = {
+  schemaVersion: 1,
+  status: 'local_migration_replay_boundary_observed',
+  stage: 'history_preflight',
+  role: 'source',
+  contract: 'pre',
+  psqlQueryCompleted: true,
+  historySchemaExists: false,
+  historyRelationExists: false,
+}
 
 describe('checksummed local psql migration replay', () => {
   it('accepts only exact contract, seed and target arguments', () => {
@@ -127,23 +143,238 @@ describe('checksummed local psql migration replay', () => {
     expect(writes).toEqual([])
   })
 
-  it('keeps identity inspection before the probe and the existing history contract after it', () => {
+  it('defines the exact one-shot transactional history bootstrap SQL', () => {
+    expect(HISTORY_BOOTSTRAP_SQL).toBe(`begin;
+set local lock_timeout = '4s';
+
+create schema supabase_migrations;
+
+create table supabase_migrations.schema_migrations (
+  version text not null primary key
+);
+
+alter table supabase_migrations.schema_migrations
+  add column statements text[];
+
+alter table supabase_migrations.schema_migrations
+  add column name text;
+
+commit;`)
+    expect(Buffer.byteLength(HISTORY_BOOTSTRAP_SQL)).toBe(333)
+    expect(
+      createHash('sha256').update(HISTORY_BOOTSTRAP_SQL).digest('hex'),
+    ).toBe('2600c289855bf6f2272fd42fd4bcaa254d3f8d68ab604a2348de26dddff23a71')
+    expect(HISTORY_BOOTSTRAP_SQL.match(/\bbegin;/giu)).toHaveLength(1)
+    expect(HISTORY_BOOTSTRAP_SQL.match(/\bcommit;/giu)).toHaveLength(1)
+    expect(HISTORY_BOOTSTRAP_SQL).toContain("set local lock_timeout = '4s';")
+    expect(HISTORY_BOOTSTRAP_SQL).not.toMatch(
+      /if\s+not\s+exists|\b(?:cascade|drop|grant|owner|revoke)\b|row\s+level\s+security|\bpolicy\b|\bextension\b|seed_files/iu,
+    )
+    const positions = [
+      'begin;',
+      "set local lock_timeout = '4s';",
+      'create schema supabase_migrations;',
+      'create table supabase_migrations.schema_migrations',
+      'add column statements text[];',
+      'add column name text;',
+      'commit;',
+    ].map((statement) => HISTORY_BOOTSTRAP_SQL.indexOf(statement))
+    expect(positions.every((position) => position >= 0)).toBe(true)
+    expect([...positions].sort((left, right) => left - right)).toEqual(
+      positions,
+    )
+  })
+
+  it('keeps the strict history contract SQL byte-identical', () => {
+    expect(Buffer.byteLength(HISTORY_CONTRACT_SQL)).toBe(1176)
+    expect(
+      createHash('sha256').update(HISTORY_CONTRACT_SQL).digest('hex'),
+    ).toBe('8114a0c17e6e7fcc41f02362095d365f4f867ddade7cdfd25d185c5ef9da5f04')
+  })
+
+  it('bootstraps exactly once only after an eligible diagnosis', async () => {
+    const events: string[] = []
+    const execute = vi.fn(async (_role: string, sql: string) => {
+      events.push('bootstrap')
+      expect(sql).toBe(HISTORY_BOOTSTRAP_SQL)
+    })
+    const query = vi.fn(async (_role: string, sql: string) => {
+      events.push('contract')
+      expect(sql).toBe(HISTORY_CONTRACT_SQL)
+      return EXPECTED_HISTORY_CONTRACT
+    })
+    await expect(
+      bootstrapLocalMigrationHistoryBoundary('source', 'pre', {
+        observe: async () => {
+          events.push('probe')
+          return eligibleDiagnostic
+        },
+        execute,
+        query,
+      }),
+    ).resolves.toEqual(EXPECTED_HISTORY_CONTRACT)
+    expect(events).toEqual(['probe', 'bootstrap', 'contract'])
+    expect(execute).toHaveBeenCalledExactlyOnceWith(
+      'source',
+      HISTORY_BOOTSTRAP_SQL,
+    )
+    expect(query).toHaveBeenCalledExactlyOnceWith(
+      'source',
+      HISTORY_CONTRACT_SQL,
+    )
+  })
+
+  it.each([
+    [true, false],
+    [false, true],
+    [true, true],
+  ] as const)(
+    'stops existing history state %s/%s before DDL',
+    async (historySchemaExists, historyRelationExists) => {
+      const execute = vi.fn()
+      const query = vi.fn()
+      await expect(
+        bootstrapLocalMigrationHistoryBoundary('source', 'pre', {
+          observe: async () => ({
+            ...eligibleDiagnostic,
+            historySchemaExists,
+            historyRelationExists,
+          }),
+          execute,
+          query,
+        }),
+      ).rejects.toThrow(/not eligible/u)
+      expect(execute).not.toHaveBeenCalled()
+      expect(query).not.toHaveBeenCalled()
+    },
+  )
+
+  it('stops malformed or context-drifted diagnosis before DDL', async () => {
+    for (const diagnostic of [
+      { ...eligibleDiagnostic, role: 'reference' },
+      { ...eligibleDiagnostic, contract: 'post' },
+      { ...eligibleDiagnostic, raw: 'unsafe' },
+    ]) {
+      const execute = vi.fn()
+      const query = vi.fn()
+      await expect(
+        bootstrapLocalMigrationHistoryBoundary('source', 'pre', {
+          observe: async () => diagnostic,
+          execute,
+          query,
+        }),
+      ).rejects.toThrow()
+      expect(execute).not.toHaveBeenCalled()
+      expect(query).not.toHaveBeenCalled()
+    }
+  })
+
+  it('stops before the contract query when transactional DDL fails', async () => {
+    const query = vi.fn()
+    await expect(
+      bootstrapLocalMigrationHistoryBoundary('source', 'pre', {
+        observe: async () => eligibleDiagnostic,
+        execute: async () => {
+          throw new Error('synthetic DDL rollback')
+        },
+        query,
+      }),
+    ).rejects.toThrow(/synthetic DDL rollback/u)
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      'column order',
+      {
+        ...EXPECTED_HISTORY_CONTRACT,
+        columns: [...EXPECTED_HISTORY_CONTRACT.columns].reverse(),
+      },
+    ],
+    [
+      'declared type',
+      {
+        ...EXPECTED_HISTORY_CONTRACT,
+        columns: EXPECTED_HISTORY_CONTRACT.columns.map((column, index) =>
+          index === 0 ? { ...column, type: 'varchar' } : column,
+        ),
+      },
+    ],
+    [
+      'array udt type',
+      {
+        ...EXPECTED_HISTORY_CONTRACT,
+        columns: EXPECTED_HISTORY_CONTRACT.columns.map((column, index) =>
+          index === 1 ? { ...column, type: 'text' } : column,
+        ),
+      },
+    ],
+    [
+      'nullability',
+      {
+        ...EXPECTED_HISTORY_CONTRACT,
+        columns: EXPECTED_HISTORY_CONTRACT.columns.map((column, index) =>
+          index === 2 ? { ...column, nullable: 'NO' } : column,
+        ),
+      },
+    ],
+    [
+      'primary key',
+      { ...EXPECTED_HISTORY_CONTRACT, primaryKey: ['version', 'name'] },
+    ],
+    [
+      'rows',
+      {
+        ...EXPECTED_HISTORY_CONTRACT,
+        rows: [{ name: 'unexpected', version: '20260819000000' }],
+      },
+    ],
+  ] as const)(
+    'rejects an inexact post-DDL %s contract',
+    async (_label, value) => {
+      await expect(
+        bootstrapLocalMigrationHistoryBoundary('source', 'pre', {
+          observe: async () => eligibleDiagnostic,
+          execute: async () => undefined,
+          query: async () => value,
+        }),
+      ).rejects.toThrow(/not empty and exact/u)
+    },
+  )
+
+  it('keeps identity, probe, eligibility, bootstrap, contract, and migration order', () => {
     const source = readFileSync(
       new URL('./apply-local-migrations-via-psql.mjs', import.meta.url),
       'utf8',
     )
     const identity = source.indexOf('inspectOwnedDatabaseContainer(role)')
-    const probe = source.indexOf(
-      'observeLocalMigrationReplayBoundary(role, requested.contract)',
+    const boundary = source.indexOf(
+      'bootstrapLocalMigrationHistoryBoundary(role, requested.contract)',
     )
-    const history = source.indexOf(
-      'queryJson(role, HISTORY_CONTRACT_SQL)',
+    const probe = source.indexOf('const diagnostic = await observe(', 0)
+    const eligibility = source.indexOf(
+      'requireLocalMigrationReplayBootstrapEligibility(diagnostic',
       probe,
     )
+    const bootstrap = source.indexOf(
+      'await execute(role, HISTORY_BOOTSTRAP_SQL)',
+      eligibility,
+    )
+    const history = source.indexOf(
+      'await query(role, HISTORY_CONTRACT_SQL)',
+      bootstrap,
+    )
+    const migration = source.indexOf(
+      'for (const migration of contract.migrations)',
+    )
     expect(identity).toBeGreaterThan(-1)
-    expect(probe).toBeGreaterThan(identity)
+    expect(boundary).toBeGreaterThan(identity)
+    expect(probe).toBeGreaterThan(-1)
+    expect(eligibility).toBeGreaterThan(probe)
+    expect(bootstrap).toBeGreaterThan(eligibility)
     expect(history).toBeGreaterThan(probe)
-    expect(source.slice(probe, history)).not.toMatch(/inspectOwnedDatabase/u)
+    expect(migration).toBeGreaterThan(boundary)
+    expect(source).toContain("'--set=ON_ERROR_STOP=1'")
     expect(source).toContain(
       "process.stderr.write('Local migration replay failed closed.\\n')",
     )

@@ -44,6 +44,33 @@ option is verified before use. Cleanup re-verifies the network owner, requires
 zero attached containers after stack stop, removes that exact network ID, and
 proves that neither its ID nor name remains.
 
+Every fresh Source or Reference replay establishes its migration-history
+boundary through the same credential-free container `psql` simple-query path.
+After immutable image identity succeeds, a read-only probe is fully validated
+and bound to the requested role and PRE/POST contract. Only the exact
+fresh-stack result with both `supabase_migrations` schema and
+`schema_migrations` relation absent is bootstrap-eligible. One non-idempotent
+transaction then creates only the schema and the empty three-column history
+table, with a four-second local lock timeout and no `IF NOT EXISTS`, ownership,
+grant, RLS, extension, or seed-history operation. Any race or DDL error rolls
+back and stops the replay. The unchanged strict history contract must next
+observe ordered `version`, `statements`, and `name` columns as `text`, `_text`,
+and `text` through `information_schema.columns.udt_name`, corresponding to the
+declared SQL types `text`, `text[]`, and `text`, with exact nullability, only
+the `version` primary key, and zero rows before the first repository migration
+runs.
+
+Golden bootstrap emits one canonical replica-bound observation after each
+validated pre-mutation Reference probe, rather than forwarding the inner
+diagnosis directly. The CI gate accepts only the ordered sequence `pre/a`,
+`pre/b`, `post/a`, `post/b`. Success requires all four; a later child failure
+may retain only the exact observed prefix while preserving its nonzero exit.
+Malformed, duplicate, swapped, fifth, or context-drifted observations persist
+no sequence. A valid exact-commit Reference image-identity rejection has
+priority over every buffered observation; wrong rejection context also fails
+without sequence evidence. Raw child stdout and stderr are never forwarded or
+stored.
+
 The one-day artifact contains exactly:
 
 - `pre-activation.schema-golden.v2.json`;

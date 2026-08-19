@@ -22,8 +22,9 @@ import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.m
 import { inspectOwnedDatabaseContainer } from './lib/local-container-postgres.mjs'
 import { parseLocalContainerIdentityRejection } from './lib/local-container-identity-diagnostic.mjs'
 import {
+  buildSchemaGoldenReferenceMigrationReplayObservation,
   requireLocalMigrationReplayDiagnostic,
-  serializeLocalMigrationReplayDiagnostic,
+  serializeSchemaGoldenReferenceMigrationReplayObservation,
 } from './lib/local-migration-replay-diagnostic.mjs'
 import {
   canonicalReferenceProjectId,
@@ -384,9 +385,11 @@ async function applyReferenceMigrations(build, workspace) {
     },
   )
   const identityRejection = parseLocalContainerIdentityRejection(outcome.stdout)
-  propagateLocalMigrationReplayDiagnostic(outcome.stdout, build, {
-    identityRejected: identityRejection !== null,
-  })
+  if (identityRejection) {
+    process.stdout.write(`${JSON.stringify(identityRejection)}\n`)
+    throw new Error('Reference migration replay failed closed')
+  }
+  propagateLocalMigrationReplayDiagnostic(outcome.stdout, build)
   requireSuccess(outcome, 'Reference migration replay')
 }
 
@@ -406,8 +409,13 @@ export function propagateLocalMigrationReplayDiagnostic(
   ) {
     throw new Error('Reference migration replay diagnostic context is invalid')
   }
-  write(serializeLocalMigrationReplayDiagnostic(diagnostic))
-  return diagnostic
+  const observation = buildSchemaGoldenReferenceMigrationReplayObservation({
+    contract: expected.contract,
+    diagnostic,
+    replica: expected.replica,
+  })
+  write(serializeSchemaGoldenReferenceMigrationReplayObservation(observation))
+  return observation
 }
 
 function verifyReferenceImageIdentity(build) {

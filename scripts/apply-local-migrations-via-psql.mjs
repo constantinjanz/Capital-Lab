@@ -16,6 +16,7 @@ import {
 import {
   buildLocalMigrationReplayDiagnostic,
   HISTORY_PREFLIGHT_SQL,
+  requireLocalMigrationReplayBootstrapEligibility,
   serializeLocalMigrationReplayDiagnostic,
 } from './lib/local-migration-replay-diagnostic.mjs'
 import { localCiImageIdentityEvidence } from './lib/owned-local-ci-stack.mjs'
@@ -95,7 +96,24 @@ export async function observeLocalMigrationReplayBoundary(
   return diagnostic
 }
 
-const HISTORY_CONTRACT_SQL = `select jsonb_build_object(
+export const HISTORY_BOOTSTRAP_SQL = `begin;
+set local lock_timeout = '4s';
+
+create schema supabase_migrations;
+
+create table supabase_migrations.schema_migrations (
+  version text not null primary key
+);
+
+alter table supabase_migrations.schema_migrations
+  add column statements text[];
+
+alter table supabase_migrations.schema_migrations
+  add column name text;
+
+commit;`
+
+export const HISTORY_CONTRACT_SQL = `select jsonb_build_object(
   'columns', (
     select jsonb_agg(jsonb_build_object(
       'name', column_name, 'nullable', is_nullable, 'type', udt_name
@@ -124,7 +142,7 @@ const HISTORY_CONTRACT_SQL = `select jsonb_build_object(
   )
 );`
 
-const EXPECTED_HISTORY_CONTRACT = {
+export const EXPECTED_HISTORY_CONTRACT = {
   columns: [
     { name: 'version', nullable: 'NO', type: 'text' },
     { name: 'statements', nullable: 'YES', type: '_text' },
@@ -132,6 +150,31 @@ const EXPECTED_HISTORY_CONTRACT = {
   ],
   primaryKey: ['version'],
   rows: [],
+}
+
+export async function bootstrapLocalMigrationHistoryBoundary(
+  role,
+  contract,
+  {
+    execute = runPsql,
+    observe = observeLocalMigrationReplayBoundary,
+    query = queryJson,
+    write = (value) => process.stdout.write(value),
+  } = {},
+) {
+  const diagnostic = await observe(role, contract, { query, write })
+  requireLocalMigrationReplayBootstrapEligibility(diagnostic, {
+    role,
+    contract,
+  })
+  await execute(role, HISTORY_BOOTSTRAP_SQL)
+  const history = await query(role, HISTORY_CONTRACT_SQL)
+  if (canonicalJson(history) !== canonicalJson(EXPECTED_HISTORY_CONTRACT)) {
+    throw new Error(
+      'Local Supabase migration history boundary is not empty and exact',
+    )
+  }
+  return history
 }
 
 export function historyInsertSql(filename, bytes) {
@@ -165,13 +208,7 @@ async function main() {
     `${requested.contract}-activation.v1.json`,
   )
   const { contract } = await loadCriticalRelationContract(contractPath, kind)
-  await observeLocalMigrationReplayBoundary(role, requested.contract)
-  const before = await queryJson(role, HISTORY_CONTRACT_SQL)
-  if (canonicalJson(before) !== canonicalJson(EXPECTED_HISTORY_CONTRACT)) {
-    throw new Error(
-      'Local Supabase migration history boundary is not empty and exact',
-    )
-  }
+  await bootstrapLocalMigrationHistoryBoundary(role, requested.contract)
   const expectedHistory = []
   for (const migration of contract.migrations) {
     const filename = path.join(

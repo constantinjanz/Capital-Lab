@@ -2,6 +2,66 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## EXACT-F fresh-stack migration-history repair (2026-08-19)
+
+Safety status: exactly one normal functional commit F from
+`7345390c738c33ca2340a667edb8f1a97b751cfa`, exactly one non-force push, and
+only the resulting automatic Exact-F runs. The repair is limited to fresh,
+run-owned local Supabase stacks. No Golden import/commit, workflow rerun,
+Hosted/Production database access or mutation, deployment promotion, provider,
+broker, Canary, or trading call is authorized.
+
+- [x] Pass the complete fail-closed local/GitHub preflight: clean isolated
+      branch at exact E and parent, remote branch/PR refs at E, `+0/-0`,
+      authenticated HTTPS push permission, Draft/open/unmerged PR #21, and all
+      three Exact-E runs terminal.
+- [x] Accept only the explicit Exact-E-B browser override: PR-CI run
+      `32173146512` remains `completed/failure` at attempt 2; attempt-1 browser
+      job `95828821670` is cancelled; attempt-2 browser job `96042726026`
+      completed successfully with 4/4 passed, zero failed/flaky, and the exact
+      354-byte artifact `9362165927`. Non-browser execution timestamps remain
+      on 18 August and no attempt 3 exists.
+- [x] Reconfirm the typed Source/PRE push, Source/PRE PR, and Reference/PRE-A
+      diagnoses all report `psqlQueryCompleted=true` and absent history schema
+      and relation.
+- [x] Add the separate false/false-only bootstrap eligibility check, exact
+      one-transaction history DDL, unchanged strict empty contract, and
+      identity/probe/bootstrap/contract/migration ordering.
+- [x] Replace direct Golden Reference diagnoses with the exact ordered
+      replica-bound `pre/a`, `pre/b`, `post/a`, `post/b` envelopes and preserve
+      identity-rejection priority, prefix evidence, exit codes, and raw-stream
+      secrecy.
+- [x] Pass all focused tests, `pnpm verify`, checksum generation/verification,
+      `git diff --check`, and the final allowlist audit; record exact results.
+- [ ] Create exactly commit F with message
+      `ci: initialize local migration history boundary`, push once without
+      force, await only natural automatic Exact-F results, inspect the row-free
+      Golden candidate without importing it, and stop.
+
+Pre-commit verification on Node `v24.14.0`, pnpm `10.33.2`, and the unchanged
+temporary Supabase CLI `2.113.0`: the final parser/Gate slice passed 2 files /
+73 tests; all four focused files passed 116 tests; the complete bounded suite
+passed 107 files / 954 tests; full zero-warning ESLint, strict TypeScript,
+PAPER-only, the working-tree plus 100-ancestor credential scan with zero
+findings, the Next.js 16.3.0 production build, and `git diff --check` all
+passed. One earlier four-worker full-suite attempt hit only the unchanged
+Alpaca adapter's five-second timeout; that file immediately passed 25/25 in
+isolation and the final two-worker suite passed all 954 tests.
+
+The exact Windows checkout command `pnpm verify` first stopped only at the
+known full-tree CRLF formatting condition created by `core.autocrlf=true`. A
+temporary clone with `core.autocrlf=false`, exact E history, and only the ten
+authorized prospective non-manifest changes installed 805 packages
+lockfile-frozen and offline with zero downloads, then passed the unmodified
+`pnpm verify`: full-tree Prettier, zero-warning ESLint, strict TypeScript, 107
+Vitest files / 954 tests, PAPER-only, bounded credential scan with zero
+findings, and the successful production build.
+
+The status-aware prospective-index checksum calculation used real merge base
+`70ed610d5e0e5c08bf523d0d160a7b76f5fe2e51`, the final staged Git blobs, and
+the repository serializer/verifier. It passed with exactly 173 sorted entries;
+the normal exact-HEAD verifier remains mandatory immediately after F.
+
 ## EXACT-E diagnostic-only migration-boundary pass (2026-08-18)
 
 Safety status: exactly one normal diagnostic commit E from
@@ -24,10 +84,12 @@ authorized.
 - [x] Run focused tests and every repository-defined Application gate, update
       and verify the prospective final-byte checksum manifest, and record exact
       results here.
-- [ ] Create exactly commit E with message
+- [x] Create exactly commit E with message
       `ci: observe migration replay boundary`, push once without force, await
       only automatic Exact-E runs, inventory all evidence/artifacts/Preview,
-      confirm non-execution, and stop.
+      confirm non-execution, and stop. The initially cancelled Browser job was
+      superseded only by the separately authorized successful Exact-E-B
+      attempt 2; no attempt 3 or other rerun occurred.
 
 Pre-commit verification on Node `v24.14.0` and pnpm `10.33.2`: four focused
 files / 49 tests; changed-file Prettier; changed-file zero-warning ESLint;
