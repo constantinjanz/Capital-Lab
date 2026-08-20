@@ -49,7 +49,12 @@ export function redactSensitiveText(value) {
   return redacted
 }
 
-function parseArguments(argv) {
+export function parseRedactedSupabaseStartArguments(argv) {
+  if (!Array.isArray(argv) || argv.some((value) => typeof value !== 'string')) {
+    throw new Error(
+      'Required: --id=<safe-id> --role=<owned-role> -- supabase start --workdir=<path>',
+    )
+  }
   const separator = argv.indexOf('--')
   if (
     separator !== 2 ||
@@ -72,15 +77,43 @@ function parseArguments(argv) {
   ) {
     throw new Error('Redacted subprocess is outside the exact allowlist')
   }
-  if (args.length !== 2 || !args[1].startsWith('--workdir=')) {
+  const hasStorageApiExclude = args.length === 3
+  if (
+    (args.length !== 2 && !hasStorageApiExclude) ||
+    !args[1].startsWith('--workdir=') ||
+    args[1].length === '--workdir='.length ||
+    (hasStorageApiExclude &&
+      (role !== 'reference' || args[2] !== '--exclude=storage-api'))
+  ) {
     throw new Error('Supabase start arguments are outside the exact allowlist')
   }
-  return { args, command, id, role }
+  return {
+    args: args.slice(0, 2),
+    command,
+    hasStorageApiExclude,
+    id,
+    role,
+  }
 }
 
-async function canonicalizeArguments(args, target) {
-  const requested = args[1].slice('--workdir='.length)
-  const resolved = await realpath(path.resolve(requested))
+export function canonicalSupabaseStartArguments(workdir, hasStorageApiExclude) {
+  if (
+    typeof workdir !== 'string' ||
+    workdir.length === 0 ||
+    typeof hasStorageApiExclude !== 'boolean'
+  ) {
+    throw new Error('Canonical Supabase start arguments are invalid')
+  }
+  return [
+    'start',
+    `--workdir=${workdir}`,
+    ...(hasStorageApiExclude ? ['--exclude=storage-api'] : []),
+  ]
+}
+
+async function canonicalizeArguments(requested, target) {
+  const workdir = requested.args[1].slice('--workdir='.length)
+  const resolved = await realpath(path.resolve(workdir))
   const config = await readFile(
     path.join(resolved, 'supabase', 'config.toml'),
     'utf8',
@@ -88,11 +121,14 @@ async function canonicalizeArguments(args, target) {
   if (!config.startsWith(`project_id = "${target.projectId}"\n`)) {
     throw new Error('Supabase start project identity is invalid')
   }
-  return ['start', `--workdir=${resolved}`]
+  return canonicalSupabaseStartArguments(
+    resolved,
+    requested.hasStorageApiExclude,
+  )
 }
 
 export async function runRedacted(argv = process.argv.slice(2)) {
-  const requested = parseArguments(argv)
+  const requested = parseRedactedSupabaseStartArguments(argv)
   const executable = resolveNativeExecutable(requested.command)
   const target = ownedDatabaseContainer(requested.role)
   const networkSpec = ownedLocalSupabaseNetworkSpec(
@@ -102,7 +138,7 @@ export async function runRedacted(argv = process.argv.slice(2)) {
   )
   inspectOwnedLocalSupabaseNetwork(networkSpec, 'empty')
   const args = [
-    ...(await canonicalizeArguments(requested.args, target)),
+    ...(await canonicalizeArguments(requested, target)),
     `--network-id=${networkSpec.networkName}`,
   ]
   const outcome = await new Promise((resolve) => {

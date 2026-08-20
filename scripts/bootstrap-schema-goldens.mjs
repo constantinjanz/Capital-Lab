@@ -215,7 +215,8 @@ enable_anonymous_sign_ins = false
 enabled = false
 
 [storage]
-enabled = false
+enabled = true
+file_size_limit = "25MiB"
 
 [edge_runtime]
 enabled = false
@@ -280,18 +281,33 @@ async function createReferenceWorkdir(root, build, runId, migrations) {
   }
 }
 
+export function referenceStartArguments(build, workspace) {
+  if (
+    !['pre', 'post'].includes(build?.contract) ||
+    !['a', 'b'].includes(build?.replica) ||
+    typeof build?.directory !== 'string' ||
+    !path.isAbsolute(build.directory) ||
+    typeof workspace !== 'string' ||
+    !path.isAbsolute(workspace)
+  ) {
+    throw new Error('Reference Supabase start identity is invalid')
+  }
+  return [
+    path.join(workspace, 'scripts', 'run-redacted-subprocess.mjs'),
+    `--id=golden-${build.contract}-${build.replica}-start`,
+    '--role=reference',
+    '--',
+    'supabase',
+    'start',
+    `--workdir=${build.directory}`,
+    '--exclude=storage-api',
+  ]
+}
+
 async function startReference(build, workspace) {
   const outcome = await runProcess(
     'node',
-    [
-      path.join(workspace, 'scripts', 'run-redacted-subprocess.mjs'),
-      `--id=golden-${build.contract}-${build.replica}-start`,
-      '--role=reference',
-      '--',
-      'supabase',
-      'start',
-      `--workdir=${build.directory}`,
-    ],
+    referenceStartArguments(build, workspace),
     {
       cwd: workspace,
       env: {

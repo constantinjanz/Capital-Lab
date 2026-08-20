@@ -2,6 +2,50 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## EXACT-F2 activation-readiness rehearsal repair (2026-08-20)
+
+Safety status: one minimal repair commit F2 from exact FD
+`185407362e60e297aefb3a409b661f57fedd5e99`, one non-force push, and only the
+naturally resulting Push, PR, Golden, and Preview runs. No local full
+Database/Golden pipeline, Hosted/Production access, Golden import, rerun,
+dispatch, cancel, amend, second commit, merge, or activation is authorized.
+
+- [x] Pass the complete fail-closed preflight in the sole new LF clone: exact
+      repository, branch, FD parent/message, Draft/open/unmerged PR #21 and
+      matching refs, clean `+0/-0` upstream, exact migration/set/manifest
+      hashes, wrapper/Reference/Gate baselines, and repository-wide old-value
+      inventory.
+- [x] Repair only the confirmed two-byte PL/pgSQL parser defect, canonicalize
+      every Rollback integrity producer/verifier/fixture without changing the
+      executed raw SQL bodies, and preserve all transaction, timeout, marker,
+      ordering, diagnosis, and fail-closed contracts.
+- [x] Enable only the seed-free Reference Storage baseline migration job while
+      excluding the persistent `storage-api` service through the exact strict
+      wrapper token; preserve Source/Restore starts and all other disabled
+      Reference services.
+- [x] Pass the required focused tests and syntaxchecks, complete `pnpm verify`,
+      checksum generation/verification, diff/credential/allowlist/byte/hash
+      audits, and record exact results below.
+- [ ] Create exactly one F2 commit with message
+      `fix: repair activation readiness rehearsals`, verify its exact parent and
+      checksum closure, push once without force, await only natural runs, audit
+      row-free candidate/evidence artifacts externally, and stop.
+
+Pre-commit application verification on Node `v24.14.0` and pnpm `10.33.2` is
+green: syntaxchecks passed for all four changed `.mjs` files; the five required
+focused files passed 157/157 tests; and the process-bounded unmodified
+`pnpm verify` passed full-tree Prettier, zero-warning ESLint, strict TypeScript,
+108 Vitest files / 1,172 tests, PAPER-only, the Working Tree plus 100-ancestor
+credential scan with zero findings, and the Next.js 16.3.0 production build.
+Three independent cross-reviews reported no findings. The byte audit proved
+that the fourth migration is exactly two bytes longer, the first three are
+unchanged, the backup has one exact hash replacement, and the canonical target
+hashes are `8bc7a0afd62cd5105729a0ba97357f07ee119f32dffa2c301d172581ac539250`
+and `be330cdc763ce83ebeb7d1ef7e319580f8bc5a4ae05fb15823a58087b8f35e88`.
+Prospective checksum generation and verification passed against the real merge
+base with exactly 175 sorted entries; the exact-index commit audit remains
+mandatory before publication.
+
 ## EXACT-FD combined failure-observation pass (2026-08-20)
 
 Safety status: exactly one normal diagnostic commit FD from

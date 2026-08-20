@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { loadCriticalRelationContract } from './critical-backup-contract.mjs'
+import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
 import {
   resolveNativeExecutable,
   resolvedArguments,
@@ -143,7 +144,9 @@ async function rollbackMigrationSetSha256() {
           new URL(`../supabase/migrations/${name}`, import.meta.url),
         ),
       )
-      return `${name}:${createHash('sha256').update(bytes).digest('hex')}`
+      return `${name}:${createHash('sha256')
+        .update(canonicalRepositoryTextBytes(bytes))
+        .digest('hex')}`
     }),
   )
   return createHash('sha256').update(rows.join('\n')).digest('hex')

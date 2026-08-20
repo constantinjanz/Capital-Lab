@@ -33,9 +33,13 @@ For each contract the workflow creates two fresh seed-free Reference stacks
 with different project IDs, ports, container IDs, server identities, and
 database identities. PRE receives exactly the 32 frozen PRE migrations; POST
 receives the complete 36-migration set. Each migration is checked against its
-contract checksum before the first stack starts. The two independently
-captured candidates must be byte-identical. Cleanup is limited to run-owned
-containers, networks, and directories and runs on every exit path. Reference
+contract checksum before the first stack starts. The temporary Reference config
+keeps repository migrations and seed disabled while Storage is enabled only so
+the pinned CLI can install its managed Storage baseline. Its exact
+`--exclude=storage-api` start token leaves the persistent Storage API and
+ImgProxy stopped; no manual Storage DDL or rescue path exists. The two
+independently captured candidates must be byte-identical. Cleanup is limited to
+run-owned containers, networks, and directories and runs on every exit path. Reference
 project IDs are deterministic, CLI-compatible, at most 40 characters, and bind
 the PRE/POST contract, A/B replica, run identity, and a 64-bit hash. Every
 Source, Restore, and Reference stack starts only on its own labeled Docker

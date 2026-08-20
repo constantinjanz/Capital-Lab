@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { LocalContainerImageIdentityRejection } from './lib/local-container-identity-diagnostic.mjs'
 
+import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
 import {
   buildLocalRollbackRehearsalClientStageMarkerPlan,
   LOCAL_ROLLBACK_REHEARSAL_STAGE_MARKER_PLAN,
@@ -35,22 +36,27 @@ const migrationHashes = [
   'ee9a1390a6cf1abfca9a8664d6dfe492bc217741265f2d0d5e8b010af6c0352e',
   '01e5b32ccc10581b272a31b91660854e6875241a88aa2893b3f1e185ef9dfb7d',
   '0385cf8d05b105766f43f2c5f0b2683696a3d0416cd79390fbdae97b2d0b23fa',
-  'e8382eb73227eb4a227eb1036daaa7e7c1d5826f4234ee3f86516980f8f136fe',
+  '8bc7a0afd62cd5105729a0ba97357f07ee119f32dffa2c301d172581ac539250',
 ]
 
 function sha256(value: string | Buffer) {
   return createHash('sha256').update(value).digest('hex')
 }
 
+function migrationFromBytes(bytes: Buffer, name: string) {
+  return {
+    body: extractRollbackMigrationBody(bytes.toString('utf8'), name),
+    name,
+    sha256: sha256(canonicalRepositoryTextBytes(bytes)),
+  }
+}
+
 function actualMigrations() {
   return ROLLBACK_MIGRATION_BASENAMES.map((name, index) => {
     const bytes = readFileSync(path.join(migrationDirectory, name))
-    expect(sha256(bytes)).toBe(migrationHashes[index])
-    return {
-      body: extractRollbackMigrationBody(bytes.toString('utf8'), name),
-      name,
-      sha256: sha256(bytes),
-    }
+    const migration = migrationFromBytes(bytes, name)
+    expect(migration.sha256).toBe(migrationHashes[index])
+    return migration
   })
 }
 
@@ -117,7 +123,7 @@ describe('rollback migration rehearsal contract', () => {
     ).toThrow('exactly one outer BEGIN/COMMIT pair')
   })
 
-  it('freezes the exact four raw migration hashes and unchanged body bytes', () => {
+  it('freezes the exact four canonical migration hashes and raw body bytes', () => {
     const migrations = actualMigrations()
     expect(migrations.map(({ name }) => name)).toEqual(
       ROLLBACK_MIGRATION_BASENAMES,
@@ -142,6 +148,95 @@ describe('rollback migration rehearsal contract', () => {
       previous = bodyPosition
     }
     expect(sql).not.toMatch(/\balter\s+type\b/iu)
+  })
+
+  it('requires the grouped CASE expression in the bounded mutation guard', () => {
+    const fourthMigrationBody = actualMigrations()[3].body
+    expect(fourthMigrationBody).toContain(`if not changed <@ (case
+      when tg_table_schema = 'private'
+        and tg_table_name = 'application_settings'
+        and context_operation = 'emergency_kill'
+      then rule.update_columns || array['is_secret']::text[]
+      else rule.update_columns
+    end) then`)
+    expect(fourthMigrationBody).not.toMatch(/if not changed <@ case\b/u)
+  })
+
+  it('canonicalizes LF and CRLF digests while preserving raw CRLF bodies', () => {
+    const lfSources = ROLLBACK_MIGRATION_BASENAMES.map(
+      (name, index) => `begin;
+select ${index + 1} as migration_${index + 1};
+select '${name}' as migration_name;
+commit;
+`,
+    )
+    const crlfSources = lfSources.map((source) =>
+      source.replace(/\n/gu, '\r\n'),
+    )
+    const lfMigrations = lfSources.map((source, index) =>
+      migrationFromBytes(
+        Buffer.from(source, 'utf8'),
+        ROLLBACK_MIGRATION_BASENAMES[index],
+      ),
+    )
+    const crlfMigrations = crlfSources.map((source, index) =>
+      migrationFromBytes(
+        Buffer.from(source, 'utf8'),
+        ROLLBACK_MIGRATION_BASENAMES[index],
+      ),
+    )
+
+    expect(crlfMigrations.map(({ sha256: digest }) => digest)).toEqual(
+      lfMigrations.map(({ sha256: digest }) => digest),
+    )
+    const lfSuccess = JSON.parse(
+      buildRollbackRehearsalSuccessOutput('a'.repeat(40), lfMigrations),
+    )
+    const crlfSuccess = JSON.parse(
+      buildRollbackRehearsalSuccessOutput('a'.repeat(40), crlfMigrations),
+    )
+    expect(crlfSuccess.migrationSetSha256).toBe(lfSuccess.migrationSetSha256)
+
+    const sql = buildRollbackMigrationRehearsalSql(crlfMigrations)
+    let previousBody = -1
+    for (const [index, migration] of crlfMigrations.entries()) {
+      const name = ROLLBACK_MIGRATION_BASENAMES[index]
+      const expectedBody = `\nselect ${index + 1} as migration_${index + 1};\r\nselect '${name}' as migration_name;\r`
+      expect(Buffer.from(migration.body, 'utf8')).toEqual(
+        Buffer.from(expectedBody, 'utf8'),
+      )
+      expect(migration.body).toContain('\r\n')
+      expect(
+        canonicalRepositoryTextBytes(Buffer.from(migration.body, 'utf8')),
+      ).toEqual(Buffer.from(lfMigrations[index].body, 'utf8'))
+      const bodyPosition = sql.indexOf(migration.body)
+      expect(bodyPosition).toBeGreaterThan(previousBody)
+      expect(sql.indexOf(migration.body, bodyPosition + 1)).toBe(-1)
+      previousBody = bodyPosition
+    }
+
+    expect(sql.match(/^begin;$/gmu)).toHaveLength(1)
+    expect(sql.match(/^rollback;$/gmu)).toHaveLength(1)
+    expect(sql.match(/^commit;$/gmu)).toBeNull()
+    expect(sql.match(/set statement_timeout = '300s';/gu)).toHaveLength(1)
+    expect(sql.match(/set lock_timeout = '10s';/gu)).toHaveLength(1)
+    const beginPosition = sql.indexOf('begin;')
+    expect(sql.indexOf("set statement_timeout = '300s';")).toBeLessThan(
+      beginPosition,
+    )
+    expect(sql.indexOf("set lock_timeout = '10s';")).toBeLessThan(beginPosition)
+    const rollbackPosition = sql.indexOf('rollback;')
+    expect(beginPosition).toBeLessThan(rollbackPosition)
+    let previousMarker = -1
+    for (const marker of LOCAL_ROLLBACK_REHEARSAL_STAGE_MARKER_PLAN.slice(1)) {
+      const serialized =
+        serializeLocalRollbackRehearsalStageMarker(marker).trim()
+      const markerPosition = sql.indexOf(serialized)
+      expect(markerPosition).toBeGreaterThan(previousMarker)
+      expect(sql.indexOf(serialized, markerPosition + 1)).toBe(-1)
+      previousMarker = markerPosition
+    }
+    expect(previousMarker).toBeLessThan(rollbackPosition)
   })
 
   it('keeps one server transaction, the exact timeouts, and forward marker order', () => {
@@ -240,7 +335,7 @@ describe('rollback migration rehearsal contract', () => {
         commitSha: 'a'.repeat(40),
         migrationCount: 4,
         migrationSetSha256:
-          'f52c276233744c3a5abc2d02570a528ea8ca399d8c1a0bcc014c176b20a83c96',
+          'be330cdc763ce83ebeb7d1ef7e319580f8bc5a4ae05fb15823a58087b8f35e88',
         status: 'rollback_verified',
       })}\n`,
     )

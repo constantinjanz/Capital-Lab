@@ -394,13 +394,13 @@ begin
     select coalesce(array_agg(key order by key), array[]::text[])
     into changed from jsonb_object_keys(new_row) as key
     where new_row -> key is distinct from old_row -> key;
-    if not changed <@ case
+    if not changed <@ (case
       when tg_table_schema = 'private'
         and tg_table_name = 'application_settings'
         and context_operation = 'emergency_kill'
       then rule.update_columns || array['is_secret']::text[]
       else rule.update_columns
-    end then
+    end) then
       raise exception using errcode = '55000',
         message = 'activation update changed a forbidden column';
     end if;

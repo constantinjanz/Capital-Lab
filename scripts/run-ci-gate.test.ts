@@ -84,7 +84,7 @@ const rollbackSuccess = {
   commitSha: 'f'.repeat(40),
   migrationCount: 4,
   migrationSetSha256:
-    'f52c276233744c3a5abc2d02570a528ea8ca399d8c1a0bcc014c176b20a83c96',
+    'be330cdc763ce83ebeb7d1ef7e319580f8bc5a4ae05fb15823a58087b8f35e88',
   status: 'rollback_verified',
 }
 
@@ -317,6 +317,20 @@ describe('CI gate local rollback rehearsal outcome', () => {
     expect(branch).toBeGreaterThanOrEqual(0)
     expect(identity).toBeGreaterThan(branch)
     expect(migrationSet).toBeGreaterThan(identity)
+  })
+
+  it('binds the rollback migration-set digest to canonical repository bytes', () => {
+    const source = readFileSync(runner, 'utf8')
+    const functionStart = source.indexOf(
+      'async function rollbackMigrationSetSha256() {',
+    )
+    const functionEnd = source.indexOf('const separatorIndex', functionStart)
+    expect(functionStart).toBeGreaterThanOrEqual(0)
+    expect(functionEnd).toBeGreaterThan(functionStart)
+
+    const functionSource = source.slice(functionStart, functionEnd)
+    expect(functionSource).toContain('canonicalRepositoryTextBytes(bytes)')
+    expect(functionSource).not.toMatch(/\.update\(\s*bytes\s*\)/u)
   })
 
   it('persists only one canonical failure and preserves the child nonzero', () => {

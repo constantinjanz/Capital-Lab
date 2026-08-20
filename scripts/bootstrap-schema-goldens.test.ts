@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
@@ -10,6 +11,7 @@ import {
   propagateLocalMigrationReplayOutcome,
   referenceConfig,
   referencePortPlan,
+  referenceStartArguments,
 } from './bootstrap-schema-goldens.mjs'
 import {
   LOCAL_CI_IMAGE,
@@ -99,6 +101,12 @@ describe('seed-free schema-Golden bootstrap closure', () => {
       studio,
     ])
     expect(plan).toHaveLength(4)
+    expect(plan.map(({ contract, replica }) => [contract, replica])).toEqual([
+      ['pre', 'a'],
+      ['pre', 'b'],
+      ['post', 'a'],
+      ['post', 'b'],
+    ])
     expect(new Set(ports).size).toBe(16)
     expect(ports.every((port) => port >= 56_000 && port <= 59_999)).toBe(true)
   })
@@ -113,11 +121,73 @@ describe('seed-free schema-Golden bootstrap closure', () => {
         studio: 56003,
       },
     )
+    expect(config).toContain(
+      '[storage]\nenabled = true\nfile_size_limit = "25MiB"',
+    )
+    for (const section of [
+      'api',
+      'studio',
+      'auth',
+      'realtime',
+      'edge_runtime',
+      'analytics',
+      'inbucket',
+    ]) {
+      expect(config).toContain(`[${section}]\nenabled = false`)
+    }
     expect(config).toContain('[db.seed]\nenabled = false\nsql_paths = []')
-    expect(config).toContain('[db.migrations]\nenabled = false')
+    expect(config).toContain(
+      '[db.migrations]\nenabled = false\nschema_paths = []',
+    )
     expect(config).not.toContain('seed.sql')
     expect(config).not.toContain('database_url')
     expect(config).not.toContain('hosted')
+    expect(config).not.toContain('imgproxy')
+    expect(config).not.toMatch(/\bcreate\s+(?:schema|table)\b/iu)
+  })
+
+  it('gives only every PRE/POST Reference replica the exact exclude token', () => {
+    const workspace = path.resolve('reviewed-workspace')
+    const referenceDirectory = path.resolve('owned-reference')
+    for (const build of referencePortPlan('run-12345-1')) {
+      const args = referenceStartArguments(
+        { ...build, directory: referenceDirectory },
+        workspace,
+      )
+      expect(args).toEqual([
+        path.join(workspace, 'scripts', 'run-redacted-subprocess.mjs'),
+        `--id=golden-${build.contract}-${build.replica}-start`,
+        '--role=reference',
+        '--',
+        'supabase',
+        'start',
+        `--workdir=${referenceDirectory}`,
+        '--exclude=storage-api',
+      ])
+      expect(
+        args.filter((value) => value === '--exclude=storage-api'),
+      ).toHaveLength(1)
+      expect(args.join('\n')).not.toContain('imgproxy')
+    }
+  })
+
+  it('keeps Source and Restore starts unchanged and adds no manual Storage DDL', () => {
+    const source = readFileSync(
+      new URL('./bootstrap-schema-goldens.mjs', import.meta.url),
+      'utf8',
+    )
+    const workflow = readFileSync(
+      new URL('../.github/workflows/ci.yml', import.meta.url),
+      'utf8',
+    )
+    expect(source.match(/--exclude=storage-api/gu)).toHaveLength(1)
+    expect(source.toLowerCase()).not.toContain('storage.buckets')
+    expect(source).not.toMatch(/\bcreate\s+(?:schema|table)\b[^\n]*storage/iu)
+    expect(workflow).not.toContain('--exclude')
+    expect(workflow).toContain(
+      '--role=source -- supabase start "--workdir=${CAPITAL_LAB_CI_WORKDIR}"',
+    )
+    expect(workflow.match(/--role=restore -- supabase start/gu)).toHaveLength(2)
   })
 
   it('requires byte-identical normalized candidates', () => {
@@ -418,11 +488,18 @@ describe('seed-free schema-Golden bootstrap closure', () => {
       identity,
     )
     const mainLoop = source.lastIndexOf('for (const build of pair)')
+    const start = source.indexOf('await startReference(build', mainLoop)
+    const imageIdentity = source.indexOf(
+      'verifyReferenceImageIdentity(build)',
+      start,
+    )
     const apply = source.indexOf('await applyReferenceMigrations(', mainLoop)
     const captures = source.indexOf('const captures = []', apply)
     expect(identity).toBeGreaterThan(child)
     expect(propagation).toBeGreaterThan(identity)
-    expect(apply).toBeGreaterThan(mainLoop)
+    expect(start).toBeGreaterThan(mainLoop)
+    expect(imageIdentity).toBeGreaterThan(start)
+    expect(apply).toBeGreaterThan(imageIdentity)
     expect(captures).toBeGreaterThan(apply)
   })
 

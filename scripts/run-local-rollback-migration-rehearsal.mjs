@@ -8,6 +8,7 @@ import {
   canonicalJson,
   loadCriticalRelationContract,
 } from './critical-backup-contract.mjs'
+import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
 import {
   isOwnedLocalPostgresToolFailure,
   ownedPsql,
@@ -318,7 +319,7 @@ async function main() {
       return {
         body: extractRollbackMigrationBody(bytes.toString('utf8'), name),
         name,
-        sha256: sha256(bytes),
+        sha256: sha256(canonicalRepositoryTextBytes(bytes)),
       }
     }),
   )
