@@ -22,8 +22,11 @@ import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.m
 import { inspectOwnedDatabaseContainer } from './lib/local-container-postgres.mjs'
 import { parseLocalContainerIdentityRejection } from './lib/local-container-identity-diagnostic.mjs'
 import {
+  buildSchemaGoldenReferenceMigrationReplayFailureObservation,
   buildSchemaGoldenReferenceMigrationReplayObservation,
+  parseLocalMigrationReplayOutcome,
   requireLocalMigrationReplayDiagnostic,
+  serializeSchemaGoldenReferenceMigrationReplayFailureObservation,
   serializeSchemaGoldenReferenceMigrationReplayObservation,
 } from './lib/local-migration-replay-diagnostic.mjs'
 import {
@@ -366,7 +369,7 @@ async function stopReference(build, workspace) {
   )
 }
 
-async function applyReferenceMigrations(build, workspace) {
+async function applyReferenceMigrations(build, workspace, migrationBasenames) {
   const outcome = await runProcess(
     'node',
     [
@@ -389,8 +392,85 @@ async function applyReferenceMigrations(build, workspace) {
     process.stdout.write(`${JSON.stringify(identityRejection)}\n`)
     throw new Error('Reference migration replay failed closed')
   }
-  propagateLocalMigrationReplayDiagnostic(outcome.stdout, build)
-  requireSuccess(outcome, 'Reference migration replay')
+  propagateLocalMigrationReplayOutcome(outcome, build, migrationBasenames)
+  if (outcome.code !== 0 || outcome.signal || outcome.timedOut) {
+    throw new Error('Reference migration replay failed closed')
+  }
+}
+
+export function propagateLocalMigrationReplayOutcome(
+  outcome,
+  expected,
+  migrationBasenames,
+  { write = (value) => process.stdout.write(value) } = {},
+) {
+  if (
+    outcome === null ||
+    typeof outcome !== 'object' ||
+    Array.isArray(outcome) ||
+    !Object.hasOwn(outcome, 'code') ||
+    !Object.hasOwn(outcome, 'signal') ||
+    !Object.hasOwn(outcome, 'timedOut') ||
+    !Object.hasOwn(outcome, 'stdout')
+  ) {
+    throw new Error('Reference migration replay outcome is invalid')
+  }
+  const completed =
+    outcome.code === 0 && outcome.signal === null && outcome.timedOut === false
+  const failed =
+    (Number.isInteger(outcome.code) && outcome.code !== 0) ||
+    typeof outcome.signal === 'string' ||
+    outcome.timedOut === true
+  if (!completed && !failed) {
+    throw new Error('Reference migration replay outcome is invalid')
+  }
+  const parsed = parseLocalMigrationReplayOutcome(
+    outcome.stdout,
+    migrationBasenames,
+  )
+  for (const diagnostic of [parsed.boundary, parsed.failure].filter(Boolean)) {
+    if (
+      diagnostic.role !== 'reference' ||
+      diagnostic.contract !== expected.contract
+    ) {
+      throw new Error(
+        'Reference migration replay diagnostic context is invalid',
+      )
+    }
+  }
+  if (
+    (completed && (!parsed.boundary || parsed.failure)) ||
+    (failed && !parsed.failure)
+  ) {
+    throw new Error('Reference migration replay outcome is invalid')
+  }
+  const observation = parsed.boundary
+    ? buildSchemaGoldenReferenceMigrationReplayObservation({
+        contract: expected.contract,
+        diagnostic: parsed.boundary,
+        replica: expected.replica,
+      })
+    : null
+  const failureObservation = parsed.failure
+    ? buildSchemaGoldenReferenceMigrationReplayFailureObservation({
+        contract: expected.contract,
+        diagnostic: parsed.failure,
+        migrationBasenames,
+        replica: expected.replica,
+      })
+    : null
+  if (observation) {
+    write(serializeSchemaGoldenReferenceMigrationReplayObservation(observation))
+  }
+  if (failureObservation) {
+    write(
+      serializeSchemaGoldenReferenceMigrationReplayFailureObservation(
+        failureObservation,
+        migrationBasenames,
+      ),
+    )
+  }
+  return { observation, failureObservation }
 }
 
 export function propagateLocalMigrationReplayDiagnostic(
@@ -640,7 +720,13 @@ async function main() {
         running.push(build)
         await startReference(build, workspace)
         verifyReferenceImageIdentity(build)
-        await applyReferenceMigrations(build, workspace)
+        await applyReferenceMigrations(
+          build,
+          workspace,
+          contractInputs[build.contract].contract.migrations.map(
+            ({ name }) => name,
+          ),
+        )
       }
       const captures = []
       const proofRows = []

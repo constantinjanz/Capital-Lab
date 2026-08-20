@@ -9,6 +9,7 @@ import {
   HISTORY_BOOTSTRAP_SQL,
   HISTORY_CONTRACT_SQL,
   historyInsertSql,
+  localMigrationReplayFailureDiagnosticFromError,
   migrationContainerName,
   migrationIdentity,
   observeLocalMigrationReplayBoundary,
@@ -27,6 +28,11 @@ const eligibleDiagnostic = {
   historySchemaExists: false,
   historyRelationExists: false,
 }
+
+const migrationBasenames = [
+  '20260801000000_first.sql',
+  '20260801000001_second.sql',
+]
 
 describe('checksummed local psql migration replay', () => {
   it('accepts only exact contract, seed and target arguments', () => {
@@ -143,6 +149,31 @@ describe('checksummed local psql migration replay', () => {
     expect(writes).toEqual([])
   })
 
+  it('binds the preflight psql call to the loaded migration list', async () => {
+    const failureContext = {
+      role: 'source',
+      contract: 'pre',
+      stage: 'history_preflight',
+      migrationBasename: null,
+      completedMigrationCount: 0,
+    }
+    const query = vi.fn().mockResolvedValue({
+      schemaExists: false,
+      relationExists: false,
+    })
+    await observeLocalMigrationReplayBoundary('source', 'pre', {
+      failureContext,
+      migrationBasenames,
+      query,
+      write: () => true,
+    })
+    expect(query).toHaveBeenCalledExactlyOnceWith(
+      'source',
+      HISTORY_PREFLIGHT_SQL,
+      { failureContext, migrationBasenames },
+    )
+  })
+
   it('defines the exact one-shot transactional history bootstrap SQL', () => {
     expect(HISTORY_BOOTSTRAP_SQL).toBe(`begin;
 set local lock_timeout = '4s';
@@ -224,6 +255,41 @@ commit;`)
     )
   })
 
+  it('marks bootstrap and contract calls without changing their order', async () => {
+    const stages: Array<Record<string, unknown>> = []
+    const execute = vi.fn().mockResolvedValue(undefined)
+    const query = vi.fn().mockResolvedValue(EXPECTED_HISTORY_CONTRACT)
+    await bootstrapLocalMigrationHistoryBoundary('source', 'pre', {
+      execute,
+      migrationBasenames,
+      observe: async () => eligibleDiagnostic,
+      onStage: (value) => stages.push(value),
+      query,
+    })
+    expect(stages.map(({ stage }) => stage)).toEqual([
+      'history_preflight',
+      'history_bootstrap',
+      'history_contract',
+    ])
+    expect(execute).toHaveBeenCalledExactlyOnceWith(
+      'source',
+      HISTORY_BOOTSTRAP_SQL,
+      false,
+      {
+        failureContext: stages[1],
+        migrationBasenames,
+      },
+    )
+    expect(query).toHaveBeenCalledExactlyOnceWith(
+      'source',
+      HISTORY_CONTRACT_SQL,
+      {
+        failureContext: stages[2],
+        migrationBasenames,
+      },
+    )
+  })
+
   it.each([
     [true, false],
     [false, true],
@@ -248,6 +314,57 @@ commit;`)
       expect(query).not.toHaveBeenCalled()
     },
   )
+
+  it('maps only a fixed logical failure to the active exact stage', async () => {
+    let logicalError: unknown
+    let activeContext: Record<string, unknown> | null = null
+    try {
+      await bootstrapLocalMigrationHistoryBoundary('source', 'pre', {
+        execute: async () => undefined,
+        migrationBasenames,
+        observe: async () => eligibleDiagnostic,
+        onStage: (value) => {
+          activeContext = value
+        },
+        query: async () => ({ ...EXPECTED_HISTORY_CONTRACT, rows: [{}] }),
+      })
+    } catch (error) {
+      logicalError = error
+    }
+    expect(activeContext).not.toBeNull()
+    expect(
+      localMigrationReplayFailureDiagnosticFromError(
+        logicalError,
+        activeContext,
+        migrationBasenames,
+      ),
+    ).toEqual({
+      schemaVersion: 1,
+      status: 'local_migration_replay_failure_observed',
+      role: 'source',
+      contract: 'pre',
+      stage: 'history_contract',
+      migrationBasename: null,
+      completedMigrationCount: 0,
+      psqlExitCode: null,
+      sqlstate: null,
+      signal: null,
+      timedOut: false,
+    })
+    expect(
+      localMigrationReplayFailureDiagnosticFromError(
+        {
+          exitCode: 3,
+          lastClientStageMarkerIndex: 0,
+          signal: null,
+          sqlstate: '42P01',
+          timedOut: false,
+        },
+        activeContext,
+        migrationBasenames,
+      ),
+    ).toBeNull()
+  })
 
   it('stops malformed or context-drifted diagnosis before DDL', async () => {
     for (const diagnostic of [
@@ -349,7 +466,7 @@ commit;`)
     )
     const identity = source.indexOf('inspectOwnedDatabaseContainer(role)')
     const boundary = source.indexOf(
-      'bootstrapLocalMigrationHistoryBoundary(role, requested.contract)',
+      'await bootstrapLocalMigrationHistoryBoundary(',
     )
     const probe = source.indexOf('const diagnostic = await observe(', 0)
     const eligibility = source.indexOf(
@@ -379,5 +496,19 @@ commit;`)
       "process.stderr.write('Local migration replay failed closed.\\n')",
     )
     expect(source).toContain('process.exit(1)')
+    const migrationApply = source.indexOf("stage: 'migration_apply'", boundary)
+    const migrationCall = source.indexOf('await runPsql(', migrationApply)
+    const historyInsert = source.indexOf(
+      "stage: 'history_insert'",
+      migrationCall,
+    )
+    const historyCall = source.indexOf('await runPsql(', historyInsert)
+    const completed = source.indexOf('expectedHistory.push(', historyCall)
+    expect(migrationApply).toBeGreaterThan(boundary)
+    expect(migrationCall).toBeGreaterThan(migrationApply)
+    expect(historyInsert).toBeGreaterThan(migrationCall)
+    expect(historyCall).toBeGreaterThan(historyInsert)
+    expect(completed).toBeGreaterThan(historyCall)
+    expect(source).toContain('\\warn ${markerPlan.markers[0]}')
   })
 })

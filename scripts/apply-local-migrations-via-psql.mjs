@@ -10,13 +10,17 @@ import {
 import { canonicalRepositoryTextBytes } from './lib/canonical-repository-bytes.mjs'
 import {
   inspectOwnedDatabaseContainer,
+  isOwnedLocalPostgresToolFailure,
   ownedDatabaseContainer,
   runOwnedPostgresTool,
 } from './lib/local-container-postgres.mjs'
 import {
+  buildLocalMigrationReplayFailureDiagnostic,
   buildLocalMigrationReplayDiagnostic,
   HISTORY_PREFLIGHT_SQL,
+  localMigrationReplayClientStageMarkerPlan,
   requireLocalMigrationReplayBootstrapEligibility,
+  serializeLocalMigrationReplayFailureDiagnostic,
   serializeLocalMigrationReplayDiagnostic,
 } from './lib/local-migration-replay-diagnostic.mjs'
 import { localCiImageIdentityEvidence } from './lib/owned-local-ci-stack.mjs'
@@ -63,7 +67,41 @@ export function migrationIdentity(filename) {
   return { version: match[1], name: match[2] }
 }
 
-async function runPsql(role, input, capture = false) {
+class LocalMigrationReplayLogicalFailure extends Error {
+  constructor(kind = 'query') {
+    super(
+      {
+        eligibility: 'Local migration replay bootstrap is not eligible',
+        final: 'Local migration history differs after psql replay',
+        history:
+          'Local Supabase migration history boundary is not empty and exact',
+        query: 'Local migration replay logical validation failed',
+      }[kind] ?? 'Local migration replay logical validation failed',
+    )
+    this.name = 'LocalMigrationReplayLogicalFailure'
+    this.stack = `${this.name}: ${this.message}`
+  }
+}
+
+function stageMarkedInput(input, markerPlan) {
+  const marker = Buffer.from(`\\warn ${markerPlan.markers[0]}\n`, 'utf8')
+  return Buffer.isBuffer(input)
+    ? Buffer.concat([marker, input])
+    : `${marker.toString('utf8')}${input}`
+}
+
+async function runPsql(
+  role,
+  input,
+  capture = false,
+  { failureContext, migrationBasenames } = {},
+) {
+  const markerPlan = failureContext
+    ? localMigrationReplayClientStageMarkerPlan(
+        failureContext,
+        migrationBasenames,
+      )
+    : null
   return runOwnedPostgresTool(
     role,
     'psql',
@@ -73,24 +111,82 @@ async function runPsql(role, input, capture = false) {
       '--set=ON_ERROR_STOP=1',
       ...(capture ? ['--tuples-only', '--no-align'] : []),
     ],
-    input,
+    markerPlan ? stageMarkedInput(input, markerPlan) : input,
+    markerPlan ? { clientStageMarkerPlan: markerPlan } : undefined,
   )
 }
 
-async function queryJson(role, sql) {
-  const outcome = await runPsql(role, sql, true)
-  return JSON.parse(outcome.stdout.trim())
+async function queryJson(role, sql, diagnosticOptions) {
+  const outcome = await runPsql(role, sql, true, diagnosticOptions)
+  try {
+    return JSON.parse(outcome.stdout.trim())
+  } catch {
+    throw new LocalMigrationReplayLogicalFailure()
+  }
 }
 
+export function localMigrationReplayFailureDiagnosticFromError(
+  error,
+  context,
+  migrationBasenames,
+) {
+  let processFields
+  if (error instanceof LocalMigrationReplayLogicalFailure) {
+    processFields = {
+      psqlExitCode: null,
+      sqlstate: null,
+      signal: null,
+      timedOut: false,
+    }
+  } else if (
+    isOwnedLocalPostgresToolFailure(error) &&
+    error.lastClientStageMarkerIndex === 0
+  ) {
+    processFields = {
+      psqlExitCode: error.exitCode,
+      sqlstate: error.sqlstate,
+      signal: error.signal,
+      timedOut: error.timedOut,
+    }
+  } else {
+    return null
+  }
+  try {
+    return buildLocalMigrationReplayFailureDiagnostic(
+      { ...context, ...processFields },
+      migrationBasenames,
+    )
+  } catch {
+    return null
+  }
+}
+
+/**
+ * @param {any} role
+ * @param {any} contract
+ * @param {{failureContext?: any, migrationBasenames?: string[], query?: Function, write?: (value: any) => any}} [options]
+ */
 export async function observeLocalMigrationReplayBoundary(
   role,
   contract,
-  { query = queryJson, write = (value) => process.stdout.write(value) } = {},
+  options = {},
 ) {
+  const {
+    failureContext,
+    migrationBasenames,
+    query = queryJson,
+    write = (value) => process.stdout.write(value),
+  } = options
+  const diagnosticOptions =
+    failureContext && migrationBasenames
+      ? { failureContext, migrationBasenames }
+      : undefined
   const diagnostic = buildLocalMigrationReplayDiagnostic({
     role,
     contract,
-    queryResult: await query(role, HISTORY_PREFLIGHT_SQL),
+    queryResult: diagnosticOptions
+      ? await query(role, HISTORY_PREFLIGHT_SQL, diagnosticOptions)
+      : await query(role, HISTORY_PREFLIGHT_SQL),
   })
   write(serializeLocalMigrationReplayDiagnostic(diagnostic))
   return diagnostic
@@ -152,27 +248,67 @@ export const EXPECTED_HISTORY_CONTRACT = {
   rows: [],
 }
 
+/**
+ * @param {any} role
+ * @param {any} contract
+ * @param {{execute?: Function, migrationBasenames?: string[], observe?: Function, onStage?: (value: any) => any, query?: Function, write?: (value: any) => any}} [options]
+ */
 export async function bootstrapLocalMigrationHistoryBoundary(
   role,
   contract,
-  {
+  options = {},
+) {
+  const {
     execute = runPsql,
+    migrationBasenames,
     observe = observeLocalMigrationReplayBoundary,
+    onStage = () => {},
     query = queryJson,
     write = (value) => process.stdout.write(value),
-  } = {},
-) {
-  const diagnostic = await observe(role, contract, { query, write })
-  requireLocalMigrationReplayBootstrapEligibility(diagnostic, {
+  } = options
+  const context = (stage) => ({
     role,
     contract,
+    stage,
+    migrationBasename: null,
+    completedMigrationCount: 0,
   })
-  await execute(role, HISTORY_BOOTSTRAP_SQL)
-  const history = await query(role, HISTORY_CONTRACT_SQL)
+  const preflightContext = context('history_preflight')
+  onStage(preflightContext)
+  const diagnostic = await observe(role, contract, {
+    failureContext: preflightContext,
+    migrationBasenames,
+    query,
+    write,
+  })
+  try {
+    requireLocalMigrationReplayBootstrapEligibility(diagnostic, {
+      role,
+      contract,
+    })
+  } catch {
+    throw new LocalMigrationReplayLogicalFailure('eligibility')
+  }
+  const bootstrapContext = context('history_bootstrap')
+  onStage(bootstrapContext)
+  if (migrationBasenames) {
+    await execute(role, HISTORY_BOOTSTRAP_SQL, false, {
+      failureContext: bootstrapContext,
+      migrationBasenames,
+    })
+  } else {
+    await execute(role, HISTORY_BOOTSTRAP_SQL)
+  }
+  const contractContext = context('history_contract')
+  onStage(contractContext)
+  const history = migrationBasenames
+    ? await query(role, HISTORY_CONTRACT_SQL, {
+        failureContext: contractContext,
+        migrationBasenames,
+      })
+    : await query(role, HISTORY_CONTRACT_SQL)
   if (canonicalJson(history) !== canonicalJson(EXPECTED_HISTORY_CONTRACT)) {
-    throw new Error(
-      'Local Supabase migration history boundary is not empty and exact',
-    )
+    throw new LocalMigrationReplayLogicalFailure('history')
   }
   return history
 }
@@ -208,48 +344,103 @@ async function main() {
     `${requested.contract}-activation.v1.json`,
   )
   const { contract } = await loadCriticalRelationContract(contractPath, kind)
-  await bootstrapLocalMigrationHistoryBoundary(role, requested.contract)
+  const migrationBasenames = contract.migrations.map(({ name }) => name)
   const expectedHistory = []
-  for (const migration of contract.migrations) {
-    const filename = path.join(
-      workspace,
-      'supabase',
-      'migrations',
-      migration.name,
-    )
-    const bytes = await readFile(filename)
-    const canonical = canonicalRepositoryTextBytes(bytes)
-    const identity = migrationIdentity(migration.name)
-    if (
-      migration.version !== identity.version ||
-      sha256(canonical) !== migration.sha256
-    ) {
-      throw new Error('Local migration bytes differ from the reviewed contract')
+  let failureContext = null
+  try {
+    await bootstrapLocalMigrationHistoryBoundary(role, requested.contract, {
+      migrationBasenames,
+      onStage: (value) => {
+        failureContext = value
+      },
+    })
+    for (const migration of contract.migrations) {
+      const filename = path.join(
+        workspace,
+        'supabase',
+        'migrations',
+        migration.name,
+      )
+      const bytes = await readFile(filename)
+      const canonical = canonicalRepositoryTextBytes(bytes)
+      const identity = migrationIdentity(migration.name)
+      if (
+        migration.version !== identity.version ||
+        sha256(canonical) !== migration.sha256
+      ) {
+        throw new Error(
+          'Local migration bytes differ from the reviewed contract',
+        )
+      }
+      failureContext = {
+        role,
+        contract: requested.contract,
+        stage: 'migration_apply',
+        migrationBasename: migration.name,
+        completedMigrationCount: expectedHistory.length,
+      }
+      await runPsql(
+        role,
+        Buffer.concat([
+          Buffer.from(
+            "\\set ON_ERROR_STOP on\nset statement_timeout = '300s';\nset lock_timeout = '10s';\n",
+            'utf8',
+          ),
+          bytes,
+          Buffer.from('\n', 'utf8'),
+        ]),
+        false,
+        { failureContext, migrationBasenames },
+      )
+      failureContext = {
+        ...failureContext,
+        stage: 'history_insert',
+      }
+      await runPsql(role, historyInsertSql(migration.name, bytes), false, {
+        failureContext,
+        migrationBasenames,
+      })
+      expectedHistory.push({ name: identity.name, version: identity.version })
     }
-    await runPsql(
+    failureContext = {
       role,
-      Buffer.concat([
-        Buffer.from(
-          "\\set ON_ERROR_STOP on\nset statement_timeout = '300s';\nset lock_timeout = '10s';\n",
-          'utf8',
+      contract: requested.contract,
+      stage: 'final_history_contract',
+      migrationBasename: null,
+      completedMigrationCount: expectedHistory.length,
+    }
+    const after = await queryJson(role, HISTORY_CONTRACT_SQL, {
+      failureContext,
+      migrationBasenames,
+    })
+    if (
+      canonicalJson(after) !==
+      canonicalJson({ ...EXPECTED_HISTORY_CONTRACT, rows: expectedHistory })
+    ) {
+      throw new LocalMigrationReplayLogicalFailure('final')
+    }
+    failureContext = null
+    if (requested.seed === 'include') {
+      const seed = await readFile(path.join(workspace, 'supabase', 'seed.sql'))
+      await runPsql(role, seed)
+    }
+  } catch (error) {
+    const diagnostic = failureContext
+      ? localMigrationReplayFailureDiagnosticFromError(
+          error,
+          failureContext,
+          migrationBasenames,
+        )
+      : null
+    if (diagnostic) {
+      process.stdout.write(
+        serializeLocalMigrationReplayFailureDiagnostic(
+          diagnostic,
+          migrationBasenames,
         ),
-        bytes,
-        Buffer.from('\n', 'utf8'),
-      ]),
-    )
-    await runPsql(role, historyInsertSql(migration.name, bytes))
-    expectedHistory.push({ name: identity.name, version: identity.version })
-  }
-  const after = await queryJson(role, HISTORY_CONTRACT_SQL)
-  if (
-    canonicalJson(after) !==
-    canonicalJson({ ...EXPECTED_HISTORY_CONTRACT, rows: expectedHistory })
-  ) {
-    throw new Error('Local migration history differs after psql replay')
-  }
-  if (requested.seed === 'include') {
-    const seed = await readFile(path.join(workspace, 'supabase', 'seed.sql'))
-    await runPsql(role, seed)
+      )
+    }
+    throw error
   }
   process.stdout.write(
     `${JSON.stringify({ status: 'local_migrations_replayed', contract: requested.contract, migrationCount: expectedHistory.length, seed: requested.seed })}\n`,

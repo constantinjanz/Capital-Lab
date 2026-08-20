@@ -48,6 +48,45 @@ const referenceSequence = [
     contract,
   },
 }))
+const referenceFailure = {
+  schemaVersion: 1,
+  status: 'schema_golden_reference_migration_replay_failure_observed',
+  contract: 'pre',
+  replica: 'a',
+  localMigrationReplayFailureDiagnostic: {
+    schemaVersion: 1,
+    status: 'local_migration_replay_failure_observed',
+    role: 'reference',
+    contract: 'pre',
+    stage: 'migration_apply',
+    migrationBasename: '20260806165114_private_storage.sql',
+    completedMigrationCount: 8,
+    psqlExitCode: 1,
+    sqlstate: '42P01',
+    signal: null,
+    timedOut: false,
+  },
+}
+const rollbackFailure = {
+  schemaVersion: 1,
+  status: 'local_rollback_migration_rehearsal_failure_observed',
+  role: 'source',
+  contract: 'pre',
+  stage: 'migration_body',
+  migrationBasename: '20260809150000_post_build_hosting_safety.sql',
+  completedMigrationCount: 0,
+  psqlExitCode: 1,
+  sqlstate: '42P01',
+  signal: null,
+  timedOut: false,
+}
+const rollbackSuccess = {
+  commitSha: 'f'.repeat(40),
+  migrationCount: 4,
+  migrationSetSha256:
+    'f52c276233744c3a5abc2d02570a528ea8ca399d8c1a0bcc014c176b20a83c96',
+  status: 'rollback_verified',
+}
 
 function tempDirectory() {
   const directory = mkdtempSync(
@@ -72,7 +111,11 @@ describe('CI gate migration replay diagnostic', () => {
       'fake-password',
       '@127.0.0.1:59999/postgres',
     ].join('')
-    const stderrSecret = 'Authorization: Bearer fake-bearer-token'
+    const stderrSecret = [
+      'Author',
+      'ization: Bear',
+      'er fake-bearer-token',
+    ].join('')
     const child = [
       `process.stdout.write(${JSON.stringify(`untrusted ${stdoutSecret}\n`)})`,
       `process.stdout.write(${JSON.stringify(`${JSON.stringify(diagnostic)}\n`)})`,
@@ -195,6 +238,266 @@ describe('CI gate migration replay diagnostic', () => {
   })
 })
 
+describe('CI gate local rollback rehearsal outcome', () => {
+  function runRollbackGate(
+    directory: string,
+    output: string,
+    childExitCode: number,
+    commitSha = 'f'.repeat(40),
+    persistedIdentityEvidence: string | null = null,
+  ) {
+    const stdoutSecret = [
+      'postgresql',
+      '://postgres:',
+      'fake-rollback-password',
+      '@127.0.0.1:59999/postgres',
+    ].join('')
+    const stderrSecret = [
+      'Author',
+      'ization: Bear',
+      'er fake-rollback-secret',
+    ].join('')
+    const identityEvidencePath = path.join(
+      directory,
+      '.ci-evidence',
+      'local-container-image-identity-rejected.json',
+    )
+    const child = [
+      ...(persistedIdentityEvidence === null
+        ? []
+        : [
+            "require('node:fs').mkdirSync('.ci-evidence',{recursive:true})",
+            `require('node:fs').writeFileSync(${JSON.stringify(identityEvidencePath)},${JSON.stringify(persistedIdentityEvidence)})`,
+          ]),
+      `process.stdout.write(${JSON.stringify(`raw ${stdoutSecret}\n${output}token=fake-rollback-token\n`)})`,
+      `process.stderr.write(${JSON.stringify(stderrSecret)})`,
+      `process.exit(${childExitCode})`,
+    ].join(';')
+    const outcome = spawnSync(
+      process.execPath,
+      [
+        runner,
+        '--id',
+        'migration-rollback-rehearsal',
+        '--',
+        'node',
+        '-e',
+        child,
+      ],
+      {
+        cwd: directory,
+        encoding: 'utf8',
+        env: { ...process.env, CAPITAL_LAB_CI_COMMIT_SHA: commitSha },
+      },
+    )
+    const evidenceText = readFileSync(
+      path.join(directory, '.ci-evidence', 'migration-rollback-rehearsal.json'),
+      'utf8',
+    )
+    return {
+      evidence: JSON.parse(evidenceText),
+      evidenceText,
+      identityEvidencePath,
+      outcome,
+      secrets: [stdoutSecret, 'fake-rollback-token', 'fake-rollback-secret'],
+    }
+  }
+
+  it('evaluates exact Source identity before local migration-set files', () => {
+    const source = readFileSync(runner, 'utf8')
+    const branch = source.indexOf('} else if (localRollbackRehearsalGate) {')
+    const identity = source.indexOf(
+      'await requireBufferedIdentityRejection(',
+      branch,
+    )
+    const migrationSet = source.indexOf(
+      'await rollbackMigrationSetSha256()',
+      branch,
+    )
+    expect(branch).toBeGreaterThanOrEqual(0)
+    expect(identity).toBeGreaterThan(branch)
+    expect(migrationSet).toBeGreaterThan(identity)
+  })
+
+  it('persists only one canonical failure and preserves the child nonzero', () => {
+    const result = runRollbackGate(
+      tempDirectory(),
+      `${JSON.stringify(rollbackFailure)}\n`,
+      7,
+    )
+    expect(result.outcome.status).toBe(7)
+    expect(result.outcome.stdout).toBe(`${JSON.stringify(rollbackFailure)}\n`)
+    expect(result.outcome.stderr).toBe('')
+    expect(result.evidence).toMatchObject({
+      exitCode: 7,
+      localRollbackMigrationRehearsalFailureDiagnostic: rollbackFailure,
+      counts: { files: null, tests: null, passed: null, flaky: 0 },
+    })
+    expect(result.evidence.redactedDiagnostic).toBeUndefined()
+    for (const secret of result.secrets) {
+      expect(
+        `${result.outcome.stdout}${result.outcome.stderr}${result.evidenceText}`,
+      ).not.toContain(secret)
+    }
+  })
+
+  it('preserves the exact strict success without creating failure evidence', () => {
+    const result = runRollbackGate(
+      tempDirectory(),
+      `${JSON.stringify(rollbackSuccess)}\n`,
+      0,
+    )
+    expect(result.outcome.status).toBe(0)
+    expect(result.outcome.stdout).toBe(`${JSON.stringify(rollbackSuccess)}\n`)
+    expect(result.outcome.stderr).toBe('')
+    expect(
+      result.evidence.localRollbackMigrationRehearsalFailureDiagnostic,
+    ).toBeUndefined()
+    expect(result.evidence.redactedDiagnostic).toBeUndefined()
+  })
+
+  it('rejects success when the exact CI commit identity is unavailable', () => {
+    const secret = ['Author', 'ization: Bear', 'er fake-env-secret'].join('')
+    const result = runRollbackGate(
+      tempDirectory(),
+      `${JSON.stringify(rollbackSuccess)}\n`,
+      0,
+      secret,
+    )
+    expect(result.outcome.status).toBe(1)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Rollback rehearsal evidence failed closed.\n',
+    )
+    expect(
+      result.evidence.localRollbackMigrationRehearsalFailureDiagnostic,
+    ).toBeUndefined()
+    expect(result.evidence.commitSha).toBeNull()
+    expect(
+      `${result.outcome.stdout}${result.outcome.stderr}${result.evidenceText}`,
+    ).not.toContain(secret)
+  })
+
+  it.each([
+    ['missing diagnosis', '', 7, 7],
+    [
+      'success and failure together',
+      `${JSON.stringify(rollbackSuccess)}\n${JSON.stringify(rollbackFailure)}\n`,
+      0,
+      1,
+    ],
+    ['failure on child success', `${JSON.stringify(rollbackFailure)}\n`, 0, 1],
+    [
+      'success with a wrong migration-set identity',
+      `${JSON.stringify({
+        ...rollbackSuccess,
+        migrationSetSha256: 'a'.repeat(64),
+      })}\n`,
+      0,
+      1,
+    ],
+    [
+      'success plus an unclosed escaped failure candidate',
+      `${JSON.stringify(rollbackSuccess)}\n{"statu\\u0073":"local_rollback_migration_rehearsal_failure_observe\\u0064`,
+      0,
+      1,
+    ],
+    [
+      'failure plus an unclosed escaped success candidate',
+      `${JSON.stringify(rollbackFailure)}\n{"statu\\u0073":"rollback_verifie\\u0064`,
+      7,
+      7,
+    ],
+  ] as const)(
+    'fails closed for %s without typed evidence',
+    (_label, output, childExitCode, expectedExitCode) => {
+      const result = runRollbackGate(tempDirectory(), output, childExitCode)
+      expect(result.outcome.status).toBe(expectedExitCode)
+      expect(result.outcome.stdout).toBe('')
+      expect(result.outcome.stderr).toBe(
+        'Rollback rehearsal evidence failed closed.\n',
+      )
+      expect(
+        result.evidence.localRollbackMigrationRehearsalFailureDiagnostic,
+      ).toBeUndefined()
+      expect(result.evidence.redactedDiagnostic).toBeUndefined()
+    },
+  )
+
+  it('gives an exact-commit Source identity rejection exclusive priority', () => {
+    const directory = tempDirectory()
+    const commitSha = 'f'.repeat(40)
+    const rejection = serializeLocalContainerIdentityRejection(
+      new LocalContainerImageIdentityRejection(
+        'source',
+        localContainerInspectFailureDiagnostic(
+          'container_inspect',
+          'container_inspect_unavailable',
+          {
+            container: 'supabase_db_capital-lab-ci-run-12345-1',
+            port: '54322',
+            projectId: 'capital-lab-ci-run-12345-1',
+          },
+        ),
+      ),
+      commitSha,
+    )
+    const result = runRollbackGate(
+      directory,
+      `${JSON.stringify(rollbackFailure)}\n${rejection}`,
+      1,
+      commitSha,
+      rejection,
+    )
+    expect(result.outcome.status).toBe(1)
+    expect(result.outcome.stdout).toBe(rejection)
+    expect(result.outcome.stderr).toBe('')
+    expect(
+      result.evidence.localRollbackMigrationRehearsalFailureDiagnostic,
+    ).toBeUndefined()
+    expect(readFileSync(result.identityEvidencePath, 'utf8')).toBe(rejection)
+    expect(result.outcome.stdout).not.toContain(
+      'local_rollback_migration_rehearsal_failure_observed',
+    )
+  })
+
+  it('rejects and quarantines a wrong-context identity rejection', () => {
+    const directory = tempDirectory()
+    const commitSha = 'f'.repeat(40)
+    const rejection = serializeLocalContainerIdentityRejection(
+      new LocalContainerImageIdentityRejection(
+        'reference',
+        localContainerInspectFailureDiagnostic(
+          'container_inspect',
+          'container_inspect_unavailable',
+          {
+            container: 'supabase_db_capital-lab-ref-pre-a-0123456789abcdef',
+            port: '56001',
+            projectId: 'capital-lab-ref-pre-a-0123456789abcdef',
+          },
+        ),
+      ),
+      commitSha,
+    )
+    const result = runRollbackGate(
+      directory,
+      rejection,
+      8,
+      commitSha,
+      rejection,
+    )
+    expect(result.outcome.status).toBe(8)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Rollback rehearsal evidence failed closed.\n',
+    )
+    expect(existsSync(result.identityEvidencePath)).toBe(false)
+    expect(result.evidenceText).not.toContain(
+      'local_container_image_identity_rejected',
+    )
+  })
+})
+
 describe('CI gate schema-Golden Reference replay sequence', () => {
   function runGoldenGate(
     directory: string,
@@ -209,6 +512,11 @@ describe('CI gate schema-Golden Reference replay sequence', () => {
       '://postgres:',
       'fake-golden-password',
       '@127.0.0.1:59999/postgres',
+    ].join('')
+    const stderrSecret = [
+      'Author',
+      'ization: Bear',
+      'er fake-golden-secret',
     ].join('')
     const identityEvidencePath = path.join(
       directory,
@@ -229,7 +537,7 @@ describe('CI gate schema-Golden Reference replay sequence', () => {
               `require('node:fs').writeFileSync(${JSON.stringify(path.join(identityEvidencePath, 'raw.json'))},${JSON.stringify(persistedIdentityEvidence.nestedIdentityEvidence)})`,
             ]),
       `process.stdout.write(${JSON.stringify(`raw ${stdoutSecret}\n${output}token=fake-child-token\n`)})`,
-      "process.stderr.write('Authorization: Bearer fake-golden-secret')",
+      `process.stderr.write(${JSON.stringify(stderrSecret)})`,
       `process.exit(${childExitCode})`,
     ].join(';')
     const outcome = spawnSync(
@@ -269,6 +577,31 @@ describe('CI gate schema-Golden Reference replay sequence', () => {
       schemaGoldenReferenceMigrationReplayObservations: referenceSequence,
     })
     expect(result.evidence.localMigrationReplayDiagnostic).toBeUndefined()
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayFailureObservation,
+    ).toBeUndefined()
+    expect(result.evidence.redactedDiagnostic).toBeUndefined()
+    for (const secret of result.secrets) {
+      expect(
+        `${result.outcome.stdout}${result.outcome.stderr}${result.evidenceText}`,
+      ).not.toContain(secret)
+    }
+  })
+
+  it('preserves a pre/a prefix plus exactly one bound failure', () => {
+    const directory = tempDirectory()
+    const output = `${serialized(referenceSequence.slice(0, 1))}${JSON.stringify(referenceFailure)}\n`
+    const result = runGoldenGate(directory, output, 7)
+    expect(result.outcome.status).toBe(7)
+    expect(result.outcome.stderr).toBe('')
+    expect(result.outcome.stdout).toBe(output)
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+    ).toEqual(referenceSequence.slice(0, 1))
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayFailureObservation,
+    ).toEqual(referenceFailure)
+    expect(result.evidence.redactedDiagnostic).toBeUndefined()
     for (const secret of result.secrets) {
       expect(
         `${result.outcome.stdout}${result.outcome.stderr}${result.evidenceText}`,
@@ -277,23 +610,24 @@ describe('CI gate schema-Golden Reference replay sequence', () => {
   })
 
   it.each([0, 1, 2, 3, 4])(
-    'preserves nonzero child exit with exact prefix length %i',
+    'rejects nonzero child output with a boundary prefix but no failure at length %i',
     (length) => {
-      const directory = tempDirectory()
-      const prefix = referenceSequence.slice(0, length)
-      const result = runGoldenGate(directory, serialized(prefix), 7)
+      const result = runGoldenGate(
+        tempDirectory(),
+        serialized(referenceSequence.slice(0, length)),
+        7,
+      )
       expect(result.outcome.status).toBe(7)
-      expect(result.outcome.stderr).toBe('')
-      expect(result.outcome.stdout).toBe(length === 0 ? '' : serialized(prefix))
-      if (length === 0) {
-        expect(
-          result.evidence.schemaGoldenReferenceMigrationReplayObservations,
-        ).toBeUndefined()
-      } else {
-        expect(
-          result.evidence.schemaGoldenReferenceMigrationReplayObservations,
-        ).toEqual(prefix)
-      }
+      expect(result.outcome.stdout).toBe('')
+      expect(result.outcome.stderr).toBe(
+        'Schema Golden replay evidence failed closed.\n',
+      )
+      expect(
+        result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+      ).toBeUndefined()
+      expect(
+        result.evidence.schemaGoldenReferenceMigrationReplayFailureObservation,
+      ).toBeUndefined()
     },
   )
 
@@ -316,6 +650,69 @@ describe('CI gate schema-Golden Reference replay sequence', () => {
       ).toBeUndefined()
     },
   )
+
+  it.each([
+    [
+      'failure with no matching boundary',
+      `${JSON.stringify(referenceFailure)}\n`,
+    ],
+    [
+      'contract drift',
+      `${serialized(referenceSequence.slice(0, 1))}${JSON.stringify({
+        ...referenceFailure,
+        contract: 'post',
+      })}\n`,
+    ],
+    [
+      'replica drift',
+      `${serialized(referenceSequence.slice(0, 1))}${JSON.stringify({
+        ...referenceFailure,
+        replica: 'b',
+      })}\n`,
+    ],
+    [
+      'nested role drift',
+      `${serialized(referenceSequence.slice(0, 1))}${JSON.stringify({
+        ...referenceFailure,
+        localMigrationReplayFailureDiagnostic: {
+          ...referenceFailure.localMigrationReplayFailureDiagnostic,
+          role: 'source',
+        },
+      })}\n`,
+    ],
+    [
+      'wrong migration/count binding',
+      `${serialized(referenceSequence.slice(0, 1))}${JSON.stringify({
+        ...referenceFailure,
+        localMigrationReplayFailureDiagnostic: {
+          ...referenceFailure.localMigrationReplayFailureDiagnostic,
+          completedMigrationCount: 7,
+        },
+      })}\n`,
+    ],
+    [
+      'duplicate failure',
+      `${serialized(referenceSequence.slice(0, 1))}${JSON.stringify(referenceFailure)}\n${JSON.stringify(referenceFailure)}\n`,
+    ],
+    [
+      'boundary after terminal failure',
+      `${serialized(referenceSequence.slice(0, 1))}${JSON.stringify(referenceFailure)}\n${JSON.stringify(referenceSequence[1])}\n`,
+    ],
+  ])('rejects %s without persisting either typed field', (_label, output) => {
+    const result = runGoldenGate(tempDirectory(), output, 9)
+    expect(result.outcome.status).toBe(9)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Schema Golden replay evidence failed closed.\n',
+    )
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+    ).toBeUndefined()
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayFailureObservation,
+    ).toBeUndefined()
+    expect(result.evidence.redactedDiagnostic).toBeUndefined()
+  })
 
   it.each([
     ['duplicate', [referenceSequence[0], referenceSequence[0]], 0, 1],

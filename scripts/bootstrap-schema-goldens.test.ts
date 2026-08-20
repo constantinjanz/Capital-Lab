@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -5,6 +7,7 @@ import {
   buildBootstrapProvenance,
   parseSchemaGoldenBootstrapOptions,
   propagateLocalMigrationReplayDiagnostic,
+  propagateLocalMigrationReplayOutcome,
   referenceConfig,
   referencePortPlan,
 } from './bootstrap-schema-goldens.mjs'
@@ -27,6 +30,40 @@ const valid = [
   '--output-dir=C:/ephemeral/goldens',
   '--run-id=run-12345-1',
 ]
+const migrationBasenames = [
+  '20260801000000_first.sql',
+  '20260801000001_second.sql',
+]
+
+function replayBoundary(contract: 'pre' | 'post' = 'pre') {
+  return {
+    schemaVersion: 1,
+    status: 'local_migration_replay_boundary_observed',
+    stage: 'history_preflight',
+    role: 'reference',
+    contract,
+    psqlQueryCompleted: true,
+    historySchemaExists: false,
+    historyRelationExists: false,
+  }
+}
+
+function replayFailure(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 1,
+    status: 'local_migration_replay_failure_observed',
+    role: 'reference',
+    contract: 'pre',
+    stage: 'migration_apply',
+    migrationBasename: migrationBasenames[1],
+    completedMigrationCount: 1,
+    psqlExitCode: 3,
+    sqlstate: '42P01',
+    signal: null,
+    timedOut: false,
+    ...overrides,
+  }
+}
 
 describe('seed-free schema-Golden bootstrap closure', () => {
   it('accepts exactly the reviewed CLI arguments', () => {
@@ -231,6 +268,163 @@ describe('seed-free schema-Golden bootstrap closure', () => {
       expect(writes.join('')).not.toContain('fake-child-token')
     },
   )
+
+  it('evaluates the complete failed child before emitting Boundary then Failure', () => {
+    const boundary = replayBoundary()
+    const failure = replayFailure()
+    const secret = [
+      'postgresql',
+      '://postgres:',
+      'fake-password',
+      '@127.0.0.1/postgres',
+    ].join('')
+    const writes: string[] = []
+    const propagated = propagateLocalMigrationReplayOutcome(
+      {
+        code: 1,
+        signal: null,
+        timedOut: false,
+        stdout: Buffer.from(
+          `${secret}\n${JSON.stringify(boundary)}\n${JSON.stringify(failure)}\ntoken=fake-child-token\n`,
+        ),
+      },
+      { contract: 'pre', replica: 'a' },
+      migrationBasenames,
+      {
+        write: (value: string) => {
+          writes.push(value)
+          return true
+        },
+      },
+    )
+    const observation = {
+      schemaVersion: 1,
+      status: 'schema_golden_reference_migration_replay_observed',
+      contract: 'pre',
+      replica: 'a',
+      localMigrationReplayDiagnostic: boundary,
+    }
+    const failureObservation = {
+      schemaVersion: 1,
+      status: 'schema_golden_reference_migration_replay_failure_observed',
+      contract: 'pre',
+      replica: 'a',
+      localMigrationReplayFailureDiagnostic: failure,
+    }
+    expect(propagated).toEqual({ observation, failureObservation })
+    expect(writes).toEqual([
+      `${JSON.stringify(observation)}\n`,
+      `${JSON.stringify(failureObservation)}\n`,
+    ])
+    expect(writes.join('')).not.toContain(secret)
+    expect(writes.join('')).not.toContain('fake-child-token')
+  })
+
+  it('keeps the completed Reference replay path Boundary-only', () => {
+    const boundary = replayBoundary('post')
+    const writes: string[] = []
+    expect(
+      propagateLocalMigrationReplayOutcome(
+        {
+          code: 0,
+          signal: null,
+          timedOut: false,
+          stdout: `${JSON.stringify(boundary)}\n${JSON.stringify({ status: 'local_migrations_replayed', contract: 'post', migrationCount: 2, seed: 'omit' })}\n`,
+        },
+        { contract: 'post', replica: 'b' },
+        migrationBasenames,
+        {
+          write: (value: string) => {
+            writes.push(value)
+            return true
+          },
+        },
+      ),
+    ).toEqual({
+      observation: {
+        schemaVersion: 1,
+        status: 'schema_golden_reference_migration_replay_observed',
+        contract: 'post',
+        replica: 'b',
+        localMigrationReplayDiagnostic: boundary,
+      },
+      failureObservation: null,
+    })
+    expect(writes).toHaveLength(1)
+  })
+
+  it('emits nothing for incomplete, contradictory, or drifted child evidence', () => {
+    const boundary = replayBoundary()
+    const failure = replayFailure()
+    for (const [outcome, expected] of [
+      [
+        {
+          code: 1,
+          signal: null,
+          timedOut: false,
+          stdout: JSON.stringify(boundary),
+        },
+        { contract: 'pre', replica: 'a' },
+      ],
+      [
+        {
+          code: 0,
+          signal: null,
+          timedOut: false,
+          stdout: `${JSON.stringify(boundary)}\n${JSON.stringify(failure)}`,
+        },
+        { contract: 'pre', replica: 'a' },
+      ],
+      [
+        {
+          code: 1,
+          signal: null,
+          timedOut: false,
+          stdout: `${JSON.stringify(boundary)}\n${JSON.stringify(failure)}`,
+        },
+        { contract: 'post', replica: 'a' },
+      ],
+    ] as const) {
+      const writes: string[] = []
+      expect(() =>
+        propagateLocalMigrationReplayOutcome(
+          outcome,
+          expected,
+          migrationBasenames,
+          {
+            write: (value: string) => {
+              writes.push(value)
+              return true
+            },
+          },
+        ),
+      ).toThrow()
+      expect(writes).toEqual([])
+    }
+  })
+
+  it('keeps identity evaluation ahead of replay evidence and stops before capture', () => {
+    const source = readFileSync(
+      new URL('./bootstrap-schema-goldens.mjs', import.meta.url),
+      'utf8',
+    )
+    const child = source.indexOf('async function applyReferenceMigrations')
+    const identity = source.indexOf(
+      'parseLocalContainerIdentityRejection(outcome.stdout)',
+      child,
+    )
+    const propagation = source.indexOf(
+      'propagateLocalMigrationReplayOutcome(outcome',
+      identity,
+    )
+    const mainLoop = source.lastIndexOf('for (const build of pair)')
+    const apply = source.indexOf('await applyReferenceMigrations(', mainLoop)
+    const captures = source.indexOf('const captures = []', apply)
+    expect(identity).toBeGreaterThan(child)
+    expect(propagation).toBeGreaterThan(identity)
+    expect(apply).toBeGreaterThan(mainLoop)
+    expect(captures).toBeGreaterThan(apply)
+  })
 
   it('rejects context or replica drift and emits nothing after identity rejection', () => {
     const diagnostic = {

@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events'
+
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -24,6 +26,7 @@ vi.mock('./lib/safe-process.mjs', () => ({
 
 import {
   inspectOwnedDatabaseContainer,
+  isOwnedLocalPostgresToolFailure,
   runOwnedPostgresTool,
 } from './lib/local-container-postgres.mjs'
 import { LocalContainerImageIdentityRejection } from './lib/local-container-identity-diagnostic.mjs'
@@ -55,6 +58,129 @@ function successfulInspect(value: unknown) {
     status: 0,
     stdout: JSON.stringify([value]),
   }
+}
+
+type MockChild = EventEmitter & {
+  kill: ReturnType<typeof vi.fn>
+  stderr: EventEmitter
+  stdin: { end: ReturnType<typeof vi.fn> }
+  stdout: EventEmitter
+}
+
+type SanitizedPsqlFailure = Error & {
+  exitCode: number | null
+  lastClientStageMarkerIndex: number | null
+  signal: string | null
+  sqlstate: string | null
+  timedOut: boolean
+}
+
+const rollbackMarkerPrefix =
+  'CAPITAL_LAB_CLIENT_STAGE_MARKER:ROLLBACK_REHEARSAL:'
+const rollbackMarkerPlan = Object.freeze({
+  markers: Object.freeze([
+    `${rollbackMarkerPrefix}0:history_baseline:0:-`,
+    `${rollbackMarkerPrefix}1:migration_body:0:20260809150000_post_build_hosting_safety.sql`,
+    `${rollbackMarkerPrefix}2:migration_body:1:20260809150417_activation_readiness_follow_up.sql`,
+    `${rollbackMarkerPrefix}3:probe:4:-`,
+    `${rollbackMarkerPrefix}4:rollback_verification:4:-`,
+  ]),
+  prefix: rollbackMarkerPrefix,
+})
+const migrationReplayMarkerPrefix =
+  'CAPITAL_LAB_CLIENT_STAGE_MARKER:MIGRATION_REPLAY:'
+const migrationReplayMarkerPlan = Object.freeze({
+  markers: Object.freeze([
+    `${migrationReplayMarkerPrefix}0|migration_apply|8|20260806165114_private_storage.sql`,
+  ]),
+  prefix: migrationReplayMarkerPrefix,
+})
+
+function prepareValidSourceInspection() {
+  const container = containerInspection(
+    'supabase_db_capital-lab-ci-run-12345-1',
+    '54322',
+  )
+  processMocks.spawnSync
+    .mockReturnValueOnce(successfulInspect(container))
+    .mockReturnValueOnce(successfulInspect(imageInspection))
+}
+
+function spawnedChild({
+  code = 0,
+  emitError,
+  endError,
+  signal = null,
+  stderr = '',
+  stdout = '',
+}: {
+  code?: number | null
+  emitError?: Error
+  endError?: Error
+  signal?: string | null
+  stderr?: string
+  stdout?: string
+} = {}): MockChild {
+  const child = new EventEmitter() as MockChild
+  child.stdout = new EventEmitter()
+  child.stderr = new EventEmitter()
+  child.kill = vi.fn(() => true)
+  child.stdin = {
+    end: vi.fn(() => {
+      if (endError) throw endError
+      queueMicrotask(() => {
+        if (stdout) child.stdout.emit('data', Buffer.from(stdout))
+        if (stderr) child.stderr.emit('data', Buffer.from(stderr))
+        if (emitError) child.emit('error', emitError)
+        else child.emit('close', code, signal)
+      })
+    }),
+  }
+  return child
+}
+
+function hangingChild(): MockChild {
+  const child = new EventEmitter() as MockChild
+  child.stdout = new EventEmitter()
+  child.stderr = new EventEmitter()
+  child.stdin = { end: vi.fn() }
+  child.kill = vi.fn((signal: string) => {
+    if (signal === 'SIGTERM') {
+      queueMicrotask(() => child.emit('close', null, 'SIGTERM'))
+    }
+    return true
+  })
+  return child
+}
+
+async function rejectedPsqlFailure(promise: Promise<unknown>) {
+  const error = await promise.catch((caught: unknown) => caught)
+  expect(isOwnedLocalPostgresToolFailure(error)).toBe(true)
+  return error as SanitizedPsqlFailure
+}
+
+async function runRejectedPsql(
+  stderr: string,
+  {
+    clientStageMarkerPlan,
+    code = 1,
+    signal = null,
+  }: {
+    clientStageMarkerPlan?: {
+      readonly markers: readonly string[]
+      readonly prefix: string
+    }
+    code?: number | null
+    signal?: string | null
+  } = {},
+) {
+  prepareValidSourceInspection()
+  processMocks.spawn.mockReturnValueOnce(spawnedChild({ code, signal, stderr }))
+  return rejectedPsqlFailure(
+    runOwnedPostgresTool('source', 'psql', ['--no-psqlrc'], 'select 1;', {
+      clientStageMarkerPlan,
+    }),
+  )
 }
 
 async function rejectedIdentity(promise: Promise<unknown>) {
@@ -351,4 +477,284 @@ describe('owned local PostgreSQL subprocess image boundary', () => {
       expect(processMocks.spawn).not.toHaveBeenCalled()
     },
   )
+
+  describe('sanitized psql failure boundary', () => {
+    it('sets SQLSTATE-only verbosity centrally and removes marker lines on success', async () => {
+      prepareValidSourceInspection()
+      processMocks.spawn.mockReturnValueOnce(
+        spawnedChild({
+          stderr: [
+            rollbackMarkerPlan.markers[0],
+            'NOTICE: safe non-marker output',
+            `${rollbackMarkerPrefix}99:unknown:9:-`,
+            '',
+          ].join('\n'),
+          stdout: 'rollback_verified\n',
+        }),
+      )
+
+      const result = await runOwnedPostgresTool(
+        'source',
+        'psql',
+        ['--no-psqlrc', '--set=ON_ERROR_STOP=1'],
+        'select 1;',
+        { clientStageMarkerPlan: rollbackMarkerPlan },
+      )
+
+      expect(result).toEqual({
+        stderr: 'NOTICE: safe non-marker output\n',
+        stdout: 'rollback_verified\n',
+      })
+      const dockerArguments = processMocks.spawn.mock.calls[0]?.[1] as string[]
+      expect(
+        dockerArguments.filter(
+          (argument) => argument === '--set=VERBOSITY=sqlstate',
+        ),
+      ).toHaveLength(1)
+      expect(dockerArguments).toEqual([
+        'exec',
+        '--interactive',
+        'supabase_db_capital-lab-ci-run-12345-1',
+        'psql',
+        '--username=postgres',
+        '--dbname=postgres',
+        '--no-psqlrc',
+        '--set=ON_ERROR_STOP=1',
+        '--set=VERBOSITY=sqlstate',
+      ])
+    })
+
+    it.each([
+      ['exactly one', 'ERROR:  42P01\n', '42P01'],
+      ['none', 'psql client failure without a server code\n', null],
+      ['multiple', 'ERROR:  42P01\nERROR:  23505\n', null],
+      ['lowercase', 'ERROR:  42p01\n', null],
+      ['short', 'ERROR:  42P0\n', null],
+      ['long', 'ERROR:  42P010\n', null],
+      ['suffix text', 'ERROR:  42P01 relation-name\n', null],
+      ['one valid plus one malformed', 'ERROR:  42P01\nERROR:  42p01\n', null],
+    ] as const)(
+      'derives %s SQLSTATE safely',
+      async (_label, stderr, expected) => {
+        const error = await runRejectedPsql(stderr)
+        expect(error).toMatchObject({
+          exitCode: 1,
+          signal: null,
+          sqlstate: expected,
+          timedOut: false,
+        })
+      },
+    )
+
+    it('accepts the exact pipe-delimited Migration-Replay marker plan', async () => {
+      const error = await runRejectedPsql(
+        `${migrationReplayMarkerPlan.markers[0]}\nERROR:  42P01\n`,
+        { clientStageMarkerPlan: migrationReplayMarkerPlan },
+      )
+      expect(error.lastClientStageMarkerIndex).toBe(0)
+    })
+
+    it('retains only fixed typed fields and discards raw failure material', async () => {
+      const fakeSecret =
+        'postgresql://postgres:' + 'fake-password' + '@127.0.0.1:59999/postgres'
+      const error = await runRejectedPsql(
+        `ERROR:  42P01\n${fakeSecret}\nselect fake_raw_sql;\n`,
+      )
+
+      expect(error.message).toBe('Owned local PostgreSQL tool failed closed')
+      expect(error).toMatchObject({
+        exitCode: 1,
+        lastClientStageMarkerIndex: null,
+        signal: null,
+        sqlstate: '42P01',
+        timedOut: false,
+      })
+      expect(Object.getOwnPropertyNames(error).sort()).toEqual(
+        [
+          'exitCode',
+          'lastClientStageMarkerIndex',
+          'message',
+          'signal',
+          'sqlstate',
+          'timedOut',
+        ].sort(),
+      )
+      expect(Object.getOwnPropertySymbols(error)).toEqual([])
+      expect(Object.isFrozen(error)).toBe(true)
+      for (const serialized of [
+        String(error),
+        JSON.stringify(error),
+        JSON.stringify(Object.getOwnPropertyDescriptors(error)),
+      ]) {
+        expect(serialized).not.toContain(fakeSecret)
+        expect(serialized).not.toContain('fake_raw_sql')
+        expect(serialized).not.toContain('127.0.0.1')
+        expect(serialized).not.toContain('59999')
+        expect(serialized).not.toContain('stderr')
+        expect(serialized).not.toContain('stdout')
+        expect(serialized).not.toContain('cause')
+        expect(serialized).not.toContain('command')
+        expect(serialized).not.toContain('args')
+      }
+    })
+
+    it.each([
+      ['valid prefix', rollbackMarkerPlan.markers.slice(0, 3), 2],
+      [
+        'duplicate',
+        [
+          rollbackMarkerPlan.markers[0],
+          rollbackMarkerPlan.markers[1],
+          rollbackMarkerPlan.markers[1],
+        ],
+        null,
+      ],
+      [
+        'unknown',
+        [
+          rollbackMarkerPlan.markers[0],
+          `${rollbackMarkerPrefix}99:unknown:1:-`,
+        ],
+        null,
+      ],
+      [
+        'backward',
+        [
+          rollbackMarkerPlan.markers[0],
+          rollbackMarkerPlan.markers[1],
+          rollbackMarkerPlan.markers[0],
+        ],
+        null,
+      ],
+      [
+        'skipped',
+        [rollbackMarkerPlan.markers[0], rollbackMarkerPlan.markers[2]],
+        null,
+      ],
+      ['missing first', [rollbackMarkerPlan.markers[1]], null],
+    ] as const)(
+      'accepts only a forward, unique marker prefix: %s',
+      async (_label, markers, expected) => {
+        const error = await runRejectedPsql(
+          `${markers.join('\n')}\nERROR:  42P01\n`,
+          { clientStageMarkerPlan: rollbackMarkerPlan },
+        )
+        expect(error.lastClientStageMarkerIndex).toBe(expected)
+      },
+    )
+
+    it('returns no SQLSTATE or marker after bounded stderr truncation', async () => {
+      const error = await runRejectedPsql(
+        `${'x'.repeat(70 * 1024)}\n${rollbackMarkerPlan.markers[0]}\nERROR:  42P01\n`,
+        { clientStageMarkerPlan: rollbackMarkerPlan },
+      )
+      expect(error).toMatchObject({
+        lastClientStageMarkerIndex: null,
+        sqlstate: null,
+      })
+    })
+
+    it('rejects an invalid caller marker plan without starting psql', async () => {
+      prepareValidSourceInspection()
+      const error = await rejectedPsqlFailure(
+        runOwnedPostgresTool('source', 'psql', [], 'select 1;', {
+          clientStageMarkerPlan: {
+            markers: ['NOT_RESERVED:history_preflight'],
+            prefix: 'NOT_RESERVED:',
+          },
+        }),
+      )
+      expect(error).toMatchObject({
+        exitCode: null,
+        lastClientStageMarkerIndex: null,
+        signal: null,
+        sqlstate: null,
+        timedOut: false,
+      })
+      expect(processMocks.spawn).not.toHaveBeenCalled()
+    })
+
+    it('sanitizes valid and invalid child signals', async () => {
+      const signaled = await runRejectedPsql('ERROR:  42P01\n', {
+        code: null,
+        signal: 'SIGTERM',
+      })
+      expect(signaled).toMatchObject({
+        exitCode: null,
+        signal: 'SIGTERM',
+        sqlstate: null,
+        timedOut: false,
+      })
+
+      const invalidSignal = await runRejectedPsql('ERROR:  42P01\n', {
+        code: 1,
+        signal: 'SIG_FAKE_SECRET',
+      })
+      expect(invalidSignal).toMatchObject({
+        exitCode: null,
+        signal: null,
+        sqlstate: null,
+        timedOut: false,
+      })
+      expect(JSON.stringify(invalidSignal)).not.toContain('FAKE_SECRET')
+    })
+
+    it('reports timeout without claiming a buffered SQLSTATE', async () => {
+      vi.useFakeTimers()
+      try {
+        prepareValidSourceInspection()
+        const child = hangingChild()
+        processMocks.spawn.mockReturnValueOnce(child)
+        const promise = rejectedPsqlFailure(
+          runOwnedPostgresTool('source', 'psql', ['--no-psqlrc'], 'select 1;', {
+            timeoutMs: 25,
+          }),
+        )
+        await vi.advanceTimersByTimeAsync(25)
+        const error = await promise
+        expect(error).toMatchObject({
+          exitCode: null,
+          signal: 'SIGTERM',
+          sqlstate: null,
+          timedOut: true,
+        })
+        expect(child.kill).toHaveBeenCalledWith('SIGTERM')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it.each(['event', 'stdin', 'throw'] as const)(
+      'sanitizes a spawn %s without retaining its error',
+      async (mode) => {
+        const fakeSecret = 'FAKE_SPAWN_SECRET=/private/local/path'
+        prepareValidSourceInspection()
+        if (mode === 'event') {
+          processMocks.spawn.mockReturnValueOnce(
+            spawnedChild({ emitError: new Error(fakeSecret) }),
+          )
+        } else if (mode === 'stdin') {
+          processMocks.spawn.mockReturnValueOnce(
+            spawnedChild({ endError: new Error(fakeSecret) }),
+          )
+        } else {
+          processMocks.spawn.mockImplementationOnce(() => {
+            throw new Error(fakeSecret)
+          })
+        }
+        const error = await rejectedPsqlFailure(
+          runOwnedPostgresTool('source', 'psql', [], 'select 1;'),
+        )
+        expect(error).toMatchObject({
+          exitCode: null,
+          lastClientStageMarkerIndex: null,
+          signal: null,
+          sqlstate: null,
+          timedOut: false,
+        })
+        expect(String(error)).not.toContain(fakeSecret)
+        expect(JSON.stringify(error)).not.toContain(fakeSecret)
+      },
+    )
+  })
 })

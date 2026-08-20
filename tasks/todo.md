@@ -2,6 +2,54 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## EXACT-FD combined failure-observation pass (2026-08-20)
+
+Safety status: exactly one normal diagnostic commit FD from
+`899123f47d6e85de06002ab65457f3d913901366`, exactly one non-force push, and
+only the resulting automatic Push, PR, Golden, and Preview runs. This pass may
+observe the existing Rollback and Reference replay failures; it may not repair
+them, alter migrations/configuration/workflows, import a Golden, access a
+Hosted/Production database, rerun a workflow, promote a deployment, or perform
+provider, broker, Canary, or trading calls.
+
+- [x] Pass the complete fail-closed local/GitHub preflight in the sole new LF
+      clone: exact F and parent E, clean branch/upstream at `+0/-0`, Draft/open/
+      unmerged PR #21 with matching refs, terminal Exact-F jobs and no later
+      commit, force-push, or unexpected workflow attempt.
+- [x] Add the shared sanitized PostgreSQL failure boundary, strict Rollback
+      stage/SQLSTATE observation, and buffered CI evidence without exposing raw
+      streams, commands, SQL, paths, identifiers, environment values, or
+      secrets.
+- [x] Add the inner and replica-bound Reference replay failure observations
+      while preserving the pre-mutation Boundary, call/query order, identity
+      priority, and the unchanged four-Boundary success path.
+- [x] Pass focused and complete relevant tests, `pnpm verify`, checksum
+      generation/verification, `git diff --check`, credential scan, and final
+      allowlist audit; record the exact results below.
+- [x] Create exactly commit FD with message
+      `ci: observe rollback and reference replay failures`, verify parent F,
+      push once without force, await only the natural automatic runs, inventory
+      all artifacts, report the observed diagnoses, and stop.
+
+Pre-commit verification on Node `v24.14.0`, pnpm `10.33.2`, and unchanged
+Supabase CLI workflow pin `2.113.0`: the final seven-file FD focus passed 324
+tests; the credential-safe fixture follow-up passed four files / 181 tests;
+the complete four-worker Vitest suite passed 108 files / 1,144 tests. The
+unmodified `pnpm verify` command, with only the process-scoped supported
+`VITEST_MAX_WORKERS=4` resource bound, passed full-tree Prettier, zero-warning
+ESLint, strict TypeScript, all 1,144 tests, PAPER-only, the working-tree plus
+100-ancestor credential scan with zero findings, and the Next.js 16.3.0
+production build. `git diff --check`, the prospective-index checksum verifier,
+and the exact 16-file allowlist audit also passed.
+
+Two earlier unbounded full-suite attempts exposed only local worker-resource
+variance: the first could not start two workers, and the second timed out two
+otherwise unchanged tests under parallel load. The affected files immediately
+passed 10/10 and 11/11 in isolation; no assertion failed. A first credential
+scan then correctly rejected six literal fake-secret fixtures introduced by
+the diagnostic tests. Their values are now assembled only at runtime, the same
+leak regressions passed, and the bounded credential scan is green.
+
 ## EXACT-F fresh-stack migration-history repair (2026-08-19)
 
 Safety status: exactly one normal functional commit F from
@@ -33,10 +81,11 @@ broker, Canary, or trading call is authorized.
       secrecy.
 - [x] Pass all focused tests, `pnpm verify`, checksum generation/verification,
       `git diff --check`, and the final allowlist audit; record exact results.
-- [ ] Create exactly commit F with message
+- [x] Create exactly commit F with message
       `ci: initialize local migration history boundary`, push once without
-      force, await only natural automatic Exact-F results, inspect the row-free
-      Golden candidate without importing it, and stop.
+      force, and await only natural automatic Exact-F results. Those runs
+      stopped at the newly exposed Rollback rehearsal and Reference PRE/A
+      replay failures, so no row-free Golden candidate was created or imported.
 
 Pre-commit verification on Node `v24.14.0`, pnpm `10.33.2`, and the unchanged
 temporary Supabase CLI `2.113.0`: the final parser/Gate slice passed 2 files /
