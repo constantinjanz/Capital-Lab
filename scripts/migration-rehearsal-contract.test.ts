@@ -152,14 +152,19 @@ describe('rollback migration rehearsal contract', () => {
 
   it('requires the grouped CASE expression in the bounded mutation guard', () => {
     const fourthMigrationBody = actualMigrations()[3].body
-    expect(fourthMigrationBody).toContain(`if not changed <@ (case
+    const canonicalFourthMigrationBody = canonicalRepositoryTextBytes(
+      Buffer.from(fourthMigrationBody, 'utf8'),
+    ).toString('utf8')
+    expect(canonicalFourthMigrationBody).toContain(`if not changed <@ (case
       when tg_table_schema = 'private'
         and tg_table_name = 'application_settings'
         and context_operation = 'emergency_kill'
       then rule.update_columns || array['is_secret']::text[]
       else rule.update_columns
     end) then`)
-    expect(fourthMigrationBody).not.toMatch(/if not changed <@ case\b/u)
+    expect(canonicalFourthMigrationBody).not.toMatch(
+      /if not changed <@ case\b/u,
+    )
   })
 
   it('canonicalizes LF and CRLF digests while preserving raw CRLF bodies', () => {

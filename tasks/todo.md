@@ -2,6 +2,48 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## EXACT-F3 Windows and pgTAP gate closure (2026-08-21)
+
+Safety status: one minimal F3 commit from exact F2
+`37c42910439f5a6bedb58a6bbcca9da65b7d6c8c`, one non-force push, and only the
+naturally resulting Push, PR, Golden, and Preview runs. No migration, SQL body,
+hash, Golden, network implementation, wrapper, local full Database/Golden
+pipeline, Hosted/Production access, rerun, dispatch, cancel, amend, second
+commit, merge, or activation is authorized.
+
+- [x] Pass the complete fail-closed preflight in the sole new LF clone: exact
+      F2 commit/parent/message/tree, Draft/open/unmerged PR #21 and matching
+      refs, clean `+0/-0` upstream, exact migration/set/manifest hashes, all
+      three natural F2 Attempt-1 runs, and both exact residual CI causes.
+- [x] Canonicalize only the grouped-CASE assertion view while preserving the
+      raw migration body and all digest, SQL execution, transaction, timeout,
+      ordering, and marker contracts.
+- [x] Bind only the existing pgTAP workflow command to the already verified
+      run-owned network and add one read-only workflow-binding regression test;
+      preserve the network implementation, identity, labels, loopback binding,
+      Start, Reset, Redaction, and Cleanup contracts.
+- [x] Pass the two focused tests, the platform-independent Windows catalog,
+      complete `pnpm verify`, checksum generation/verification, and every
+      workflow, migration, hash, credential, diff, and allowlist audit.
+- [ ] Create exactly one F3 commit with message
+      `fix: close windows and pgtap gates`, verify its exact F2 parent and
+      checksum closure, push once without force, await only natural runs, audit
+      all evidence externally, and stop.
+
+Automatic F3 acceptance remains pending and is not claimed before the natural
+Push, PR, Golden, and Preview runs complete.
+
+Pre-commit verification on Node `v24.14.0` and pnpm `10.33.2` is green: the two
+focused files passed 44/44 tests; the exact unchanged 22-file Windows catalog
+passed 331/331 tests; all 21 Windows-sensitive wrappers passed `node --check`;
+and process-local `VITEST_MAX_WORKERS=4 pnpm verify` passed full-tree Prettier,
+zero-warning ESLint, strict TypeScript, 108 Vitest files / 1,173 tests,
+PAPER-only, the Working Tree plus 100-ancestor credential scan with zero
+findings, and the Next.js 16.3.0 production build. The prospective checksum
+closure passed with exactly 175 sorted entries; exact workflow replacement,
+migration, backup, hash, diff, credential, and six-file allowlist audits all
+passed. Exact-commit checksum verification remains mandatory after commit.
+
 ## EXACT-F2 activation-readiness rehearsal repair (2026-08-20)
 
 Safety status: one minimal repair commit F2 from exact FD
@@ -26,7 +68,7 @@ dispatch, cancel, amend, second commit, merge, or activation is authorized.
 - [x] Pass the required focused tests and syntaxchecks, complete `pnpm verify`,
       checksum generation/verification, diff/credential/allowlist/byte/hash
       audits, and record exact results below.
-- [ ] Create exactly one F2 commit with message
+- [x] Create exactly one F2 commit with message
       `fix: repair activation readiness rehearsals`, verify its exact parent and
       checksum closure, push once without force, await only natural runs, audit
       row-free candidate/evidence artifacts externally, and stop.
@@ -45,6 +87,15 @@ and `be330cdc763ce83ebeb7d1ef7e319580f8bc5a4ae05fb15823a58087b8f35e88`.
 Prospective checksum generation and verification passed against the real merge
 base with exactly 175 sorted entries; the exact-index commit audit remains
 mandatory before publication.
+
+F2 was committed as `37c42910439f5a6bedb58a6bbcca9da65b7d6c8c`
+with exact FD parent and pushed exactly once without force. Its natural Push and
+PR runs preserved successful Application, Browser, Rollback, PRE/POST replay,
+Golden, Candidate, and Preview evidence, while remaining blocked exclusively by
+the LF/CRLF-sensitive grouped-CASE assertion and the missing explicit pgTAP
+binding to the already verified run-owned Docker network. Disaster Recovery
+failed only at the expected missing committed PRE-Golden `ENOENT`; no F2
+Candidate was imported and no post-push repair was performed.
 
 ## EXACT-FD combined failure-observation pass (2026-08-20)
 

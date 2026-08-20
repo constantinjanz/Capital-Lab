@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const processMocks = vi.hoisted(() => ({ spawnSync: vi.fn() }))
@@ -67,6 +69,33 @@ describe('run-owned local Supabase loopback network', () => {
     expect(() =>
       ownedLocalSupabaseNetworkSpec('source', target, 'runtime-input'),
     ).toThrow(/identity is invalid/u)
+  })
+
+  it('binds the pgTAP sibling container to the exact run-owned network', () => {
+    const workflow = readFileSync(
+      new URL('../../.github/workflows/ci.yml', import.meta.url),
+      'utf8',
+    )
+    const pgtapLines = workflow
+      .split(/\r?\n/u)
+      .filter((line) => line.includes('--id database-pgtap --'))
+    expect(pgtapLines).toHaveLength(1)
+
+    const pgtapLine = pgtapLines[0]
+    expect(pgtapLine.trim()).toBe(
+      '- run: node scripts/run-ci-gate.mjs --id database-pgtap -- supabase test db "--workdir=${CAPITAL_LAB_CI_WORKDIR}" "--network-id=capital-lab-net-capital-lab-ci-${CAPITAL_LAB_CI_RUN_ID}"',
+    )
+    expect(pgtapLine.match(/--network-id=/gu)).toHaveLength(1)
+    expect(pgtapLine).toContain('"--workdir=${CAPITAL_LAB_CI_WORKDIR}"')
+    expect(pgtapLine).not.toContain('supabase_network_')
+    expect(pgtapLine).not.toContain('--linked')
+    expect(pgtapLine).not.toContain('--db-url')
+
+    const networkArgument = pgtapLine.match(/"--network-id=([^"]+)"/u)
+    expect(networkArgument).not.toBeNull()
+    expect(
+      networkArgument?.[1].replace('${CAPITAL_LAB_CI_RUN_ID}', target.runId),
+    ).toBe(spec.networkName)
   })
 
   it.each([

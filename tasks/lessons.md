@@ -27,3 +27,5 @@
 - A Windows CI allowlist is only complete when it covers every executable wrapper reachable from package scripts, not just newly added activation helpers. Scan package entrypoints for legacy `shell: true` paths and exercise them with injected native-process fixtures.
 - Before authorizing a new CLI argument in an exact-file task, trace it through the caller, parser, canonicalizer, and final spawn reconstruction, and include every required wrapper and test file in the allowlist before execution.
 - Before freezing an exact-file allowlist for a changed invariant, search its old and new values repository-wide and trace every runner, validator, and success fixture that consumes it; include all necessary dependent files before execution.
+- When repository text intentionally preserves checkout bytes, canonicalize only the assertion view for multiline semantic checks and keep a separate test proving that execution still receives the raw bytes.
+- When a local CLI stack starts on an explicit Docker network, audit every later CLI subcommand that launches sibling containers and pass the same verified network identity explicitly.

@@ -143,7 +143,7 @@ jobs:
           node scripts/run-ci-gate.mjs --id database-reset-migrations -- \
             node scripts/apply-local-migrations-via-psql.mjs \
             --contract=post --seed=include --target=ci
-      - run: node scripts/run-ci-gate.mjs --id database-pgtap -- supabase test db "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
+      - run: node scripts/run-ci-gate.mjs --id database-pgtap -- supabase test db "--workdir=${CAPITAL_LAB_CI_WORKDIR}" "--network-id=capital-lab-net-capital-lab-ci-${CAPITAL_LAB_CI_RUN_ID}"
       - name: Seed-free pre- and post-activation backup and disposable restore
         shell: bash
         run: |
