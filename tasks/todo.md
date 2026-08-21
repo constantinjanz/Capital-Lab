@@ -2,38 +2,122 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
-## EXACT-F3 Windows and pgTAP gate closure (2026-08-21)
+## EXACT-F4 pgTAP API and Golden diagnostic closure (2026-08-21)
 
-Safety status: one minimal F3 commit from exact F2
-`37c42910439f5a6bedb58a6bbcca9da65b7d6c8c`, one non-force push, and only the
-naturally resulting Push, PR, Golden, and Preview runs. No migration, SQL body,
-hash, Golden, network implementation, wrapper, local full Database/Golden
-pipeline, Hosted/Production access, rerun, dispatch, cancel, amend, second
-commit, merge, or activation is authorized.
+Safety status: one minimal F4 commit from exact F3
+`23781a0ea1fc21469d5b7147fe8a74b57f7b2dc3`, one non-force push, and only the
+naturally resulting Push, PR, Golden, and Preview evidence. The scope is limited
+to the two pgTAP API bytes, the already allowlisted structured Golden diagnostic
+path, its real-spawn tests, the handoff manifest, and this task record. No
+migration, schema, Runtime SQL, Golden, workflow, network identity, timeout,
+Hosted/Production access, rerun, dispatch, cancel, amend, second commit, import,
+merge, Ready-for-Review, promotion, provider, broker, or trading action is
+authorized.
 
-- [x] Pass the complete fail-closed preflight in the sole new LF clone: exact
-      F2 commit/parent/message/tree, Draft/open/unmerged PR #21 and matching
-      refs, clean `+0/-0` upstream, exact migration/set/manifest hashes, all
-      three natural F2 Attempt-1 runs, and both exact residual CI causes.
-- [x] Canonicalize only the grouped-CASE assertion view while preserving the
-      raw migration body and all digest, SQL execution, transaction, timeout,
-      ordering, and marker contracts.
-- [x] Bind only the existing pgTAP workflow command to the already verified
-      run-owned network and add one read-only workflow-binding regression test;
-      preserve the network implementation, identity, labels, loopback binding,
-      Start, Reset, Redaction, and Cleanup contracts.
-- [x] Pass the two focused tests, the platform-independent Windows catalog,
-      complete `pnpm verify`, checksum generation/verification, and every
-      workflow, migration, hash, credential, diff, and allowlist audit.
-- [ ] Create exactly one F3 commit with message
-      `fix: close windows and pgtap gates`, verify its exact F2 parent and
+- [x] Pass the complete local and GitHub F3 preflight in the existing clean LF
+      clone: exact commit/parent/message/tree, Draft/open/unmerged PR #21,
+      matching refs, clean `+0/-0` upstream, exact SQL/migration/set/manifest
+      bytes, and all natural F3 evidence.
+- [x] Resume after the first fail-closed stop with the corrected Preview object
+      model: Actions runs `32424503359`, `32424506368`, and `32424506376` are
+      Attempt 1; Deployment `6011867651`, Deployment Status `17094350202`, and
+      Commit Status `52624257482` prove the successful F3 Preview; Check-Run
+      `96603670359` is only successful `Vercel Preview Comments` feedback.
+- [x] Replace exactly the two invalid pgTAP `like()` calls with `alike()` and
+      offer only an eligible originally failed Golden child's stdout to the
+      unchanged exact structured-diagnostic parser.
+- [x] Extend only the existing Golden real-spawn gate tests and preserve Success,
+      Identity-Rejection, migration-failure, buffering, exit, timeout, and
+      secret-suppression contracts.
+- [x] Pass the required focused tests, syntaxcheck, complete `pnpm verify`,
+      checksum generation/verification, diff/credential/allowlist/SQL-byte/
+      migration/backup/Golden/workflow audits, and record exact results.
+- [ ] Create exactly one commit with message
+      `fix: close pgtap and golden diagnostics`, verify exact F3 parent and final
       checksum closure, push once without force, await only natural runs, audit
       all evidence externally, and stop.
 
-Automatic F3 acceptance remains pending and is not claimed before the natural
-Push, PR, Golden, and Preview runs complete.
+The first preflight stopped before any repository or remote mutation because a
+feedback Check-Run had been typed as Preview deployment evidence. The corrected
+resume contract preserved zero F4 file changes, commits, pushes, reruns, cancels,
+imports, or other mutations before this section began.
 
-Pre-commit verification on Node `v24.14.0` and pnpm `10.33.2` is green: the two
+Focused verification on Node `v24.14.0` and pnpm `10.33.2` is green: the
+unchanged Gate syntaxcheck passed, and `run-ci-gate.test.ts`, unchanged
+`run-redacted-subprocess.test.ts`, and unchanged
+`bootstrap-schema-goldens.test.ts` passed 3 files / 129 tests. The first
+process-local `VITEST_MAX_WORKERS=4 pnpm verify` passed full-tree Prettier,
+zero-warning ESLint, strict TypeScript, 108 Vitest files / 1,178 tests,
+PAPER-only, the Working Tree plus 100-ancestor credential scan with zero
+findings, and the Next.js 16.3.0 production build.
+
+The scoped audits are also green: `git diff --check` passed; the exact six-file
+allowlist is closed; the SQL change is exactly two inserted ASCII `a` bytes,
+with 14/14 pgTAP files free of `select like(`; all 36 migrations are
+byte-identical to F3, with fourth-migration SHA-256
+`8bc7a0afd62cd5105729a0ba97357f07ee119f32dffa2c301d172581ac539250`
+and four-migration set SHA-256
+`be330cdc763ce83ebeb7d1ef7e319580f8bc5a4ae05fb15823a58087b8f35e88`;
+backups, Goldens, workflows, packages, locks, and every other protected file are
+unchanged. The prospective manifest closure passed with exactly 175 sorted
+entries and 20,057 bytes. Exact-commit checksum verification remains mandatory
+before publication.
+
+Automatic F4 acceptance remains pending and is not claimed before the natural
+Push, PR, Golden, and Preview results complete. No F2, F3, or eventual F4 Golden
+candidate is imported in F4.
+
+## EXACT-F3 Windows and pgTAP gate closure (2026-08-21)
+
+Safety status: F3 was committed as
+`23781a0ea1fc21469d5b7147fe8a74b57f7b2dc3` with exact F2 parent
+`37c42910439f5a6bedb58a6bbcca9da65b7d6c8c`, tree
+`063efe0e20adaaebf19b456e6454502f011d5bf1`, and message
+`fix: close windows and pgtap gates`; it was pushed exactly once without force.
+Only the natural Push, PR, Golden, and Preview evidence was evaluated.
+
+- [x] Pass the complete fail-closed F2 preflight and all scoped local
+      verification, checksum, credential, workflow, migration, backup, hash,
+      diff, and allowlist audits.
+- [x] Preserve raw migration bytes while making the grouped-CASE assertion view
+      LF/CRLF independent.
+- [x] Bind the existing pgTAP command to the already verified run-owned network
+      and keep all network implementation and cleanup contracts unchanged.
+- [x] Create the exact F3 commit, verify its F2 parent and checksum closure, and
+      perform exactly one non-force push.
+- [x] Evaluate only the three natural Attempt-1 Actions runs: Push CI
+      `32424503359`, PR CI `32424506368`, and Golden `32424506376`, plus the
+      separately typed natural Vercel Preview evidence.
+
+Application, Browser, and Windows passed in Push and PR. Browser completed 4/4
+without flakes; both Windows jobs completed 22 files / 331 tests. The Database
+jobs created and verified their run-owned networks, then passed PRE replay,
+Rollback, Reset, and POST replay with no Docker exit 125 or missing-network
+failure. Both Rollback observations remained `migrationCount: 4`, set SHA-256
+`be330cdc763ce83ebeb7d1ef7e319580f8bc5a4ae05fb15823a58087b8f35e88`,
+and `status: rollback_verified`.
+
+F3 remained blocked by exactly two invalid pgTAP `select like(` calls in
+`activation_readiness_follow_up_test.sql` and by the unclassified Golden child
+failure. pgTAP reached the first call, emitted 18 subtests from that file, then
+failed with `function like(text, unknown, unknown) does not exist` before
+`finish()`; `Files=14, Tests=1851` was only the failing abort count. The
+pre/post backup and restore step was skipped after pgTAP, so Backup/Restore was
+not yet proved. Cleanup succeeded in both runs.
+
+Golden job `96603536797` exited 1 without signal or timeout, skipped Candidate
+upload, and retained neither Replay observations nor `redactedDiagnostic`; no F3
+Candidate exists. F2's successful Candidate was not imported, and the F2-to-F3
+Golden Runtime scope was byte-identical, so there is no evidence of an
+F3-introduced Golden Runtime regression. Disaster Recovery failed only at the
+expected missing committed PRE-Golden `ENOENT`.
+
+The F3 Preview is proven separately by successful Deployment `6011867651`,
+Deployment Status `17094350202`, and Vercel Commit Status `52624257482`, all
+bound to exact F3. Check-Run `96603670359` is successful feedback-only
+`Vercel Preview Comments` evidence and has no `run_attempt`.
+
+Pre-commit verification on Node `v24.14.0` and pnpm `10.33.2` was green: the two
 focused files passed 44/44 tests; the exact unchanged 22-file Windows catalog
 passed 331/331 tests; all 21 Windows-sensitive wrappers passed `node --check`;
 and process-local `VITEST_MAX_WORKERS=4 pnpm verify` passed full-tree Prettier,
@@ -42,7 +126,7 @@ PAPER-only, the Working Tree plus 100-ancestor credential scan with zero
 findings, and the Next.js 16.3.0 production build. The prospective checksum
 closure passed with exactly 175 sorted entries; exact workflow replacement,
 migration, backup, hash, diff, credential, and six-file allowlist audits all
-passed. Exact-commit checksum verification remains mandatory after commit.
+passed, followed by exact-commit checksum verification before publication.
 
 ## EXACT-F2 activation-readiness rehearsal repair (2026-08-20)
 

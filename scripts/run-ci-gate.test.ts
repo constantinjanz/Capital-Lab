@@ -67,6 +67,15 @@ const referenceFailure = {
     timedOut: false,
   },
 }
+const goldenFailureDiagnostic = {
+  failure_category: 'container_unhealthy',
+  container_or_service: 'db',
+  migration_basename: null,
+  sqlstate: null,
+  timeout: false,
+  signal: null,
+  exit_code: 1,
+}
 const rollbackFailure = {
   schemaVersion: 1,
   status: 'local_rollback_migration_rehearsal_failure_observed',
@@ -580,6 +589,95 @@ describe('CI gate schema-Golden Reference replay sequence', () => {
     return `${values.map((value) => JSON.stringify(value)).join('\n')}\n`
   }
 
+  it('retains only an exact diagnostic from an originally failed child', () => {
+    const result = runGoldenGate(
+      tempDirectory(),
+      `${serialized(referenceSequence.slice(0, 1))}${JSON.stringify(goldenFailureDiagnostic)}\n`,
+      1,
+    )
+    expect(result.outcome.status).toBe(1)
+    expect(result.evidence.exitCode).toBe(1)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Schema Golden replay evidence failed closed.\n',
+    )
+    expect(result.evidence.redactedDiagnostic).toEqual(goldenFailureDiagnostic)
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+    ).toBeUndefined()
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayFailureObservation,
+    ).toBeUndefined()
+    expect(result.evidence.localMigrationReplayDiagnostic).toBeUndefined()
+    for (const secret of result.secrets) {
+      expect(
+        `${result.outcome.stdout}${result.outcome.stderr}${result.evidenceText}`,
+      ).not.toContain(secret)
+    }
+  })
+
+  it('rejects a Golden diagnostic before an exact commit is eligible', () => {
+    const result = runGoldenGate(
+      tempDirectory(),
+      `${JSON.stringify(goldenFailureDiagnostic)}\n`,
+      1,
+      'invalid-commit',
+    )
+    expect(result.outcome.status).toBe(1)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Schema Golden replay evidence failed closed.\n',
+    )
+    expect(result.evidence.commitSha).toBeNull()
+    expect(result.evidence.redactedDiagnostic).toBeUndefined()
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+    ).toBeUndefined()
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayFailureObservation,
+    ).toBeUndefined()
+    for (const secret of result.secrets) {
+      expect(
+        `${result.outcome.stdout}${result.outcome.stderr}${result.evidenceText}`,
+      ).not.toContain(secret)
+    }
+  })
+
+  it.each([
+    [
+      'an extra key',
+      JSON.stringify({ ...goldenFailureDiagnostic, detail: 'forbidden' }),
+    ],
+    [
+      'an invalid failure category',
+      JSON.stringify({
+        ...goldenFailureDiagnostic,
+        failure_category: 'unclassified_failure',
+      }),
+    ],
+    ['malformed JSON', '{"failure_category":"container_unhealthy"'],
+  ])('rejects %s without inventing a fallback diagnostic', (_label, value) => {
+    const result = runGoldenGate(tempDirectory(), `${value}\n`, 1)
+    expect(result.outcome.status).toBe(1)
+    expect(result.outcome.stdout).toBe('')
+    expect(result.outcome.stderr).toBe(
+      'Schema Golden replay evidence failed closed.\n',
+    )
+    expect(result.evidence.redactedDiagnostic).toBeUndefined()
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayObservations,
+    ).toBeUndefined()
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayFailureObservation,
+    ).toBeUndefined()
+    expect(result.evidence.localMigrationReplayDiagnostic).toBeUndefined()
+    for (const secret of result.secrets) {
+      expect(
+        `${result.outcome.stdout}${result.outcome.stderr}${result.evidenceText}`,
+      ).not.toContain(secret)
+    }
+  })
+
   it('accepts exactly pre/a, pre/b, post/a, post/b on child success', () => {
     const directory = tempDirectory()
     const result = runGoldenGate(directory, serialized(), 0)
@@ -604,17 +702,22 @@ describe('CI gate schema-Golden Reference replay sequence', () => {
 
   it('preserves a pre/a prefix plus exactly one bound failure', () => {
     const directory = tempDirectory()
-    const output = `${serialized(referenceSequence.slice(0, 1))}${JSON.stringify(referenceFailure)}\n`
-    const result = runGoldenGate(directory, output, 7)
+    const replayOutput = `${serialized(referenceSequence.slice(0, 1))}${JSON.stringify(referenceFailure)}\n`
+    const result = runGoldenGate(
+      directory,
+      `${replayOutput}${JSON.stringify(goldenFailureDiagnostic)}\n`,
+      7,
+    )
     expect(result.outcome.status).toBe(7)
     expect(result.outcome.stderr).toBe('')
-    expect(result.outcome.stdout).toBe(output)
+    expect(result.outcome.stdout).toBe(replayOutput)
     expect(
       result.evidence.schemaGoldenReferenceMigrationReplayObservations,
     ).toEqual(referenceSequence.slice(0, 1))
     expect(
       result.evidence.schemaGoldenReferenceMigrationReplayFailureObservation,
     ).toEqual(referenceFailure)
+    expect(result.evidence.localMigrationReplayDiagnostic).toBeUndefined()
     expect(result.evidence.redactedDiagnostic).toBeUndefined()
     for (const secret of result.secrets) {
       expect(
@@ -651,7 +754,7 @@ describe('CI gate schema-Golden Reference replay sequence', () => {
       const directory = tempDirectory()
       const result = runGoldenGate(
         directory,
-        serialized(referenceSequence.slice(0, length)),
+        `${serialized(referenceSequence.slice(0, length))}${JSON.stringify(goldenFailureDiagnostic)}\n`,
         0,
       )
       expect(result.outcome.status).toBe(1)
@@ -662,6 +765,16 @@ describe('CI gate schema-Golden Reference replay sequence', () => {
       expect(
         result.evidence.schemaGoldenReferenceMigrationReplayObservations,
       ).toBeUndefined()
+      expect(
+        result.evidence.schemaGoldenReferenceMigrationReplayFailureObservation,
+      ).toBeUndefined()
+      expect(result.evidence.localMigrationReplayDiagnostic).toBeUndefined()
+      expect(result.evidence.redactedDiagnostic).toBeUndefined()
+      for (const secret of result.secrets) {
+        expect(
+          `${result.outcome.stdout}${result.outcome.stderr}${result.evidenceText}`,
+        ).not.toContain(secret)
+      }
     },
   )
 
@@ -802,7 +915,7 @@ describe('CI gate schema-Golden Reference replay sequence', () => {
     )
     const result = runGoldenGate(
       directory,
-      `${serialized()}${rejection}`,
+      `${serialized()}${JSON.stringify(goldenFailureDiagnostic)}\n${rejection}`,
       1,
       commitSha,
       rejection,
@@ -814,7 +927,16 @@ describe('CI gate schema-Golden Reference replay sequence', () => {
       result.evidence.schemaGoldenReferenceMigrationReplayObservations,
     ).toBeUndefined()
     expect(result.evidence.localMigrationReplayDiagnostic).toBeUndefined()
+    expect(
+      result.evidence.schemaGoldenReferenceMigrationReplayFailureObservation,
+    ).toBeUndefined()
+    expect(result.evidence.redactedDiagnostic).toBeUndefined()
     expect(readFileSync(result.identityEvidencePath, 'utf8')).toBe(rejection)
+    for (const secret of result.secrets) {
+      expect(
+        `${result.outcome.stdout}${result.outcome.stderr}${result.evidenceText}`,
+      ).not.toContain(secret)
+    }
   })
 
   it.each([
@@ -842,7 +964,7 @@ describe('CI gate schema-Golden Reference replay sequence', () => {
       )
       const result = runGoldenGate(
         directory,
-        `${serialized()}${rejection}`,
+        `${serialized()}${JSON.stringify(goldenFailureDiagnostic)}\n${rejection}`,
         8,
         expectedCommit,
         rejection,
@@ -855,10 +977,20 @@ describe('CI gate schema-Golden Reference replay sequence', () => {
       expect(
         result.evidence.schemaGoldenReferenceMigrationReplayObservations,
       ).toBeUndefined()
+      expect(
+        result.evidence.schemaGoldenReferenceMigrationReplayFailureObservation,
+      ).toBeUndefined()
+      expect(result.evidence.localMigrationReplayDiagnostic).toBeUndefined()
+      expect(result.evidence.redactedDiagnostic).toBeUndefined()
       expect(result.evidenceText).not.toContain(
         'local_container_image_identity_rejected',
       )
       expect(existsSync(result.identityEvidencePath)).toBe(false)
+      for (const secret of result.secrets) {
+        expect(
+          `${result.outcome.stdout}${result.outcome.stderr}${result.evidenceText}`,
+        ).not.toContain(secret)
+      }
     },
   )
 

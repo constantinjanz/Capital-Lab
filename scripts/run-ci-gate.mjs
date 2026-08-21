@@ -235,11 +235,14 @@ const outcome = await new Promise((resolve) => {
     resolve({ exitCode: code ?? 1, signal, timedOut })
   })
 })
+const originalChildFailed =
+  outcome.exitCode !== 0 || outcome.timedOut || Boolean(outcome.signal)
 let exitCode = outcome.timedOut || outcome.signal ? 124 : outcome.exitCode
 let localMigrationReplayDiagnostic
 let localRollbackMigrationRehearsalFailureDiagnostic
 let schemaGoldenReferenceMigrationReplayObservations
 let schemaGoldenReferenceMigrationReplayFailureObservation
+let schemaGoldenDiagnosticEligible = false
 if (migrationReplayContext) {
   try {
     const identityRejection = parseLocalContainerIdentityRejection(childStdout)
@@ -328,6 +331,7 @@ if (migrationReplayContext) {
       if (exitCode === 0) exitCode = 1
       process.stdout.write(`${JSON.stringify(identityRejection)}\n`)
     } else {
+      schemaGoldenDiagnosticEligible = true
       const migrationBasenames =
         await schemaGoldenMigrationBasenamesByContract()
       const { failureObservation, observations } =
@@ -404,7 +408,14 @@ const evidence = {
     flaky: flakyTests,
   },
 }
-const redactedDiagnostic = redactedDiagnosticForCi(id, normalizedOutput, {
+const diagnosticInput =
+  schemaGoldenBootstrapGate &&
+  schemaGoldenDiagnosticEligible &&
+  originalChildFailed &&
+  !schemaGoldenReferenceMigrationReplayFailureObservation
+    ? childStdout
+    : normalizedOutput
+const redactedDiagnostic = redactedDiagnosticForCi(id, diagnosticInput, {
   exitCode,
   signal: outcome.signal,
   timedOut: outcome.timedOut,

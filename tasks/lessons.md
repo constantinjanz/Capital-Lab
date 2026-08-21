@@ -29,3 +29,5 @@
 - Before freezing an exact-file allowlist for a changed invariant, search its old and new values repository-wide and trace every runner, validator, and success fixture that consumes it; include all necessary dependent files before execution.
 - When repository text intentionally preserves checkout bytes, canonicalize only the assertion view for multiline semantic checks and keep a separate test proving that execution still receives the raw bytes.
 - When a local CLI stack starts on an explicit Docker network, audit every later CLI subcommand that launches sibling containers and pass the same verified network identity explicitly.
+- Before using a pgTAP pattern assertion, verify the exact framework API: use alike() for SQL LIKE patterns and matches() for regular expressions; do not infer aliases such as like().
+- For a fully buffered failure gate, keep raw child output suppressed and pass the original failed child's stdout only to an exact allowlisted structured-diagnostic parser; never derive diagnostics from a gate-adjusted failure or let identity rejection lose priority.

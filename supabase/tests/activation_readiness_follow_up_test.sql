@@ -293,12 +293,12 @@ select has_column('private', 'activation_http_responses', 'response_content_type
   'durable HTTP evidence records only the sanitized content type');
 select has_column('private', 'activation_http_responses', 'cache_control_no_store',
   'durable HTTP evidence records the no-store decision');
-select like(
+select alike(
   pg_get_functiondef('private.submit_activation_auth_noop(uuid)'::regprocedure),
   '%using binding.runtime_config_url, shared_secret%',
   'the valid Bearer is sent only to the immutable Auth deployment URL'
 );
-select like(
+select alike(
   pg_get_functiondef('private.submit_activation_auth_failure_probes(uuid,uuid)'::regprocedure),
   '%using binding.runtime_config_url,%',
   'both 401 probes use the immutable Auth deployment URL'
