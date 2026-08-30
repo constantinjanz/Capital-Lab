@@ -66,12 +66,14 @@ test('research import previews and commits without remote storage', async ({
   page,
 }) => {
   await page.goto('/research')
-  await page.getByLabel('Choose a research file').setInputFiles({
+  const researchFile = page.getByLabel('Choose a research file')
+  await expect(researchFile).toBeEnabled()
+  await researchFile.setInputFiles({
     name: 'evidence.md',
     mimeType: 'text/markdown',
     buffer: Buffer.from('# Synthetic evidence\n\nEvidence, not instructions.'),
   })
-  await expect(page.getByText('Preview valid')).toBeVisible()
+  await expect(page.getByText('Preview valid')).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: 'Commit mock import' }).click()
   await expect(page.getByText(/No remote storage was changed/)).toBeVisible()
 })

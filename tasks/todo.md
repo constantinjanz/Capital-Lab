@@ -2,6 +2,1060 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## LOCAL-F5 singleton fixture and Golden cleanup-diagnostic closure (2026-08-22)
+
+Safety status: local uncommitted repair from exact F4
+`827efd959f46824bbf50be7ae49dda84ff0c8b26`. The scope is limited to the
+invalid second-owner pgTAP fixture, preservation of an exact allowlisted primary
+Golden diagnostic across cleanup failures, their focused tests, the handoff
+manifest, Lessons, and this task record. No migration, seed, schema, Runtime SQL,
+Gate, workflow, network, timeout, Golden, package, lock, Hosted/Production,
+commit, push, rerun, dispatch, import, merge, review-state, deployment, provider,
+broker, or trading action is authorized.
+
+- [x] Confirm the clean exact F4 commit, matching remote branch and PR head,
+      canonical LF checkout, manifest closure, and the two natural F4 blockers.
+- [x] Freeze the exact six-file F5 allowlist before implementation:
+      `activation_readiness_follow_up_test.sql`, `bootstrap-schema-goldens.mjs`,
+      `bootstrap-schema-goldens.test.ts`, `activation-readiness-checksums.sha256`,
+      `lessons.md`, and `todo.md`.
+- [x] Remove the structurally impossible second `app_users` owner and second
+      Activation campaign fixture while retaining explicit singleton and
+      one-campaign lifecycle assertions.
+- [x] Preserve the already validated primary Golden startup diagnostic when
+      later stack or incomplete-artifact cleanup also fails; cleanup must remain
+      fail-closed and raw child streams must remain suppressed.
+- [x] Pass focused fault-injection tests, syntax checks, full `pnpm verify`,
+      prospective checksum closure, and exact diff/credential/protected-file
+      audits; record the exact results.
+- [x] Hand off the scoped local diff without commit, push, CI/Golden rerun,
+      Candidate import, merge, or deployment.
+
+The pgTAP fixture now proves SQLSTATE `23505` for both the prohibited second
+`app_users` owner and the prohibited second `(owner_id, run_type)` campaign,
+keeps exactly one prepared campaign, and leaves the singleton index, seed,
+migrations, schema, and Runtime SQL unchanged. An independent SQL review found
+no invalid error code, residual two-campaign assumption, or rollback side
+effect. A real pgTAP lane was not run locally because the Docker daemon is
+unavailable and the Supabase CLI is absent; dynamic Database acceptance is
+therefore deliberately not claimed.
+
+The Golden bootstrap now distinguishes an exact child failure from a clean
+child envelope followed by an outer exit, timeout, or signal. It emits only an
+exact revalidated failure diagnostic before the tested stack and
+incomplete-artifact cleanup paths can throw, while success, contradictory,
+malformed, absent, and private values remain suppressed. Cleanup remains
+fail-closed, the outer catch remains fixed-text-only, and the Gate, workflows,
+network, and timeouts are unchanged. The final independent diff review found no
+P0, P1, or P2 issue.
+
+Local verification on Node `v24.14.0` and pnpm `10.33.2` is green:
+`bootstrap-schema-goldens.mjs` passed `node --check`; the focused
+`bootstrap-schema-goldens.test.ts`, `run-ci-gate.test.ts`, and
+`run-redacted-subprocess.test.ts` run passed 3 files / 135 tests; and the final
+process-local `VITEST_MAX_WORKERS=4 pnpm verify` passed full-tree Prettier,
+zero-warning ESLint, strict TypeScript, 108 Vitest files / 1,184 tests,
+PAPER-only safety, the Working Tree plus 100-ancestor credential scan with zero
+findings, and the Next.js 16.3.0 production build.
+
+The scoped audits are green: `git diff --check` passed; all six paths are
+canonical LF; the exact six-file allowlist is closed; workflows, packages,
+locks, all 36 migrations, seed, backups, and committed Goldens are unchanged;
+and the prospective manifest contains exactly 175 sorted, case-distinct entries
+and 20,057 bytes. Exact-commit checksum verification remains mandatory before
+any separately authorized publication. No commit, push, CI/Golden rerun,
+Candidate import, merge, deployment, provider, broker, or trading action was
+performed.
+
+## EXACT-F4 pgTAP API and Golden diagnostic closure (2026-08-21)
+
+Safety status: one minimal F4 commit from exact F3
+`23781a0ea1fc21469d5b7147fe8a74b57f7b2dc3`, one non-force push, and only the
+naturally resulting Push, PR, Golden, and Preview evidence. The scope is limited
+to the two pgTAP API bytes, the already allowlisted structured Golden diagnostic
+path, its real-spawn tests, the handoff manifest, and this task record. No
+migration, schema, Runtime SQL, Golden, workflow, network identity, timeout,
+Hosted/Production access, rerun, dispatch, cancel, amend, second commit, import,
+merge, Ready-for-Review, promotion, provider, broker, or trading action is
+authorized.
+
+- [x] Pass the complete local and GitHub F3 preflight in the existing clean LF
+      clone: exact commit/parent/message/tree, Draft/open/unmerged PR #21,
+      matching refs, clean `+0/-0` upstream, exact SQL/migration/set/manifest
+      bytes, and all natural F3 evidence.
+- [x] Resume after the first fail-closed stop with the corrected Preview object
+      model: Actions runs `32424503359`, `32424506368`, and `32424506376` are
+      Attempt 1; Deployment `6011867651`, Deployment Status `17094350202`, and
+      Commit Status `52624257482` prove the successful F3 Preview; Check-Run
+      `96603670359` is only successful `Vercel Preview Comments` feedback.
+- [x] Replace exactly the two invalid pgTAP `like()` calls with `alike()` and
+      offer only an eligible originally failed Golden child's stdout to the
+      unchanged exact structured-diagnostic parser.
+- [x] Extend only the existing Golden real-spawn gate tests and preserve Success,
+      Identity-Rejection, migration-failure, buffering, exit, timeout, and
+      secret-suppression contracts.
+- [x] Pass the required focused tests, syntaxcheck, complete `pnpm verify`,
+      checksum generation/verification, diff/credential/allowlist/SQL-byte/
+      migration/backup/Golden/workflow audits, and record exact results.
+- [ ] Create exactly one commit with message
+      `fix: close pgtap and golden diagnostics`, verify exact F3 parent and final
+      checksum closure, push once without force, await only natural runs, audit
+      all evidence externally, and stop.
+
+The first preflight stopped before any repository or remote mutation because a
+feedback Check-Run had been typed as Preview deployment evidence. The corrected
+resume contract preserved zero F4 file changes, commits, pushes, reruns, cancels,
+imports, or other mutations before this section began.
+
+Focused verification on Node `v24.14.0` and pnpm `10.33.2` is green: the
+unchanged Gate syntaxcheck passed, and `run-ci-gate.test.ts`, unchanged
+`run-redacted-subprocess.test.ts`, and unchanged
+`bootstrap-schema-goldens.test.ts` passed 3 files / 129 tests. The first
+process-local `VITEST_MAX_WORKERS=4 pnpm verify` passed full-tree Prettier,
+zero-warning ESLint, strict TypeScript, 108 Vitest files / 1,178 tests,
+PAPER-only, the Working Tree plus 100-ancestor credential scan with zero
+findings, and the Next.js 16.3.0 production build.
+
+The scoped audits are also green: `git diff --check` passed; the exact six-file
+allowlist is closed; the SQL change is exactly two inserted ASCII `a` bytes,
+with 14/14 pgTAP files free of `select like(`; all 36 migrations are
+byte-identical to F3, with fourth-migration SHA-256
+`8bc7a0afd62cd5105729a0ba97357f07ee119f32dffa2c301d172581ac539250`
+and four-migration set SHA-256
+`be330cdc763ce83ebeb7d1ef7e319580f8bc5a4ae05fb15823a58087b8f35e88`;
+backups, Goldens, workflows, packages, locks, and every other protected file are
+unchanged. The prospective manifest closure passed with exactly 175 sorted
+entries and 20,057 bytes. Exact-commit checksum verification remains mandatory
+before publication.
+
+Automatic F4 acceptance remains pending and is not claimed before the natural
+Push, PR, Golden, and Preview results complete. No F2, F3, or eventual F4 Golden
+candidate is imported in F4.
+
+## EXACT-F3 Windows and pgTAP gate closure (2026-08-21)
+
+Safety status: F3 was committed as
+`23781a0ea1fc21469d5b7147fe8a74b57f7b2dc3` with exact F2 parent
+`37c42910439f5a6bedb58a6bbcca9da65b7d6c8c`, tree
+`063efe0e20adaaebf19b456e6454502f011d5bf1`, and message
+`fix: close windows and pgtap gates`; it was pushed exactly once without force.
+Only the natural Push, PR, Golden, and Preview evidence was evaluated.
+
+- [x] Pass the complete fail-closed F2 preflight and all scoped local
+      verification, checksum, credential, workflow, migration, backup, hash,
+      diff, and allowlist audits.
+- [x] Preserve raw migration bytes while making the grouped-CASE assertion view
+      LF/CRLF independent.
+- [x] Bind the existing pgTAP command to the already verified run-owned network
+      and keep all network implementation and cleanup contracts unchanged.
+- [x] Create the exact F3 commit, verify its F2 parent and checksum closure, and
+      perform exactly one non-force push.
+- [x] Evaluate only the three natural Attempt-1 Actions runs: Push CI
+      `32424503359`, PR CI `32424506368`, and Golden `32424506376`, plus the
+      separately typed natural Vercel Preview evidence.
+
+Application, Browser, and Windows passed in Push and PR. Browser completed 4/4
+without flakes; both Windows jobs completed 22 files / 331 tests. The Database
+jobs created and verified their run-owned networks, then passed PRE replay,
+Rollback, Reset, and POST replay with no Docker exit 125 or missing-network
+failure. Both Rollback observations remained `migrationCount: 4`, set SHA-256
+`be330cdc763ce83ebeb7d1ef7e319580f8bc5a4ae05fb15823a58087b8f35e88`,
+and `status: rollback_verified`.
+
+F3 remained blocked by exactly two invalid pgTAP `select like(` calls in
+`activation_readiness_follow_up_test.sql` and by the unclassified Golden child
+failure. pgTAP reached the first call, emitted 18 subtests from that file, then
+failed with `function like(text, unknown, unknown) does not exist` before
+`finish()`; `Files=14, Tests=1851` was only the failing abort count. The
+pre/post backup and restore step was skipped after pgTAP, so Backup/Restore was
+not yet proved. Cleanup succeeded in both runs.
+
+Golden job `96603536797` exited 1 without signal or timeout, skipped Candidate
+upload, and retained neither Replay observations nor `redactedDiagnostic`; no F3
+Candidate exists. F2's successful Candidate was not imported, and the F2-to-F3
+Golden Runtime scope was byte-identical, so there is no evidence of an
+F3-introduced Golden Runtime regression. Disaster Recovery failed only at the
+expected missing committed PRE-Golden `ENOENT`.
+
+The F3 Preview is proven separately by successful Deployment `6011867651`,
+Deployment Status `17094350202`, and Vercel Commit Status `52624257482`, all
+bound to exact F3. Check-Run `96603670359` is successful feedback-only
+`Vercel Preview Comments` evidence and has no `run_attempt`.
+
+Pre-commit verification on Node `v24.14.0` and pnpm `10.33.2` was green: the two
+focused files passed 44/44 tests; the exact unchanged 22-file Windows catalog
+passed 331/331 tests; all 21 Windows-sensitive wrappers passed `node --check`;
+and process-local `VITEST_MAX_WORKERS=4 pnpm verify` passed full-tree Prettier,
+zero-warning ESLint, strict TypeScript, 108 Vitest files / 1,173 tests,
+PAPER-only, the Working Tree plus 100-ancestor credential scan with zero
+findings, and the Next.js 16.3.0 production build. The prospective checksum
+closure passed with exactly 175 sorted entries; exact workflow replacement,
+migration, backup, hash, diff, credential, and six-file allowlist audits all
+passed, followed by exact-commit checksum verification before publication.
+
+## EXACT-F2 activation-readiness rehearsal repair (2026-08-20)
+
+Safety status: one minimal repair commit F2 from exact FD
+`185407362e60e297aefb3a409b661f57fedd5e99`, one non-force push, and only the
+naturally resulting Push, PR, Golden, and Preview runs. No local full
+Database/Golden pipeline, Hosted/Production access, Golden import, rerun,
+dispatch, cancel, amend, second commit, merge, or activation is authorized.
+
+- [x] Pass the complete fail-closed preflight in the sole new LF clone: exact
+      repository, branch, FD parent/message, Draft/open/unmerged PR #21 and
+      matching refs, clean `+0/-0` upstream, exact migration/set/manifest
+      hashes, wrapper/Reference/Gate baselines, and repository-wide old-value
+      inventory.
+- [x] Repair only the confirmed two-byte PL/pgSQL parser defect, canonicalize
+      every Rollback integrity producer/verifier/fixture without changing the
+      executed raw SQL bodies, and preserve all transaction, timeout, marker,
+      ordering, diagnosis, and fail-closed contracts.
+- [x] Enable only the seed-free Reference Storage baseline migration job while
+      excluding the persistent `storage-api` service through the exact strict
+      wrapper token; preserve Source/Restore starts and all other disabled
+      Reference services.
+- [x] Pass the required focused tests and syntaxchecks, complete `pnpm verify`,
+      checksum generation/verification, diff/credential/allowlist/byte/hash
+      audits, and record exact results below.
+- [x] Create exactly one F2 commit with message
+      `fix: repair activation readiness rehearsals`, verify its exact parent and
+      checksum closure, push once without force, await only natural runs, audit
+      row-free candidate/evidence artifacts externally, and stop.
+
+Pre-commit application verification on Node `v24.14.0` and pnpm `10.33.2` is
+green: syntaxchecks passed for all four changed `.mjs` files; the five required
+focused files passed 157/157 tests; and the process-bounded unmodified
+`pnpm verify` passed full-tree Prettier, zero-warning ESLint, strict TypeScript,
+108 Vitest files / 1,172 tests, PAPER-only, the Working Tree plus 100-ancestor
+credential scan with zero findings, and the Next.js 16.3.0 production build.
+Three independent cross-reviews reported no findings. The byte audit proved
+that the fourth migration is exactly two bytes longer, the first three are
+unchanged, the backup has one exact hash replacement, and the canonical target
+hashes are `8bc7a0afd62cd5105729a0ba97357f07ee119f32dffa2c301d172581ac539250`
+and `be330cdc763ce83ebeb7d1ef7e319580f8bc5a4ae05fb15823a58087b8f35e88`.
+Prospective checksum generation and verification passed against the real merge
+base with exactly 175 sorted entries; the exact-index commit audit remains
+mandatory before publication.
+
+F2 was committed as `37c42910439f5a6bedb58a6bbcca9da65b7d6c8c`
+with exact FD parent and pushed exactly once without force. Its natural Push and
+PR runs preserved successful Application, Browser, Rollback, PRE/POST replay,
+Golden, Candidate, and Preview evidence, while remaining blocked exclusively by
+the LF/CRLF-sensitive grouped-CASE assertion and the missing explicit pgTAP
+binding to the already verified run-owned Docker network. Disaster Recovery
+failed only at the expected missing committed PRE-Golden `ENOENT`; no F2
+Candidate was imported and no post-push repair was performed.
+
+## EXACT-FD combined failure-observation pass (2026-08-20)
+
+Safety status: exactly one normal diagnostic commit FD from
+`899123f47d6e85de06002ab65457f3d913901366`, exactly one non-force push, and
+only the resulting automatic Push, PR, Golden, and Preview runs. This pass may
+observe the existing Rollback and Reference replay failures; it may not repair
+them, alter migrations/configuration/workflows, import a Golden, access a
+Hosted/Production database, rerun a workflow, promote a deployment, or perform
+provider, broker, Canary, or trading calls.
+
+- [x] Pass the complete fail-closed local/GitHub preflight in the sole new LF
+      clone: exact F and parent E, clean branch/upstream at `+0/-0`, Draft/open/
+      unmerged PR #21 with matching refs, terminal Exact-F jobs and no later
+      commit, force-push, or unexpected workflow attempt.
+- [x] Add the shared sanitized PostgreSQL failure boundary, strict Rollback
+      stage/SQLSTATE observation, and buffered CI evidence without exposing raw
+      streams, commands, SQL, paths, identifiers, environment values, or
+      secrets.
+- [x] Add the inner and replica-bound Reference replay failure observations
+      while preserving the pre-mutation Boundary, call/query order, identity
+      priority, and the unchanged four-Boundary success path.
+- [x] Pass focused and complete relevant tests, `pnpm verify`, checksum
+      generation/verification, `git diff --check`, credential scan, and final
+      allowlist audit; record the exact results below.
+- [x] Create exactly commit FD with message
+      `ci: observe rollback and reference replay failures`, verify parent F,
+      push once without force, await only the natural automatic runs, inventory
+      all artifacts, report the observed diagnoses, and stop.
+
+Pre-commit verification on Node `v24.14.0`, pnpm `10.33.2`, and unchanged
+Supabase CLI workflow pin `2.113.0`: the final seven-file FD focus passed 324
+tests; the credential-safe fixture follow-up passed four files / 181 tests;
+the complete four-worker Vitest suite passed 108 files / 1,144 tests. The
+unmodified `pnpm verify` command, with only the process-scoped supported
+`VITEST_MAX_WORKERS=4` resource bound, passed full-tree Prettier, zero-warning
+ESLint, strict TypeScript, all 1,144 tests, PAPER-only, the working-tree plus
+100-ancestor credential scan with zero findings, and the Next.js 16.3.0
+production build. `git diff --check`, the prospective-index checksum verifier,
+and the exact 16-file allowlist audit also passed.
+
+Two earlier unbounded full-suite attempts exposed only local worker-resource
+variance: the first could not start two workers, and the second timed out two
+otherwise unchanged tests under parallel load. The affected files immediately
+passed 10/10 and 11/11 in isolation; no assertion failed. A first credential
+scan then correctly rejected six literal fake-secret fixtures introduced by
+the diagnostic tests. Their values are now assembled only at runtime, the same
+leak regressions passed, and the bounded credential scan is green.
+
+## EXACT-F fresh-stack migration-history repair (2026-08-19)
+
+Safety status: exactly one normal functional commit F from
+`7345390c738c33ca2340a667edb8f1a97b751cfa`, exactly one non-force push, and
+only the resulting automatic Exact-F runs. The repair is limited to fresh,
+run-owned local Supabase stacks. No Golden import/commit, workflow rerun,
+Hosted/Production database access or mutation, deployment promotion, provider,
+broker, Canary, or trading call is authorized.
+
+- [x] Pass the complete fail-closed local/GitHub preflight: clean isolated
+      branch at exact E and parent, remote branch/PR refs at E, `+0/-0`,
+      authenticated HTTPS push permission, Draft/open/unmerged PR #21, and all
+      three Exact-E runs terminal.
+- [x] Accept only the explicit Exact-E-B browser override: PR-CI run
+      `32173146512` remains `completed/failure` at attempt 2; attempt-1 browser
+      job `95828821670` is cancelled; attempt-2 browser job `96042726026`
+      completed successfully with 4/4 passed, zero failed/flaky, and the exact
+      354-byte artifact `9362165927`. Non-browser execution timestamps remain
+      on 18 August and no attempt 3 exists.
+- [x] Reconfirm the typed Source/PRE push, Source/PRE PR, and Reference/PRE-A
+      diagnoses all report `psqlQueryCompleted=true` and absent history schema
+      and relation.
+- [x] Add the separate false/false-only bootstrap eligibility check, exact
+      one-transaction history DDL, unchanged strict empty contract, and
+      identity/probe/bootstrap/contract/migration ordering.
+- [x] Replace direct Golden Reference diagnoses with the exact ordered
+      replica-bound `pre/a`, `pre/b`, `post/a`, `post/b` envelopes and preserve
+      identity-rejection priority, prefix evidence, exit codes, and raw-stream
+      secrecy.
+- [x] Pass all focused tests, `pnpm verify`, checksum generation/verification,
+      `git diff --check`, and the final allowlist audit; record exact results.
+- [x] Create exactly commit F with message
+      `ci: initialize local migration history boundary`, push once without
+      force, and await only natural automatic Exact-F results. Those runs
+      stopped at the newly exposed Rollback rehearsal and Reference PRE/A
+      replay failures, so no row-free Golden candidate was created or imported.
+
+Pre-commit verification on Node `v24.14.0`, pnpm `10.33.2`, and the unchanged
+temporary Supabase CLI `2.113.0`: the final parser/Gate slice passed 2 files /
+73 tests; all four focused files passed 116 tests; the complete bounded suite
+passed 107 files / 954 tests; full zero-warning ESLint, strict TypeScript,
+PAPER-only, the working-tree plus 100-ancestor credential scan with zero
+findings, the Next.js 16.3.0 production build, and `git diff --check` all
+passed. One earlier four-worker full-suite attempt hit only the unchanged
+Alpaca adapter's five-second timeout; that file immediately passed 25/25 in
+isolation and the final two-worker suite passed all 954 tests.
+
+The exact Windows checkout command `pnpm verify` first stopped only at the
+known full-tree CRLF formatting condition created by `core.autocrlf=true`. A
+temporary clone with `core.autocrlf=false`, exact E history, and only the ten
+authorized prospective non-manifest changes installed 805 packages
+lockfile-frozen and offline with zero downloads, then passed the unmodified
+`pnpm verify`: full-tree Prettier, zero-warning ESLint, strict TypeScript, 107
+Vitest files / 954 tests, PAPER-only, bounded credential scan with zero
+findings, and the successful production build.
+
+The status-aware prospective-index checksum calculation used real merge base
+`70ed610d5e0e5c08bf523d0d160a7b76f5fe2e51`, the final staged Git blobs, and
+the repository serializer/verifier. It passed with exactly 173 sorted entries;
+the normal exact-HEAD verifier remains mandatory immediately after F.
+
+## EXACT-E diagnostic-only migration-boundary pass (2026-08-18)
+
+Safety status: exactly one normal diagnostic commit E from
+`756e399674165ed5f73842d8864564a517872572`, followed by exactly one non-force
+push and only automatic exact-E runs. No replay repair, Golden import or change,
+migration/history mutation, Hosted/Production access, deployment promotion,
+provider/broker/Canary/trading call, rerun, cancel, or second iteration is
+authorized.
+
+- [x] Fail closed on the exact clean isolated C checkout, exact parent/branch/PR
+      refs, Draft/open/unmerged PR #21, authenticated GitHub transport, one
+      successful non-destructive push dry-run, and three terminal Exact-C runs.
+      The unrelated dirty checkout remained untouched.
+- [x] Add the strict read-only migration-history preflight observation after
+      verified local image identity and before the unchanged history contract;
+      propagate only the validated typed object through CI and Golden wrappers.
+- [x] Cover the complete exact-key/enum/Boolean/roundtrip, raw-output secrecy,
+      child-output filtering, exit-status preservation, identity ordering, and
+      read-only SQL matrix.
+- [x] Run focused tests and every repository-defined Application gate, update
+      and verify the prospective final-byte checksum manifest, and record exact
+      results here.
+- [x] Create exactly commit E with message
+      `ci: observe migration replay boundary`, push once without force, await
+      only automatic Exact-E runs, inventory all evidence/artifacts/Preview,
+      confirm non-execution, and stop. The initially cancelled Browser job was
+      superseded only by the separately authorized successful Exact-E-B
+      attempt 2; no attempt 3 or other rerun occurred.
+
+Pre-commit verification on Node `v24.14.0` and pnpm `10.33.2`: four focused
+files / 49 tests; changed-file Prettier; changed-file zero-warning ESLint;
+strict TypeScript; PAPER-only; and the working-tree plus 100-ancestor credential
+scan with zero findings all passed. The complete Windows checkout command
+`pnpm verify` first stopped at full-tree Prettier because the known
+`core.autocrlf=true` checkout converted 335 otherwise unchanged files. A
+temporary clean clone with `core.autocrlf=false`, exact C history, and only the
+nine authorized prospective changes then passed the unmodified `pnpm verify`
+command completely: full-tree Prettier, zero-warning ESLint, strict TypeScript,
+107 Vitest files / 887 tests, PAPER-only, the bounded credential scan with zero
+findings, and the successful Next.js 16.3.0 production build. Its 805 packages
+were installed lockfile-frozen and offline with zero downloads, and the entire
+temporary clone was removed after verification.
+
+The status-aware prospective-index checksum calculation used real merge base
+`70ed610d5e0e5c08bf523d0d160a7b76f5fe2e51`, canonical staged Git blobs, and
+the repository verifier functions; it passed with exactly 173 sorted entries.
+The normal exact-HEAD checksum verifier remains mandatory immediately after E.
+
+## PR #21 final bounded closure pass (2026-08-18)
+
+Safety status: exactly one Repair commit C and, only after complete Exact-C
+acceptance, at most one Golden import commit G. Ephemeral local/CI Supabase
+stacks only. No Hosted/Production database action, migration change, workflow
+rerun/cancel, deployment promotion, provider, broker, Canary, or trading action
+is authorized.
+
+- [x] Reconfirm the clean, complete isolated clone, exact local/remote/PR HEAD
+      `19ca1b591bc220a22865c7ad6da7ca2361822cd8`, Draft/open/unmerged PR #21,
+      authenticated non-forced push dry-run, and terminal Exact-D Push-CI. The
+      unrelated dirty checkout remained untouched.
+- [x] Isolate negative image-identity unit tests from the real CI commit SHA,
+      require typed rejection stage/field assertions and zero downstream
+      PostgreSQL processes, and prove the fixed evidence file is immutable on a
+      second write and absent for invalid commit identity.
+- [x] Add centrally derived, run-owned Docker bridge networks with exact
+      loopback binding, run/commit/role ownership, attachment checks, immutable
+      network-ID use, and revalidated fail-closed cleanup. Pass the same verified
+      network through Source, Restore, Reference and Peer-Reference starts and
+      resets without weakening the existing container/image guard.
+- [x] Canonicalize Reference project IDs before configuration to at most 40
+      CLI-compatible characters with deterministic 64-bit hash entropy and
+      exact PRE/POST plus A/B separation; derive configuration, container,
+      network and Golden proof identity from that single value.
+- [x] Complete local verification: 9 focused files / 137 tests; full bounded
+      Vitest run 105 files / 853 tests; native Windows catalog 22 files / 219
+      tests; changed-file Prettier; zero-warning ESLint; strict TypeScript;
+      PAPER-only; worktree-plus-100-ancestor credential scan with zero findings;
+      all 21 Windows-sensitive wrappers parsed; successful Next.js 16.3.0
+      production build; and `git diff --check`. A first unconstrained full-suite
+      attempt passed 100 files / 833 tests but exhausted five unrelated worker
+      startup slots; the single bounded four-worker rerun passed completely.
+      The full Windows working-tree Prettier scan reports only the known
+      `core.autocrlf=true` checkout conversion; changed bytes and the prospective
+      canonical LF Git tree are verified without rewriting unrelated files.
+- [ ] Create and push exactly one normal Repair commit C, then wait for every
+      automatic Exact-C Push-CI, PR-CI, Golden and Preview result. Import Goldens
+      only if every stated C acceptance criterion is met except the declared
+      Missing-Golden ENOENT.
+- [ ] If and only if C is accepted, import exactly the two verified candidate
+      Golden files plus their two mechanical checksum entries in one direct
+      child G, then complete Exact-G acceptance without rerun or further repair.
+
+## PR #21 diagnostic-only image-identity pass (2026-08-17)
+
+Safety status: exactly one diagnostic commit and one exact-head CI/Golden cycle;
+ephemeral local/CI stacks only. No identity-rule change, Golden/migration change,
+Hosted/Production access, deployment, activation, provider, broker, Canary, or
+trading action is authorized.
+
+- [x] Reconfirm Draft/open/unmerged PR #21 and exact clean isolated branch/PR
+      HEAD `ce00c7f69ab9b73fcefbfee2a651779bc440fda9`; preserve and re-fingerprint
+      the unrelated dirty checkout without changing it.
+- [x] Add one fixed-enum, public-OCI-only rejection contract shared by Database
+      and Golden container guards, while retaining the existing binding and
+      immutable image validators and preventing every PostgreSQL subprocess
+      after a failed guard.
+- [x] Cover all six failure stages, binding/IP/port variants, container/image
+      IDs, OS/architecture, missing/wrong/additional RepoDigests, bounded output,
+      synthetic-secret suppression, all four container roles, and unchanged
+      success paths. Focused verification: 5 files / 108 tests, changed-file
+      zero-warning ESLint, and strict TypeScript.
+- [x] Complete local formatting, zero-warning lint, strict TypeScript, Vitest,
+      PAPER-only, worktree-plus-100-ancestor credential, production build,
+      checksum, and `git diff --check` gates. Verified with 5 focused files /
+      108 tests; 104 complete Vitest files / 838 tests; changed-file Prettier;
+      full zero-warning ESLint; strict TypeScript; PAPER-only; credential scan
+      with zero findings; successful Next.js 16.3.0 production build; and clean
+      diff/checksum verification. The full Windows working-tree Prettier scan is
+      CRLF-contaminated by system `core.autocrlf=true`; the unchanged LF Git
+      bytes were already exact-head CI-green and the prospective LF commit tree
+      is verified separately without rewriting unrelated files.
+- [ ] Create and push exactly one normal commit D, then inspect exactly one
+      automatic exact-D CI run and one automatic exact-D Golden run. Stop after
+      recording the typed rejection evidence; do not implement a fix.
+
+## PR #21 immutable image-identity closure (2026-08-17)
+
+Safety status: isolated repository/ephemeral CI only. No Hosted or Production
+database action, migration change, deployment promotion, provider, broker, or
+trading action is authorized.
+
+- [x] Preserve and fingerprint the unrelated dirty checkout; create a complete,
+      independent HTTPS clone at exact Draft-PR HEAD
+      `e2cdb89d4c50a6b77764469dcbb3073bb9d0183e`; verify clean history,
+      no alternates/promisor state, exact branch/PR refs, Draft/open/unmerged PR,
+      and a successful non-forced push dry-run.
+- [x] Pin and centrally enforce the reviewed GHCR runtime reference, immutable
+      RepoDigest, linux/amd64 manifest/config identity, OS and architecture for
+      Source, Restore, Reference and Peer-Reference containers before any
+      PostgreSQL subprocess.
+- [x] Extend the Golden bootstrap/reference/candidate provenance contracts with
+      the same repository-owned immutable identity and exact-key verification;
+      retain the Public-ECR reference as non-runtime provenance evidence only.
+- [x] Run focused negative tests plus formatting, zero-warning lint, strict
+      TypeScript, complete Vitest, PAPER-only, credential-history, production
+      build and `git diff --check` gates before code commit P.
+      Verified on Node `v24.14.0` with pnpm `10.33.2`: changed-file Prettier;
+      zero-warning ESLint; strict TypeScript; 9 focused files / 104 tests; the
+      complete 103-file / 796-test Vitest suite; PAPER-only scan; credential
+      scan over the Working Tree plus 100 ancestors with zero findings; and a
+      successful Next.js 16.3.0 production build. No local Docker evidence was
+      simulated; exact runtime evidence remains the first CI requirement.
+- [ ] Push exactly code commit P, accept only the expected missing-Golden
+      Disaster-Recovery failure, then verify and import exactly two reproducible
+      row-free Golden files in commit G.
+- [ ] Verify exact-G application/database/disaster-recovery/Windows/browser,
+      Golden rebuild reproducibility and Preview READY/`target=null` evidence;
+      keep PR #21 Draft/open/unmerged.
+
+## PR #21 bounded CI closure pass (2026-08-12)
+
+Safety status: exactly one diagnostic cycle and at most two repair/CI cycles.
+Repository and ephemeral CI only; no Hosted, Production, scheduler, provider,
+Canary, broker, Vault, Cron, extension, migration-history, or trading action.
+
+- [x] Scope the credential-history gate to the verified current HEAD and its
+      100 ancestors so divergent local refs cannot contaminate PR evidence; retain
+      the unchanged working-tree scan and all credential rules.
+      Verified with 3 focused files / 26 tests, zero-warning lint, and the complete
+      working-tree plus 100-ancestor scanner at `08ebc2f7`.
+
+- [x] Verify Draft PR #21, branch, remote, exact clean isolated HEAD `26e7e41b31846a8535280c1d9121a98c7f551f57`, and preserve the unrelated shared checkout.
+- [x] Review the pinned Supabase CLI 2.113.0 release and current official local-stack guidance before changing the diagnostic/bootstrap path.
+- [x] Buffer `supabase start` output privately and emit only categorized allowlisted evidence; prove synthetic secrets never reach output, errors, summaries, or artifacts.
+- [x] Repair the five-argument schema-Golden capture parser and add positive/negative parser tests.
+- [ ] Build PRE and POST twice from four fresh, seed-free, migration-exact Reference clusters with unique identities/ports and exact CLI/image/contract provenance; compare normalized candidates byte-for-byte.
+- [x] Add a manual, secret-free Golden bootstrap workflow that uploads only two row-free candidates plus harmless provenance and never commits automatically.
+- [x] Keep application gates running independently while Golden/DR verification remains a required red job.
+- [x] Push the diagnostic commit, inspect exactly one categorized `supabase start`
+      result, and repair only its demonstrated causes: the pinned CLI surfaced
+      SQLSTATE `42601`; the first run-owned-stack cycle then proved its copied
+      pgTAP filename allowlist excluded the repository's named SQL tests before
+      Supabase start. Preserve fail-closed evidence for that pre-start phase.
+- [x] Repair the demonstrated local SQLSTATE `42601` cause by starting an exact
+      run-owned stack with CLI migrations disabled and replaying the checksummed
+      PRE/POST contract through credential-free container `psql` simple-query
+      mode; do not change any migration bytes.
+- [ ] Inspect the generated artifact, commit exactly both Golden JSON files, regenerate byte manifests/report, and use no more than two repair/CI cycles.
+- [ ] Record exact final jobs, test counts, Golden hashes, Preview target/SHA, failure category, non-execution evidence, and the bounded final status.
+
+## PR #21 fourth and final activation-readiness remediation (2026-08-12)
+
+Safety status: repository hardening only. No Hosted migration/history repair,
+extension/Vault/Cron mutation, scheduler/auth/runtime-attestation request,
+Production deployment/environment change, provider/model/Canary/broker call, or
+trading effect is authorized. Production gates remain pending even when local
+fixtures pass.
+
+### Preflight and primary-source review
+
+- [x] Derive the exact Draft-PR head `3015f864f26e2d547f43e1f47a8adfe6a1200bf8`, confirm PR #21 remains Draft/open/unmerged, and select the existing clean detached worktree without touching the 21 unrelated shared-checkout changes.
+- [x] Read the current official Supabase Auth migration, CLI backup/restore, migration/reset, RLS/security and changelog guidance plus Vercel system-variable, deployment, alias and REST-API guidance.
+- [x] Verify read-only that Hosted has 32 applied migrations, neither Activation migration, zero Activation relations, no installed `pg_cron`/`pg_net`, and zero true rows among the nine dangerous controls; read no Vault contents and no Auth/user rows.
+- [x] Verify read-only that the connected Vercel project remains Node 24.x and non-live and that the exact starting commit has only a READY `target=null` Preview.
+
+### P0 executable remediation
+
+- [x] Add actual runtime configuration attestation with the mandatory identity/requested/config-verified/deployment-verified sequence, immutable one-shot request identity, exact no-store schema, centralized runtime reads, two distinct deployment roles, unknown-outcome reconciliation, and hostile fixtures; send no live request.
+- [ ] Add officially supported Auth backup/restore closure and a synthetic two-user, two-isolated-stack login/JWT/Data-API/RLS E2E with exact UUID/identity/owner/orphan checks and Auth/RLS fault injection.
+- [ ] Commit independent pre/post schema goldens generated only from seed-free migration-built reference clusters; normal CI is verify-only and rejects source+target common-mode drift across all required schema objects.
+- [x] Replace same-cluster two-database restore proof with separate run-owned Source and Target Supabase/Postgres stacks, distinct cluster/system IDs, immutable target marker, source-read-only proof, loopback/Hosted-deny target validation, and run-scoped cleanup.
+- [x] Enforce one compatible MVCC snapshot across application/Auth/history/count/hash export evidence; concurrency fault injection must observe a complete old or new state and never mixed state or a completed manifest after abort.
+
+### P1 executable remediation
+
+- [x] Close break-glass integrity over the entrypoint and every transitive helper/SQL/template/config/wrapper using realpath plus exact HEAD Git-blob bytes before database/network access while allowing unrelated dirt.
+- [ ] Replace table-level side-effect exceptions with row/column/operation/transition/cardinality-bounded contracts and adversarial tests for same-count mutation, wrong campaign/column, trigger mutation, insert-delete compensation and unclassified relations.
+- [x] Require strong source/target cluster identity, run ID, target marker, role/database/fingerprint and source-not-target proof before every destructive process; prove zero spawn on failed validation.
+- [x] Revalidate backup/artifact realpaths and parents against symlink/junction/case escapes, use restrictive temporary artifacts, redact stdout and stderr, distinguish backup/restore/schema-golden/activation status, and cover encoded URLs/JWT/header/token patterns.
+- [ ] Add a forward-only migration through the pinned Supabase CLI workflow without modifying the 32 Hosted-applied migration bytes; update reset, pgTAP, rollback rehearsal and grants/RLS contracts.
+
+### Independent review, exact-head gates and handoff
+
+- [x] Run three independent adversarial reviews: Runtime/Vercel/State Machine; Backup/Auth/Schema/Snapshot; Break-glass/Filesystem/Side-effects/Credentials. Reproduce and close every accepted finding.
+- [ ] Run all focused fault-injection tests, then the complete Node 24 application, Windows, mock Playwright, credential-history, Supabase CLI 2.113.0, start/reset/pgTAP, every pending rollback, dual-cluster pre/post restore, synthetic Auth/RLS, golden/MVCC, filesystem/redaction/side-effect/checksum and Git gates on one exact clean commit.
+- [ ] Regenerate final-byte phase/migration/handoff checksums, update the post-build report with implementation/handoff SHAs and exact non-execution evidence, push only the existing branch, keep PR #21 Draft/unmerged, and wait for exact-head green CI plus Preview `target=null` evidence.
+
+### Verification checkpoint 2026-08-12
+
+- [x] The three required adversarial reviews inspected exact commit `1747df0c870e51906485b30419dd5b66315530d2`. Accepted fixes now use the immutable Auth deployment URL, exact JSON/no-store transport evidence, a portfolio zero-counter, pre-statement forbidden-mutation rejection, campaign-scoped/terminal-state emergency repair, a committed-blob break-glass bootstrap, native Windows database execution, contextual redacted credential scanning, full Auth schema fingerprints, Auth/owner cardinality, ephemeral sensitive Auth equality, schema-driven FK validation, empty-target identity validation and seed-free reference-proof enforcement.
+- [x] Current Node `v24.14.0` verification: focused security suite 8 files / 94 tests; complete Vitest 96 files / 715 tests; strict TypeScript; zero-warning ESLint after test typing cleanup; Prettier; PAPER-only scan; credential scan over worktree plus 100 commits with zero redacted findings. Backup contracts deterministically contain 82 relations / 32 migrations pre and 108 relations / 36 migrations post.
+- [ ] The pinned forward migration `20260812140953_fourth_activation_readiness_review_closure.sql` and its rollback/reset/pgTAP path require clean exact-head CI because this workstation has no Docker executable.
+- [ ] Both independently generated seed-free schema Golden files remain absent. Their approved provenance workflow is implemented and tested, but no Golden was fabricated from Source A, Stack B, Hosted, a placeholder or a circular workflow artifact. Until both reviewed files exist and exact-head CI passes, the required result remains `BLOCKED — CODE-LEVEL ACCEPTANCE CRITERIA NOT MET`.
+
+- [x] Focused runtime, backup/Auth, break-glass, filesystem, redaction and contract suites passed: 12 files / 113 tests.
+- [x] Complete Vitest suite passed after canonical Auth-artifact path hardening: 91 files / 678 tests.
+- [x] Prettier, zero-warning ESLint and strict TypeScript passed after the fourth-remediation implementation changes.
+- [x] PAPER-only safety scan and redacted credential scan passed across the worktree and 100 commits with zero findings.
+- [x] Intermediate exact-head CI `31594018211` passed Windows subprocess, 4/4 mock Playwright flows, Supabase CLI/start, rollback rehearsal and reset; pgTAP narrowed the remaining database work to an ambiguous retry reference plus incorrect counting of immutable expected mutations as forbidden effects. Both are corrected forward-only with explicit expected/forbidden evidence semantics and new assertions; replacement exact-head CI is pending.
+- [x] Exact-head CI `31594950210` passed Windows subprocess, 4/4 mock Playwright flows, Supabase start, rollback rehearsal, reset, and the complete pgTAP suite; application/database then stopped only because the intentionally independent pre/post schema-golden files do not yet exist.
+- [x] Narrow Auth restore data to the supported `auth.users` + `auth.identities` closure, explicitly exclude session/token tables, and keep full Auth schema plus synthetic login/JWT/Owner-RLS proof. The exporter contains no source DML.
+- [x] Move MVCC fault injection to a separate local source connection synchronized after `pg_export_snapshot`; the external writer restores its exact fixture and the exporter rejects any post-export source drift.
+- [x] Forward-only redefine Runtime dry-run dispatch so reviewed expected evidence cannot trigger a kill and the Bearer transport uses the immutable Runtime deployment URL, not the mutable Production alias; the Vault alias remains independently reverified.
+- [x] Revalidate and re-hash external backup, restore-proof, Auth-fixture and Vercel-proof paths after their final use; incomplete-artifact cleanup refuses to recurse into an unverified path.
+- [x] Exact-head CI `31597002015` reconfirmed Supabase start, every pending rollback rehearsal, reset, complete pgTAP and 4/4 mock Playwright; restore stopped fail-closed only at the deliberately absent independent pre Golden, while the Windows fixture exposed and prompted canonical temp-root handling.
+- [x] Expand independent schema-drift unit coverage across columns, relation removal, type/default, FK, RLS, policy, grants, functions/search paths and triggers; freeze Auth owners/ACLs plus user/identity schema dependencies without widening Auth row data beyond users and identities.
+- [x] Bind every destructive restore-target action to a fully constructed run/container/system/marker proof before the first schema drop, then require byte-canonical proof stability after reset.
+- [x] Close the Break-glass HEAD-byte closure over the package wrapper, entrypoint, transitive helpers and SQL, deriving Git HEAD internally while allowing unrelated dirt and rejecting modified, absent, untracked, symlinked or junction-replaced dependencies.
+- [x] Add database adversarial coverage for foreign-owner bounded mutations, storage cardinality overflow, insert/delete compensation and hidden-trigger side effects before arming.
+- [x] Complete local non-database verification after these changes: Prettier, zero-warning ESLint, strict TypeScript, 92 Vitest files / 692 tests, PAPER-only safety and the redacted worktree-plus-100-commit credential scan all passed. Local Next build remains unclaimed because the isolated worktree's external `node_modules` junction is rejected by Turbopack; clean exact-head CI is authoritative.
+- [ ] Local database gates remain unclaimed: this workstation has no Docker-compatible runtime or local PostgreSQL server.
+- [ ] Replace the pre/post schema-golden inputs with outputs generated from a fresh seed-free migration-built local stack; Hosted/source-derived or placeholder goldens are prohibited.
+- [ ] Re-run all exact-head application, browser, database, dual-stack restore and CI gates after the schema goldens and final bytes are complete.
+
+## PR #21 third activation-readiness remediation (2026-08-11)
+
+Safety status: repository hardening only. No Hosted migration/history repair,
+extension/Vault/Cron mutation, scheduler request, Production deployment, provider,
+model, Canary, broker, or trading execution is authorized.
+
+### Preflight and migration baseline
+
+- [x] Derive the exact local and Draft-PR head (`e705f67db819be13c99f759e07186c63f114b831`), preserve the 21 unrelated shared-worktree edits, and create a clean detached worktree at that commit.
+- [x] Read the governing repository instructions, current Supabase/Vercel documentation and changelog, and verify read-only that Hosted still has 32 applied migrations while both PR migrations remain unapplied.
+- [x] Prove a one-to-one repository/Hosted migration-name mapping and schema-equivalence evidence for every same-name/different-version discrepancy; stop rather than guessing on ambiguity. Read-only Hosted metadata and the pre contract contain the exact same 82 public/private base-relation names with RLS enabled; the 15 filename renames preserve the exact migration bytes.
+
+### Executable remediation
+
+- [x] Add append-only `auth_disabled` and `no_ai_runtime_enabled` deployment bindings, a mandatory `runtime_deployment_verified` gate, exact route/runtime identity checks, and two-deployment end-to-end coverage.
+- [x] Add a checksummed non-secret project identity contract and fixture-driven read-only Vercel deployment/alias proof before any request-capable phase.
+- [x] Make missing- and invalid-Bearer 401 probes durable, mandatory one-shots with exact evidence and no state-machine bypass.
+- [x] Split versioned pre- and post-activation backup contracts, cover every classified application relation, expand schema fingerprints, and bind verification to an externally retained manifest hash. The two seed-free restores remain an exact-head Docker CI gate.
+- [x] Add a deterministic handoff checksum generator/verifier based on status-aware merge-base changes and canonical Git bytes; final manifest generation remains after the implementation commit.
+- [x] Add the standalone dirty-tree-tolerant DB-first break-glass runner, complete relation classification, paid-Canary terminal prerequisite, and retry-safe terminal operation identities.
+- [x] Pin Node 24 consistently, enforce real credential-history depth, and harden all Windows subprocess/destructive local-database paths with fault-injection coverage.
+
+### Verification and publication
+
+- [x] Run focused unit/SQL contracts, then all mandatory application, browser, Supabase, pgTAP, rollback, pre/post restore, checksum, credential-history, Windows, hostile-endpoint, state-machine, side-effect, Canary, and break-glass gates on one exact clean Node 24 head.
+- [x] Regenerate final-byte phase/migration/handoff checksums, update the post-build report with honest implementation/handoff SHAs and non-execution evidence, commit only scoped files, push the existing branch, and keep PR #21 Draft and unmerged.
+
+Local pre-commit evidence on Node `v24.14.0`: phase contract 18 files / SHA-256
+`19577027ceab91fef3ac510e6dd92d63772931767980fc07924ad462ef5b673d`;
+backup contracts 82 pre-migration and 105 post-migration relations; Prettier exit
+0; ESLint exit 0 with zero warnings; strict TypeScript exit 0; Vitest 87 files /
+635 tests; PAPER-only scan exit 0; redacted credential scan exit 0 across the
+working tree and 100 commits; Next.js 16.3 production build exit 0; Playwright
+4/4 mock-only flows with fail-on-flaky exit 0; Supabase CLI `2.113.0` verified.
+This workstation has no Docker executable, so Supabase start/reset, pgTAP,
+rollback rehearsal, and the two seed-free export/restore contracts are not
+claimed locally and remain mandatory on the exact committed CI head.
+
+Exact-head CI run `31478991594` passed Windows subprocess and all four browser
+flows, then failed closed before application gates because phase hashes had
+captured Windows CRLF checkout bytes. The database job independently compiled
+and applied all migrations to its ephemeral stack, then stopped because the
+runner image had a `psql` wrapper but no versioned PostgreSQL client package.
+Repository-derived text contracts now hash canonical UTF-8/LF bytes with
+cross-platform tests; external evidence remains raw-byte exact. CI now installs
+and verifies PostgreSQL 17 client tools before any rehearsal. A fresh exact-head
+run remains mandatory; neither failure authorized or caused Hosted mutation.
+
+Exact-head CI run `31480224272` proved the canonical phase, backup, and handoff
+contracts on Linux and again passed Windows subprocess plus 4/4 browser jobs.
+The application suite then found that the simulated Windows resolver test still
+consulted the Linux execute bit even though the real Windows job passed; the
+resolver now consistently uses the explicitly selected platform, and the
+focused Linux test passes. The database job stopped before Supabase because
+Ubuntu Noble does not ship PostgreSQL 17 in its default repository. CI now adds
+the official PGDG HTTPS repository only after validating its full signing-key
+fingerprint, installs client 17, and asserts the major version. A fresh exact-head
+run is mandatory; no failing result is counted as evidence of completion.
+
+Exact-head CI run `31480867586` passed the complete application, Windows, and
+browser jobs. PGDG key validation and PostgreSQL 17 installation also passed.
+Rollback rehearsal then failed because the Node resolver found Ubuntu's generic
+`/usr/bin/psql` wrapper rather than PGDG's installed native binary. CI now
+asserts `/usr/lib/postgresql/17/bin/psql` is executable, verifies its major
+version directly, and prepends that exact native directory through
+`GITHUB_PATH` for subsequent `shell:false` resolution. Reset, pgTAP, and restore
+were correctly skipped; a fresh exact-head database run remains mandatory.
+
+Exact-head CI run `31481331885` passed the complete application, Windows, and
+4/4 browser jobs. Its database job passed the fingerprint-bound PGDG install,
+the rollback-only rehearsal, and a fresh seed-free reset before pgTAP failed
+closed. The database output exposed three root causes: deployment-proof retries
+checked the durable identity before recomputing the proof hash, a local
+`probe_kind` variable collided with the evidence column, and the newly added
+terminal-operation trigger helper retained PostgreSQL's default `PUBLIC`
+execute privilege. The proof check is now ordered before retry reconciliation,
+the variable is unambiguous, and the helper is included in the explicit revoke
+set. The post-migration backup contract was regenerated from the resulting
+migration bytes. The two restores remained correctly skipped; the replacement
+exact-head CI run is mandatory.
+
+Exact-head CI run `31483832916` passed the complete application, Windows, and
+4/4 browser jobs, then passed Supabase start, both rollback rehearsals, and the
+fresh reset. The three earlier pgTAP root causes were resolved: the 401 sequence
+and privilege contract advanced cleanly. The next first failure showed the
+test's synthetic market-calendar/session setup mutating forbidden relations
+after `runtime_deployment_verified`; the production guard correctly performed
+the DB-first stop. The deterministic fixture and experiment pause now occur
+before Campaign preparation, while the later adversarial mutation assertions
+remain in the protected states. Restores were correctly skipped after pgTAP;
+the replacement exact-head run remains mandatory.
+
+Exact-head CI run `31484467384` again passed application, Windows, browser,
+Supabase start, rollback rehearsal, and reset. pgTAP then executed the complete
+52-slot/104-event path and reached the positive post-terminal Canary claim; only
+that claim aborted because its final insert named a nonexistent `metadata`
+column on `private.paid_canary_runs`. The immutable prerequisite payload now
+uses the table's existing `result` evidence column, and pgTAP explicitly checks
+that all three globally locked model rows bind to the passed Activation Campaign.
+The post-migration backup contract was regenerated. Both restores remained
+correctly skipped after pgTAP; a replacement exact-head run is mandatory.
+
+Exact-head CI run `31485089511` passed application, Windows, browser, Supabase
+start, rollback rehearsal, and reset. All 135 Activation assertions executed;
+the only failure was the existing phase-two assertion that required durable
+`auto_stopped` transition evidence. Review showed the later retry-safe
+phase-two implementation had replaced the earlier transition-writing body
+without carrying that evidence forward. Phase two now inserts and immediately
+verifies the exact append-only transition, and a completed retry revalidates
+both its operation evidence and transition operation/correlation identity
+before returning. Both restores remained correctly skipped after pgTAP; a
+replacement exact-head run is mandatory.
+
+Exact-head CI run `31485769952` passed application, Windows, browser, Supabase
+start, both rollback rehearsals, reset, and every pgTAP assertion. The restore
+step created and exported the 82-relation pre-activation backup, then failed
+closed while preparing its disposable `template0` target because the script
+requested `supabase_vault WITH SCHEMA vault` before creating the target schema.
+The local-only target path now creates `vault` under `supabase_admin` before the
+extension, with a unit assertion for that ordering. No Hosted extension or Vault
+state was read or changed. The post restore did not run after the pre-target
+failure; a replacement exact-head run is mandatory.
+
+Exact-head CI run `31486465529` again passed application, Windows, browser,
+Supabase start, rollback rehearsal, reset, and pgTAP. Pre-activation export and
+the seed-free Supabase platform target then succeeded. App-schema restore failed
+closed because a `template0` database starts with an empty `public` schema while
+the verified schema dump contains its own `CREATE SCHEMA public`. The target
+preparer now drops only that empty schema in the already validated loopback-only
+`capital_lab_restore` database, inside the existing `try/finally`, before any
+platform/app restore. Unit coverage freezes this ordering. Post restore did not
+run after the pre-restore failure; a replacement exact-head run is mandatory.
+
+Exact-head CI run `31487163698` passed application (87 files / 634 tests),
+Windows (4 files / 14 tests), browser (4/4), Supabase start, both rollback
+rehearsals, reset, and all 14 pgTAP files / 1927 assertions. The pre-activation
+export created all 82 relation artifacts and the seed-free target preparation
+completed; application-schema restore then failed closed because the disposable
+`template0` target had not installed the existing baseline `pgcrypto`, `citext`,
+and `vector` extensions before restoring columns typed as `extensions.vector`.
+The target preparer now installs exactly those unversioned historical baseline
+extensions in the already validated loopback-only database before application
+schema restore, and the ordering contract is frozen in unit coverage. Post
+restore did not run after the pre-restore failure; a replacement exact-head run
+remains mandatory.
+
+Exact-head CI run `31488059936` again passed application (87 files / 634
+tests), Windows (4 files / 14 tests), browser (4/4), Supabase start, both
+rollback rehearsals, reset, and all 14 pgTAP files / 1927 assertions. The
+baseline-extension fix carried the 82-relation pre restore through application
+types; the next fail-closed statement was a platform-owned `supabase_admin`
+`ALTER DEFAULT PRIVILEGES` emitted by plain `pg_dump --no-owner`. The exporter
+now creates a custom schema archive, parses its explicit TOC, retains every
+application-owned `postgres` default ACL and current object grant, excludes only
+the classified platform-owned default ACL entries, rejects every unknown owner,
+freezes the counts/owners and PostgreSQL tool versions in a version-5 manifest,
+and removes the restrictive-permission intermediate files. The restored current
+grant fingerprint remains exact. Post restore did not run after the pre failure;
+a replacement exact-head run remains mandatory.
+
+Exact-head CI run `31489442949` is the first complete green remediation run:
+application 87 files / 635 tests, credential scan over the worktree plus 100
+commits with zero redacted findings, Windows 4 files / 14 tests, browser 4/4,
+Supabase CLI 2.113.0 start, both rollback-only migration rehearsals, reset, and
+all 14 pgTAP files / 1927 assertions passed. The seed-free pre contract exported
+and restored 82/82 relations with externally retained manifest SHA-256
+`2994fbd798a0891641572748fe5df2c3c3d5af2b889acf48919f326a672006cb`;
+the post contract exported and restored 105/105 relations with manifest SHA-256
+`0f490a59df1c4f4b2cb19219dc8def5049c48baf5859ad76711aa128e012da8b`.
+Read-only Hosted metadata independently matched the exact 82-relation pre set
+with RLS enabled on every listed relation. No Production data, credential, or
+mutation was used. The final report/manifest-only commit still requires its own
+exact-head green CI before handoff.
+
+## PR #21 activation-readiness adversarial hardening (2026-08-09)
+
+Safety status: implementation-only. Production migration/deployment/activation, Hosted extension/Vault/Cron mutation, scheduler HTTP, provider/model calls, Canary execution, broker connectivity, and PR merge/undraft are prohibited.
+
+### Preflight and evidence boundaries
+
+- [x] Derive local HEAD/branch/remote from Git, inspect the complete working tree, and preserve the 21 unrelated modified files observed in the shared working tree unstaged and unchanged.
+- [x] Confirm Draft PR #21 points to `codex/activation-readiness-follow-up` at `f23c8e4a98338e2546497d53ab77238f51c09691`; no later PR commits exist.
+- [x] Read current official Supabase migration, backup/restore, Cron/pg_cron, pg_net, Vault, RLS, security-definer, and breaking-change guidance; direct `cron.job` mutation and extension version pins remain forbidden.
+- [x] Prove read-only that linked Capital-Lab Hosted migration history contains neither `20260809150000` nor `20260809150417`; `pg_cron`/`pg_net`, planned Vault names, activation relations, and scheduler jobs are absent. Existing Vault extension is platform baseline with zero entries.
+- [x] Confirm read-only that the Vercel project is not live, the PR deployment is Preview-only (`target=null`), and tracked `vercel.json` disables `main` Git deployments; Production config remains untouched.
+
+### Implementation plan
+
+- [x] Replace name-trusting Cron logic with versioned canonical job specifications, persisted schedule-returned IDs, full-definition checks before install/arm/verify/stop, ID-bound `cron.alter_job`/`cron.unschedule`, and fail-closed extra-job detection.
+- [x] Bind the campaign manifest to a parser-validated Production origin/path, Deployment ID, commit, environment, database target fingerprint, phase-file hashes, and server-derived Git/target evidence.
+- [x] Add persistent one-shot auth-noop request/response/reconciliation evidence and a strict scheduler route response contract with exact zero side-effect counters and 401/no-side-effect coverage.
+- [x] Split unconditional DB-first emergency kill from orderly Vercel-first stop; make drain, disable, unschedule, and audit retryable without rolling back phase-one controls.
+- [x] Make dispatcher/reconciler transport capture unconditional, persist actual response JSON evidence, refresh side-effect snapshots on every tick, and implement deterministic terminal finalization (52 slots/104 events for v2) with drain and 300-second post-stop gates.
+- [x] Replace partial baselines with deterministic full-state signatures/watermarks/sums; enforce the complete dangerous-setting keyset, mock/paper provider contract, lead time, and retry equality.
+- [x] Establish one versioned critical-relation source of truth for exporter/manifest/restore verification, full schema/content hashes, clean-commit/migration/target binding, seed-free disposable restore, and tamper tests.
+- [x] Minimize grants and wrapper execution, enforce actor/transition matrices and owner/campaign composite FKs, harden security-definer search paths, and protect immutable evidence including TRUNCATE and global Canary one-shot semantics.
+- [x] Harden the cross-platform runner (`shell:false`, canonical paths, `psql -X`, timeouts, allowlists, unknown-outcome reconciliation) and expose explicit canonical phase files with frozen SHA-256 values.
+- [x] Expand redacted credential/history scanning, pin security-critical Actions by immutable SHAs, keep Canary flags child-scoped, and expose only safe disabled/mock health evidence.
+- [x] Add application, integration, pgTAP, fault-injection, full 52/104 happy-path, backup/restore tamper, privilege/RLS/TRUNCATE, target/manifest mismatch, Windows argument/path, and unknown/late request tests with zero external network/provider/OpenAI effects.
+
+### Verification and publication
+
+- [x] Run focused tests while iterating, then on the exact clean final commit: format, lint, typecheck, unit, safety, credentials, build, Playwright, pinned Supabase CLI version, local start/reset/pgTAP, seed-free export/restore, and rollback-only migration rehearsals.
+- [x] Regenerate migration/script/manifest/documentation checksums from final bytes; verify them again after commit and record exact commands, exit codes, and test counts under `docs/post-build/`.
+- [x] Push only scoped files to the existing PR branch, keep PR #21 draft/unmerged, observe exact-commit CI/Preview read-only, and end at no stronger than second-independent-review readiness.
+
+Iteration evidence before the first CI commit: direct TypeScript compiler exit 0;
+ESLint exit 0 with zero warnings; focused security suites 5 files / 34 tests;
+complete Vitest 79 files / 589 tests; PAPER-only scan exit 0. Local Supabase,
+pgTAP, Playwright, build, and seed-free restore remain pending until the clean
+ephemeral CI checkout because this workstation has neither Docker nor psql.
+Exact-head CI run `31341237570` passed application and browser gates, then
+failed closed on a non-idempotent trigger drop. Run `31341396633` passed the
+browser gate and advanced migration compilation to an installed-function
+parameter-name mismatch. Both schema-local findings were fixed without Hosted
+mutation; exact-head database rerun remains mandatory.
+Run `31341545900` passed application, browser, Supabase start, migration compile,
+and database reset. Its 1,332-assertion pgTAP pass then failed closed on a
+schema-wide private-function revoke that regressed established owner wrappers
+and on a non-superuser Cron-owner tamper fixture. The grant change is now an
+exact activation-function allowlist; username tamper is covered by the
+documented API rejection plus versioned hash inequality. A fresh exact-head
+pgTAP/restore run remains mandatory.
+Run `31341809083` passed application, browser, migration compile, and reset;
+1,816 of 1,836 pgTAP assertions passed. The remaining failures reduced to an
+older blanket exposed-schema SECURITY-DEFINER assertion, a missing explicit
+safe-control test fixture, a transaktionsweit offenbleibendes internal-writer
+flag, and one pg_cron SQLSTATE mismatch. The contract now allowlists only the
+three narrow fixed-search-path public wrappers, the fixture creates every
+required false setting explicitly, and internal writers open the mutation gate
+only around individual writes and close it before return. Exact-head rerun is
+still mandatory.
+Run `31342073726` passed all non-database gates and reduced pgTAP to three
+cascade assertions: the accelerated deterministic 52/104 test proposed a
+future slot with a lease based only on current server time, violating
+`lease_until > slot_at` before `ON CONFLICT` could use the preclaimed fixture.
+The runtime now derives lease expiry from the greater of server time and the
+server-planned slot, preserving the table invariant for retries and future
+slots. A fresh exact-head run remains mandatory.
+Run `31342252647` passed application, browser, pinned Supabase CLI startup,
+reset, and all 14 pgTAP files / 1,836 assertions. The seed-free backup gate was
+reached for the first time and rejected the post-toolchain checkout as dirty
+before any dump. The exporter now reports only Git status plus repository path
+(with `.env*`/`.npmrc` path redaction), never contents or credentials, so the
+next ephemeral run can identify and explicitly ignore or eliminate only the
+actual generated path. Clean-tree rejection remains unchanged.
+Run `31342485611` proved the only dirty path is the Supabase CLI-generated
+`supabase/.branches/_current_branch`; exactly `/supabase/.branches` is now
+ignored alongside `/supabase/.temp`, while every other dirty path remains
+blocking. Application and all database assertions stayed green. One unchanged
+Research-import browser assertion timed out after earlier green runs; no retry,
+timeout, or assertion was weakened, and a fresh exact-head browser pass remains
+mandatory.
+Run `31343249634` proved source evidence and sensitive export creation in
+ephemeral external storage. Restore rejected the manifest before applying
+roles/schema/data; mismatch reporting is now category-only, and psql distro
+suffixes are accepted while exact export/restore version equality remains
+mandatory. The credential gate correctly caught reserved-host test URLs in the
+current tree and commit history. Only `critical-backup-contract.test.ts` URLs
+to loopback or `db.example.com` are internally removed before CRED-008 matching;
+all other files, hosts, credential classes, and 100-commit history scanning
+remain fail-closed. Local scan now reports only the pre-existing ignored
+`.env.local` categories, never their values.
+Run `31343512116` passed application, browser, credential scan, all database
+assertions, source export, and strict manifest validation. The first empty
+target preflight failed before roles/schema/data restore. Exporter and verifier
+now share one tested PostgreSQL error redactor; a fixture proves literals and
+URLs are removed. Nine focused backup-contract tests pass, and the next
+exact-head run remains mandatory.
+Run `31343752298` identified the empty-target preflight error: the server
+`system_identifier` column was selected beside an aggregate count without its
+own aggregate. It now uses `max(system_identifier)` in the same one-row
+server-side identity query. No restore phase ran; the next exact-head target
+preflight and full restore remain mandatory.
+Run `31343987544` passed application, browser, credentials, Supabase start,
+reset, all 1,836 pgTAP assertions, export, manifest validation, and the empty
+target preflight. Role replay then failed because PostgreSQL roles are
+cluster-global: replaying the dump into a second database on the still-running
+source server attempted a privileged global setting mutation. The contract now
+freezes a password-free full role-policy fingerprint and a server fingerprint.
+Same-server disposable restores require exact role-policy equality and do not
+mutate shared roles; truly separate servers still restore and reverify roles.
+The focused contract suite passes 1 file / 10 tests; exact-head schema/data
+restore and full evidence comparison remain mandatory.
+Run `31344323501` passed every gate through role-policy and empty-target
+preflight. Schema restore then proved that Supabase CLI intentionally assumes a
+pre-provisioned target and excludes the extension-managed schema namespace.
+The seed-free target now applies one tracked, manifest-checksummed Prelude that
+creates only the empty `extensions` schema: no table, extension, migration,
+role, or row. The pgTAP path now also uses local `net._http_response` fixtures
+instead of direct durable-evidence inserts, rolls back invalid correlation,
+counter, transport-error, and terminal-reason cases, copies parsed counters,
+expires ephemeral transport rows, injects post-kill Cron/audit faults, rejects
+early finalization and drifted unschedule, and checks duplicate terminal ticks.
+A new exact-head pgTAP and full schema/data restore run is mandatory.
+Run `31344675766` kept all application and browser gates green (79 files / 594
+tests and 4/4 Playwright). The expanded pgTAP path rejected the nominal auth
+fixture because its JSON used the operation UUID in the `request_id` field
+instead of the request UUID frozen by the claim. The fixture now uses the exact
+persisted request identity; no production code or acceptance condition was
+weakened. Backup/restore was correctly skipped after the pgTAP failure.
+Run `31344881015` passed format, lint, typecheck, 79 files / 594 tests, safety,
+credentials, build, pinned Supabase startup/reset, and all 14 pgTAP files /
+1,851 assertions. The seed-free target passed export, manifest, role-policy,
+and identity preflight, then stopped because the schema dump expects the empty
+Supabase-managed `vault` namespace. The manifest-checksummed Prelude now creates
+only empty `extensions` and `vault` namespaces; it installs no extension and
+creates no table, role, migration, or row. One unchanged Research-import browser
+assertion was transiently red (3/4); no retry, timeout, or assertion was
+weakened. A fresh exact-head full restore and browser run remain mandatory.
+Run `31345275407` again passed the complete application gate and all 1,851
+database assertions. The `template0` restore advanced through the extension
+namespaces and then proved the deeper contract error: official Supabase dumps
+expect the managed Auth/Storage platform baseline of a provisioned target.
+Target preparation now exports first, temporarily holds only the exact project
+migrations, runs pinned `supabase db reset --no-seed`, restores the files,
+clones that real local platform baseline to a distinct database, and removes
+only its empty migration-history schema. The checksummed Prelude validates the
+baseline without creating it. The database fingerprint now includes the
+server-side database OID. Research import again failed at the same preview
+assertion (3/4), so it is now tracked as a repeated root-cause investigation,
+not dismissed as transient.
+Run `31345678279` passed the complete application gate, all four Playwright
+flows, migration compile/reset, and all 1,851 database assertions with the
+OID-bound fingerprint. The new local target builder failed closed, but its
+deliberately generic error did not identify the subphase. Fixed allowlisted
+phase labels now distinguish baseline reset, source quiesce/drain/reopen,
+clone, and history clear without emitting stderr, URLs, SQL values, or
+credentials. A fresh exact-head restore run remains mandatory.
+Run `31345975029` again passed application, all four Playwright flows, and all
+1,851 database assertions. Its new label identified `source_drain`: the local
+database operator cannot terminate every Supabase service backend. Physical
+cloning is removed. The helper now uses `pg_dump` to create schema/data artifacts
+for the real seed-free platform baseline in an OS temporary directory, restores
+them transactionally into a new `template0` database, and removes the temporary
+directory in `finally`. This path needs no backend termination and still emits
+no dump contents, stderr, URL, SQL value, or credential.
+Run `31346276617` passed application and all four Playwright flows but did not
+exercise any database code: the ephemeral runner already had local port 54322
+bound before `supabase start`. Reset, pgTAP, export, and restore were skipped.
+No retry loop or port override was added; a fresh exact-head clean runner is
+required.
+Run `31346407773` passed application, all four Playwright flows, pinned local
+startup/reset, and all 1,851 database assertions. The logical builder reached
+`platform_schema_dump` and failed closed before target restore. It now reuses
+the tested PostgreSQL redactor only for fixed `platform_*` phases: the next run
+may emit only the first error category line with literals/URLs redacted and a
+400-character cap; dump contents and stdout remain suppressed.
+Run `31346632981` passed application, all four Playwright flows, and all 1,851
+database assertions. The redacted diagnostic proved the runner `pg_dump` major
+version differs from the Supabase database. The baseline export now uses the
+same pinned Supabase CLI `2.113.0` dump path already proven by the critical
+export, with schemas fixed to `auth,storage,extensions,vault`; no arbitrary
+schema input or mismatched host client remains.
+Run `31346865611` passed application, all four Playwright flows, and all 1,851
+database assertions. The pinned baseline dump succeeded; restore then correctly
+refused its `SET ROLE supabase_admin` under the generic operator. Ownership
+commands are not stripped. Only the allowlisted managed baseline now restores
+as the fixed local `supabase_admin` with the existing non-logged loopback
+password; the Capital Lab schema/data restore and all evidence queries remain
+bound to the parsed operator.
+Run `31347131750` passed application, all four Playwright flows, and all 1,851
+database assertions. Managed schema restore then succeeded under its preserved
+role identity; baseline data failed because extension-owned `vault.secrets` was
+not recreated by a schema-filtered dump. The local disposable builder now
+installs `supabase_vault` with no version pin through `CREATE EXTENSION IF NOT
+EXISTS ... WITH SCHEMA vault`, copies data only for `auth,storage`, and requires
+the actual `vault.secrets` relation in both Prelude and target preflight. No
+Hosted extension or Vault object was changed.
+Run `31347387043` passed the complete application gate, pinned local reset, and
+all 14 pgTAP files / 1,851 assertions. The local platform-baseline builder now
+completed, including the unpinned local Vault extension; restore then attempted
+to replay cluster-global role settings on a freshly reset local server even
+though the password-free policy was already provisioned. The contract now
+compares complete role attributes and memberships first, skips redundant
+global replay on exact equality, rejects a same-server mismatch, and replays
+plus reverifies only a differing policy on a distinct server. The repeated
+Research-import browser failure was traced to interaction before React attached
+the file-change handler: the input is now disabled through SSR and becomes
+enabled only after the client hydration snapshot, which the unchanged semantic
+E2E flow explicitly observes before upload. A new clean local-only rollback
+rehearsal applies both PR migrations in one bounded transaction, verifies their
+probe relation, rolls back, proves absence, and restores the exact migration
+bytes; Hosted rehearsal remains unauthorized.
+Run `31404735561` passed the complete application and browser jobs, including
+the hydration-gated Research import, plus pinned local startup, the new
+rollback-only migration rehearsal, full reset, and all 1,851 pgTAP assertions.
+The seed-free builder and role-policy gate completed; schema restore then
+failed because a schema-filtered platform dump does not carry the global empty
+`supabase_realtime` publication that official Supabase application dumps expect
+to exist. The disposable builder now creates exactly that local publication,
+and both the verifier preflight and checksummed Prelude require its non-all-table
+default DML policy. No Hosted publication or Realtime configuration was read or
+changed.
+Run `31405499189` again passed application, all four browser flows, rollback
+rehearsal, reset, and all 1,851 pgTAP assertions. The Realtime publication gate
+allowed schema restore to complete; data restore then exposed that the default
+Supabase data dump also carried managed Storage baseline tables outside the
+critical relation contract. The exporter now derives a sorted data-schema scope
+from the canonical critical relation list, passes only that scope to the dump,
+freezes it in the manifest, and makes restore reject drift. Auth/Storage remain
+the separately provisioned seed-free platform baseline.
+Run `31406201745` at exact code commit
+`1023be44ed9f4e1f0e610dba8a501c7ccf687e89` is the first complete green cycle:
+format, zero-warning lint, strict typecheck, 80 Vitest files / 600 tests,
+PAPER-only safety, current plus 100-commit credential history, production build,
+4/4 Playwright flows, pinned Supabase CLI 2.113.0, local start, rollback-only
+rehearsal, full reset, 14 pgTAP files / 1,851 assertions, sensitive external
+export, seed-free managed target construction, and full restore verification of
+40 critical relations. The documentation-only checksum/handoff commit is the
+final candidate and remains subject to exact-head CI/PR reconciliation before
+handoff.
+Run `31342645890` passed application, all four browser flows, Supabase startup,
+reset, and 1,836 pgTAP assertions. The clean-tree gate now passes; the first
+canonical evidence query fails before any dump. The exporter now emits only
+the first PostgreSQL `ERROR` line with all single-quoted literals and URLs
+redacted and a hard 400-character cap. It still never prints query output,
+rows, credentials, headers, or connection details. A fresh exact-head run is
+required to identify the SQL contract defect.
+Run `31342850522` kept application, browser, reset, and all pgTAP assertions
+green. The pre-dump `psql` failure uses lowercase `psql: error:` formatting, so
+the redactor remained unclassified. Matching is now case-insensitive; no error
+detail, query output, row, literal, URL, or connection value is exposed. The
+next exact-head run remains mandatory.
+Run `31343009696` identified the pre-dump failure: libpq ignored the full URI
+when placed only in `PGDATABASE` and fell back to the default local socket.
+Export and restore now use one strict parser and separate non-logged `PGHOST`,
+`PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`, and `PGSSLMODE` fields. The
+parser requires credentials/database, exact port bounds, loopback for restore,
+`verify-full` for non-loopback sources, and rejects fragments or non-allowlisted
+parameters. Eight focused contract tests pass; exact-head restore remains
+mandatory.
+
+## Activation readiness follow-up (2026-08-09)
+
+- [x] Preserve unrelated working-tree changes and branch from the audit tree on `codex/activation-readiness-follow-up` without merging or deploying Production.
+- [x] Classify the prior audit evidence, record `key_rotation_completed=owner_attested`, and keep `server_consumer_scope_sync=pending` without inspecting hosted secret values.
+- [x] Confirm the hosted Production off-state and identify Supabase CLI `2.113.0` as the exact release resolved by the last green clean-checkout CI run.
+- [x] Pin the database gate, add redacted credential scanning, and capture exact-commit exit codes and test counts as machine-readable CI evidence.
+- [x] Separate schema migration, extension preparation, disabled job installation, later arming, and shutdown into idempotent fail-closed phases.
+- [x] Add the dedicated `no_ai_shadow_infrastructure_dry_run`, two-full-regular-session plan, expected-vs-actual evidence, alarms, atomic stop, and audited state machine.
+- [x] Make the paid Canary globally one-shot across operation IDs and isolate temporary launcher flags without executing a real model request.
+- [x] Add focused application and pgTAP coverage, harden backup/restore evidence, and produce the final Activation Readiness report.
+- [x] Run clean application, browser, and exact-commit CI database gates; publish only an unmerged draft PR and leave every dangerous flag false.
+
+Scope guard: this follow-up prepares and verifies code only. It must not apply the Production migration, install remote extensions, inspect or change hosted secrets, create or enable jobs, promote or deploy Production, merge a PR, activate any runtime control, call a live provider or model, run the paid Canary, import research, or create an order, fill, or ledger entry.
+
 ## Post-build hosting and activation audit (2026-08-09)
 
 - [x] Re-audit repository instructions, architecture, dependencies, migrations, runtime boundaries, CI, environment examples, and dirty worktree without overwriting unrelated user changes.

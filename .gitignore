@@ -42,8 +42,10 @@ yarn-error.log*
 
 # local Supabase and browser-test state
 /supabase/.temp
+/supabase/.branches
 /playwright-report
 /test-results
+/.ci-evidence
 
 # vercel
 .vercel

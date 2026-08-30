@@ -12,6 +12,7 @@ export type HostedSchedulerRequestResult = {
   cyclesClaimed: number
   cyclesReconciled: number
   modelCalls: 0
+  budgetReservations: 0
   paperOrdersCreated: 0
   paperFillsCreated: 0
   ledgerEntriesCreated: 0
@@ -43,6 +44,9 @@ function text(value: unknown, label: string): string {
 export async function runHostedSchedulerRequest(
   client: SchedulerClient,
   input: {
+    campaignId: string
+    eventId: string
+    requestId: string
     job: HostedSchedulerJob
     correlationId: string
     cycleId: string
@@ -54,6 +58,9 @@ export async function runHostedSchedulerRequest(
     'run_hosted_scheduler_request' as keyof Database['public']['Functions'],
     {
       p_job: input.job,
+      p_campaign_id: input.campaignId,
+      p_event_id: input.eventId,
+      p_request_id: input.requestId,
       p_correlation_id: input.correlationId,
       p_cycle_id: input.cycleId,
       p_requested_at: input.requestedAt,
@@ -79,6 +86,10 @@ export async function runHostedSchedulerRequest(
       'reconciled-cycle count',
     ),
     modelCalls: exactZero(record.model_calls, 'model-call count'),
+    budgetReservations: exactZero(
+      record.budget_reservations,
+      'budget-reservation count',
+    ),
     paperOrdersCreated: exactZero(
       record.paper_orders_created,
       'paper-order count',

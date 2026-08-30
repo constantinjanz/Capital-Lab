@@ -13,7 +13,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'pnpm dev --port 3100',
+    command: 'node node_modules/next/dist/bin/next dev --port 3100',
     url: `${mockE2eOrigin}/api/health`,
     env: {
       ...process.env,

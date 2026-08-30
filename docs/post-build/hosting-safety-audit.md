@@ -1,5 +1,7 @@
 # Capital Lab post-build hosting and safety audit
 
+> Historical audit snapshot. Its 48-hour activation instructions are superseded by [`activation-readiness-follow-up.md`](./activation-readiness-follow-up.md). Do not execute the historical combined activation command: migration, extension preparation, disabled job installation, auth/no-op, two-full-session planning, arming, and shutdown are now separate reviewed phases.
+
 Audit date: 2026-08-09 (Europe/Berlin)
 Branch: `codex/post-build-hosting-audit`
 Scope: post-build hardening and preparation only
@@ -264,22 +266,15 @@ Expected prerequisite result: `status=ok` with all three exact IDs true. This re
 Only after migration, key rotation, backup restore, metadata check, Billing checklist, and separate paid approval:
 
 ```powershell
-$env:AGENT_ENABLED='false'
-$env:AGENT_EXECUTION_MODE='mock'
-$env:AUTONOMOUS_PAPER_EXECUTION_ENABLED='false'
-$env:PAID_MODEL_CALLS_ENABLED='true'
-$env:OPENAI_CANARY_ENABLED='true'
-$env:OPENAI_WEB_SEARCH_ENABLED='false'
-$env:SOL_ENABLED='false'
-$env:SOL_CHALLENGER_ENABLED='false'
-$env:SOL_LIVE_EXECUTION_ENABLED='false'
-$env:REAL_BROKER_ENABLED='false'
-$env:SCHEDULER_ENABLED='false'
 $operationId = [guid]::NewGuid().ToString()
 pnpm openai:canary -- --confirm-paid-canary=MAX_0_01_USD --operation-id=$operationId
-$env:PAID_MODEL_CALLS_ENABLED='false'
-$env:OPENAI_CANARY_ENABLED='false'
 ```
+
+`openai:canary` now launches a dedicated child process with the reviewed Canary
+flags and every scheduler/agent/web-search/Sol/broker path explicitly disabled.
+The parent PowerShell environment is never changed, and interruption destroys the
+child-only flag scope. Supply any later approved key through a secret-aware
+child-process mechanism; do not export it persistently in the parent shell.
 
 `OPENAI_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, and `SUPABASE_SECRET_KEY` must already be supplied by the approved local secret mechanism. Do not paste them into the command or report. The real Canary was **not run** in this audit.
 

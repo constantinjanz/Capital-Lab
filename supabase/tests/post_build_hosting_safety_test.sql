@@ -150,10 +150,10 @@ select ok(
 select ok(
   has_function_privilege(
     'service_role',
-    'public.run_hosted_scheduler_request(text,uuid,uuid,timestamptz)',
+    'public.run_hosted_scheduler_request(uuid,uuid,uuid,text,uuid,uuid,timestamptz)',
     'EXECUTE'
   ),
-  'only the server service role can execute scheduler work'
+  'only the server service role can execute the identity-bound scheduler wrapper'
 );
 select hasnt_column('public', 'model_comparisons', 'promoted_at', 'comparison evidence cannot auto-promote Sol');
 select results_eq(

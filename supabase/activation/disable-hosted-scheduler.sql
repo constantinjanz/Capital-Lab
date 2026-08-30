@@ -1,38 +1,14 @@
--- Idempotent emergency/default shutdown. Uses Cron APIs; cron.job is read only.
+-- Orderly-stop database phase. The runbook requires the independently verified
+-- Vercel drain/deactivation gate to finish before this file is invoked.
+\set ON_ERROR_STOP on
 begin;
 
-do $$
-begin
-  if to_regclass('cron.job') is not null then
-    if exists (select 1 from cron.job where jobname = 'capital-lab-market-dispatcher') then
-      perform cron.unschedule('capital-lab-market-dispatcher');
-    end if;
-    if exists (select 1 from cron.job where jobname = 'capital-lab-reconciler') then
-      perform cron.unschedule('capital-lab-reconciler');
-    end if;
-  end if;
-end;
-$$;
+select private.emergency_kill_activation_controls(:'campaign_id'::uuid);
 
-update private.application_settings
-set value = 'false'::jsonb,
-    version = version + 1
-where setting_key in (
-  'scheduler_enabled', 'agent_enabled', 'autonomous_paper_execution_enabled',
-  'paid_model_calls_enabled', 'openai_canary_enabled',
-  'openai_web_search_enabled', 'sol_challenger_enabled',
-  'sol_live_execution_enabled', 'real_broker_enabled'
-);
-
-update private.application_settings
-set value = '"supabase"'::jsonb,
-    version = version + 1
-where setting_key = 'scheduler_provider';
-
-update public.experiment_controls
-set scheduler_enabled = false,
-    agent_enabled = false,
-    state_version = state_version + 1
-where scheduler_enabled or agent_enabled;
+select jsonb_build_object('schema_version', 3, 'phase', 'orderly-stop',
+  'persisted_state', state, 'scheduler_control_enabled', scheduler_control_enabled,
+  'database_kill_committed_by_this_transaction', true,
+  'cron_change_attempted', false)
+from private.no_ai_shadow_dry_runs where id = :'campaign_id'::uuid;
 
 commit;

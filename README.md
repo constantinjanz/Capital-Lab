@@ -6,7 +6,7 @@ Capital Lab is a private, single-owner AI paper-trading research laboratory. It 
 
 ## Safe local start
 
-Requirements: Node.js 22+ and pnpm 10. Docker is optional unless you want the local Supabase stack.
+Requirements: Node.js 24.x and pnpm 10.33.2. Docker is optional unless you want the local Supabase stack.
 
 ```powershell
 Copy-Item .env.example .env.local
@@ -27,7 +27,7 @@ pnpm test:safety
 pnpm build
 ```
 
-Database verification additionally requires Docker Desktop and the Supabase CLI:
+Database verification additionally requires Docker Desktop and Supabase CLI exactly `2.113.0`:
 
 ```powershell
 supabase start

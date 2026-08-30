@@ -8,48 +8,340 @@ on:
 permissions:
   contents: read
 
+env:
+  CAPITAL_LAB_CI_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   application:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact clean checkout
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain)"
+      - uses: pnpm/action-setup@d15e628ca66d93ee5f352c71671a7bc6a97af5c9 # v6.0.8
         with:
           version: 10.33.2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
-          node-version: 22
+          node-version: 24.x
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm test:safety
-      - run: pnpm build
+      - run: node scripts/run-ci-gate.mjs --id format -- pnpm format:check
+      - run: node scripts/run-ci-gate.mjs --id lint -- pnpm lint
+      - run: node scripts/run-ci-gate.mjs --id typecheck -- pnpm typecheck
+      - run: node scripts/run-ci-gate.mjs --id unit-integration -- pnpm test
+      - run: node scripts/run-ci-gate.mjs --id paper-only -- pnpm test:safety
+      - run: node scripts/run-ci-gate.mjs --id credentials -- pnpm test:credentials
+      - run: node scripts/run-ci-gate.mjs --id production-build -- pnpm build
+      - name: Publish application evidence summary
+        if: always()
+        run: cat .ci-evidence/*.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: application-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .ci-evidence/*.json
+          include-hidden-files: true
+          if-no-files-found: error
+
+  disaster-recovery-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact clean checkout
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain)"
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: 24.x
+      - name: Verify activation phase contracts
+        run: node scripts/activation-phase-contract.mjs --verify
+      - name: Verify backup relation contracts
+        run: node scripts/generate-backup-contracts.mjs --verify
+      - name: Verify committed independent schema Goldens
+        run: node scripts/verify-schema-golden-contracts.mjs
+      - name: Verify complete handoff byte manifest
+        if: always()
+        run: node scripts/handoff-checksums.mjs --verify
 
   database:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
-          version: latest
-      - run: supabase start
-      - run: supabase db reset
-      - run: supabase test db
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact clean checkout
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain)"
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: 24.x
+      - name: Install PostgreSQL 17 client tools
+        run: |
+          key_file="$RUNNER_TEMP/postgresql-pgdg.asc"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc --output "$key_file"
+          key_fingerprint="$(gpg --batch --show-keys --with-colons "$key_file" | awk -F: '$1 == "fpr" { print $10; exit }')"
+          test "$key_fingerprint" = "B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8"
+          sudo gpg --batch --dearmor --yes \
+            --output /usr/share/keyrings/postgresql-pgdg.gpg "$key_file"
+          echo "deb [signed-by=/usr/share/keyrings/postgresql-pgdg.gpg] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/postgresql-pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes postgresql-client-17
+          client_bin="/usr/lib/postgresql/17/bin"
+          test -x "$client_bin/psql"
+          echo "$client_bin" >> "$GITHUB_PATH"
+          test "$("$client_bin/psql" --version | awk '{print $3}' | cut -d. -f1)" = "17"
+      - uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
+        with:
+          version: 2.113.0
+      - run: supabase --version
+      - name: Create exact run-owned local CI stack
+        run: |
+          ci_run_id="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ci_workdir="${RUNNER_TEMP}/capital-lab-ci-${ci_run_id}"
+          node scripts/run-ci-gate.mjs --id create-owned-local-ci-stack -- \
+            node scripts/create-owned-local-ci-stack.mjs \
+              "--run-id=${ci_run_id}" "--output-dir=${ci_workdir}"
+          echo "CAPITAL_LAB_CI_RUN_ID=${ci_run_id}" >> "$GITHUB_ENV"
+          echo "CAPITAL_LAB_CI_WORKDIR=${ci_workdir}" >> "$GITHUB_ENV"
+      - name: Create exact run-owned source network
+        run: node scripts/run-ci-gate.mjs --id create-owned-local-ci-network -- node scripts/create-owned-local-supabase-network.mjs --role=source
+      - run: node scripts/run-ci-gate.mjs --id supabase-start -- node scripts/run-redacted-subprocess.mjs --id=supabase-start --role=source -- supabase start "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
+      - name: Replay exact PRE migrations through psql simple-query mode
+        run: node scripts/run-ci-gate.mjs --id local-migration-replay-pre -- node scripts/apply-local-migrations-via-psql.mjs --contract=pre --seed=omit --target=ci
+      - name: Rollback-only migration rehearsal
+        run: node scripts/run-ci-gate.mjs --id migration-rollback-rehearsal -- node scripts/run-local-rollback-migration-rehearsal.mjs
+      - name: Seed-free reset of the exact run-owned stack
+        run: |
+          node scripts/run-ci-gate.mjs --id database-reset -- \
+            node scripts/reset-owned-local-ci-stack.mjs \
+            "--confirm=RESET OWNED CAPITAL LAB CI STACK postgres" \
+            "--run-id=${CAPITAL_LAB_CI_RUN_ID}" \
+            "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
+          node scripts/run-ci-gate.mjs --id database-reset-migrations -- \
+            node scripts/apply-local-migrations-via-psql.mjs \
+            --contract=post --seed=include --target=ci
+      - run: node scripts/run-ci-gate.mjs --id database-pgtap -- supabase test db "--workdir=${CAPITAL_LAB_CI_WORKDIR}" "--network-id=capital-lab-net-capital-lab-ci-${CAPITAL_LAB_CI_RUN_ID}"
+      - name: Seed-free pre- and post-activation backup and disposable restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_root="$(mktemp -d "${RUNNER_TEMP}/capital-lab-artifacts.XXXXXX")"
+          restore_run_id="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          target_workdir="${RUNNER_TEMP}/capital-lab-restore-${restore_run_id}"
+          disposable_marker="$(node -e "process.stdout.write(require('node:crypto').randomUUID())")"
+          export CAPITAL_LAB_RESTORE_RUN_ID="$restore_run_id"
+          export CAPITAL_LAB_RESTORE_DISPOSABLE_MARKER="$disposable_marker"
+          [[ "$restore_run_id" =~ ^run-[0-9]+-[0-9]+$ ]]
+          [[ "$artifact_root" == "$RUNNER_TEMP"/capital-lab-artifacts.* ]]
+          [[ "$target_workdir" == "$RUNNER_TEMP"/capital-lab-restore-run-* ]]
+          node scripts/create-local-restore-stack.mjs "--run-id=${restore_run_id}" "--output-dir=${target_workdir}"
+          target_owned=false
+          cleanup() {
+            prior_status=$?
+            trap - EXIT
+            set +e
+            cleanup_failed=0
+            if [ "$target_owned" = true ]; then
+              if ! node scripts/cleanup-owned-local-supabase-stack.mjs --role=restore "--workdir=${target_workdir}"; then
+                echo 'Disposable restore stack cleanup failed closed' >&2
+                cleanup_failed=1
+              fi
+            fi
+            if [[ "$artifact_root" == "$RUNNER_TEMP"/capital-lab-artifacts.* ]]; then
+              if ! chmod -R u+rwX "$artifact_root" 2>/dev/null; then cleanup_failed=1; fi
+              if ! rm -rf -- "$artifact_root"; then cleanup_failed=1; fi
+            else
+              cleanup_failed=1
+            fi
+            if [[ "$target_workdir" == "$RUNNER_TEMP"/capital-lab-restore-run-* ]]; then
+              if ! rm -rf -- "$target_workdir"; then cleanup_failed=1; fi
+            else
+              cleanup_failed=1
+            fi
+            if [ "$cleanup_failed" -ne 0 ]; then
+              echo 'Sensitive local artifact cleanup was incomplete' >&2
+            fi
+            if [ "$prior_status" -ne 0 ]; then exit "$prior_status"; fi
+            exit "$cleanup_failed"
+          }
+          trap cleanup EXIT
+          run_mvcc_export() {
+            local contract="$1"
+            local output="$2"
+            local control="$3"
+            local race_id="run-${contract}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            local export_status=0
+            local writer_status=0
+            mkdir --mode=700 -- "$control"
+            export CAPITAL_LAB_LOCAL_MVCC_RACE_CONTROL="$control"
+            export CAPITAL_LAB_LOCAL_MVCC_RACE_ID="$race_id"
+            node scripts/run-local-mvcc-race-writer.mjs &
+            local writer_pid=$!
+            node scripts/export-critical-tables.mjs "--contract=${contract}" "--output-dir=${output}" || export_status=$?
+            wait "$writer_pid" || writer_status=$?
+            unset CAPITAL_LAB_LOCAL_MVCC_RACE_CONTROL
+            unset CAPITAL_LAB_LOCAL_MVCC_RACE_ID
+            if [ "$export_status" -ne 0 ] || [ "$writer_status" -ne 0 ]; then
+              echo 'MVCC export fault-injection gate failed closed' >&2
+              return 1
+            fi
+          }
+          node scripts/reset-owned-local-ci-stack.mjs \
+            "--confirm=RESET OWNED CAPITAL LAB CI STACK postgres" \
+            "--run-id=${CAPITAL_LAB_CI_RUN_ID}" \
+            "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
+          node scripts/apply-local-migrations-via-psql.mjs \
+            --contract=pre --seed=omit --target=ci
+          node scripts/local-auth-restore-fixture.mjs --mode=prepare "--credentials=${artifact_root}/pre-auth.json"
+          run_mvcc_export pre "${artifact_root}/pre" "${artifact_root}/pre-race-control"
+          node scripts/assert-local-mvcc-fixture-clean.mjs
+          node scripts/create-owned-local-supabase-network.mjs --role=restore
+          target_owned=true
+          node scripts/run-redacted-subprocess.mjs --id=restore-stack-b-pre-start --role=restore -- supabase start "--workdir=${target_workdir}"
+          export CAPITAL_LAB_LOCAL_DISPOSABLE_CONFIRM='RESET DISPOSABLE CAPITAL LAB RESTORE STACK B postgres'
+          node scripts/prepare-seed-free-local-restore-target.mjs "--proof=${artifact_root}/pre-target-proof.json"
+          export CAPITAL_LAB_RESTORE_CONFIRM_DISPOSABLE='seed-free-disposable-database-confirmed'
+          pre_hash="$(sha256sum "${artifact_root}/pre/manifest.json" | cut -d' ' -f1)"
+          pre_target_hash="$(sha256sum "${artifact_root}/pre-target-proof.json" | cut -d' ' -f1)"
+          node scripts/verify-backup-restore.mjs --contract=pre "--manifest=${artifact_root}/pre/manifest.json" "--expected-manifest-sha256=${pre_hash}" "--target-proof=${artifact_root}/pre-target-proof.json" "--expected-target-proof-sha256=${pre_target_hash}"
+          node scripts/local-auth-restore-fixture.mjs --mode=verify "--credentials=${artifact_root}/pre-auth.json" "--supabase-workdir=${target_workdir}"
+          node scripts/local-auth-restore-fixture.mjs --mode=faults "--credentials=${artifact_root}/pre-auth.json" "--supabase-workdir=${target_workdir}"
+          cp "${artifact_root}/pre/auth-data.sql" "${artifact_root}/pre/auth-data.original"
+          : > "${artifact_root}/pre/auth-data.sql"
+          if node scripts/verify-backup-restore.mjs --contract=pre "--manifest=${artifact_root}/pre/manifest.json" "--expected-manifest-sha256=${pre_hash}" "--target-proof=${artifact_root}/pre-target-proof.json" "--expected-target-proof-sha256=${pre_target_hash}"; then
+            echo 'Missing Auth backup data was not rejected' >&2
+            exit 1
+          fi
+          mv "${artifact_root}/pre/auth-data.original" "${artifact_root}/pre/auth-data.sql"
+          node scripts/cleanup-owned-local-supabase-stack.mjs --role=restore "--workdir=${target_workdir}"
+          target_owned=false
+          node scripts/reset-owned-local-ci-stack.mjs \
+            "--confirm=RESET OWNED CAPITAL LAB CI STACK postgres" \
+            "--run-id=${CAPITAL_LAB_CI_RUN_ID}" \
+            "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
+          node scripts/apply-local-migrations-via-psql.mjs \
+            --contract=post --seed=omit --target=ci
+          node scripts/local-auth-restore-fixture.mjs --mode=prepare "--credentials=${artifact_root}/post-auth.json"
+          run_mvcc_export post "${artifact_root}/post" "${artifact_root}/post-race-control"
+          node scripts/create-owned-local-supabase-network.mjs --role=restore
+          target_owned=true
+          node scripts/run-redacted-subprocess.mjs --id=restore-stack-b-post-start --role=restore -- supabase start "--workdir=${target_workdir}"
+          node scripts/prepare-seed-free-local-restore-target.mjs "--proof=${artifact_root}/post-target-proof.json"
+          post_hash="$(sha256sum "${artifact_root}/post/manifest.json" | cut -d' ' -f1)"
+          post_target_hash="$(sha256sum "${artifact_root}/post-target-proof.json" | cut -d' ' -f1)"
+          node scripts/verify-backup-restore.mjs --contract=post "--manifest=${artifact_root}/post/manifest.json" "--expected-manifest-sha256=${post_hash}" "--target-proof=${artifact_root}/post-target-proof.json" "--expected-target-proof-sha256=${post_target_hash}"
+          node scripts/local-auth-restore-fixture.mjs --mode=verify "--credentials=${artifact_root}/post-auth.json" "--supabase-workdir=${target_workdir}"
+          node scripts/local-auth-restore-fixture.mjs --mode=faults "--credentials=${artifact_root}/post-auth.json" "--supabase-workdir=${target_workdir}"
+      - name: Stop exact run-owned local CI stack
+        if: always() && env.CAPITAL_LAB_CI_WORKDIR != ''
+        run: node scripts/cleanup-owned-local-supabase-stack.mjs --role=source "--workdir=${CAPITAL_LAB_CI_WORKDIR}"
+      - name: Publish database evidence summary
+        if: always()
+        run: cat .ci-evidence/*.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: database-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .ci-evidence/*.json
+          include-hidden-files: true
+          if-no-files-found: error
 
   browser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact clean checkout
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain)"
+      - uses: pnpm/action-setup@d15e628ca66d93ee5f352c71671a7bc6a97af5c9 # v6.0.8
         with:
           version: 10.33.2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
         with:
-          node-version: 22
+          node-version: 24.x
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      - run: node scripts/run-ci-gate.mjs --id browser -- pnpm test:e2e
+      - name: Publish browser evidence summary
+        if: always()
+        run: cat .ci-evidence/*.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: always()
+        with:
+          name: browser-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .ci-evidence/*.json
+          include-hidden-files: true
+          if-no-files-found: error
+
+  windows-subprocess:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@d15e628ca66d93ee5f352c71671a7bc6a97af5c9 # v6.0.8
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: 24.x
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Native Windows subprocess and path gates
+        run: pnpm exec vitest run scripts/lib/safe-process.test.ts scripts/lib/held-files.test.ts scripts/lib/safe-artifact-path.test.ts scripts/lib/credential-scan-safety.test.ts scripts/lib/schema-golden-reference-proof.test.ts scripts/lib/mvcc-race-control.test.ts scripts/lib/local-container-identity-diagnostic.test.ts scripts/lib/owned-local-supabase-network.test.ts scripts/run-activation-phase.test.ts scripts/run-database-tests.test.ts scripts/run-emergency-kill.test.ts scripts/run-redacted-subprocess.test.ts scripts/migration-rehearsal-contract.test.ts scripts/critical-backup-contract.test.ts scripts/local-container-postgres.test.ts scripts/local-supabase-target-proof.test.ts scripts/prepare-seed-free-local-restore-target.test.ts scripts/capture-backup-schema-golden.test.ts scripts/bootstrap-schema-goldens.test.ts scripts/verify-schema-golden-candidate-artifact.test.ts scripts/apply-local-migrations-via-psql.test.ts scripts/owned-local-ci-stack.test.ts
+      - name: Parse every Windows-sensitive subprocess wrapper
+        run: |
+          node --check scripts/export-critical-tables.mjs
+          node --check scripts/prepare-seed-free-local-restore-target.mjs
+          node --check scripts/run-local-rollback-migration-rehearsal.mjs
+          node --check scripts/run-ci-gate.mjs
+          node --check scripts/verify-backup-restore.mjs
+          node --check scripts/local-auth-restore-fixture.mjs
+          node --check scripts/run-local-mvcc-race-writer.mjs
+          node --check scripts/create-local-restore-stack.mjs
+          node --check scripts/run-redacted-subprocess.mjs
+          node --check scripts/run-database-tests.mjs
+          node --check scripts/prepare-schema-golden-reference-proof.mjs
+          node --check scripts/capture-backup-schema-golden.mjs
+          node --check scripts/bootstrap-schema-goldens.mjs
+          node --check scripts/apply-local-migrations-via-psql.mjs
+          node --check scripts/assert-local-mvcc-fixture-clean.mjs
+          node --check scripts/create-owned-local-ci-stack.mjs
+          node --check scripts/create-owned-local-supabase-network.mjs
+          node --check scripts/cleanup-owned-local-supabase-stack.mjs
+          node --check scripts/reset-owned-local-ci-stack.mjs
+          node --check scripts/verify-schema-golden-candidate-artifact.mjs
+          node --check scripts/run-emergency-bootstrap.mjs
