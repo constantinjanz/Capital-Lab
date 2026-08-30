@@ -2,6 +2,71 @@
 
 The authoritative design and acceptance criteria are in `IMPLEMENTATION_PLAN.md`.
 
+## LOCAL-F5 singleton fixture and Golden cleanup-diagnostic closure (2026-08-22)
+
+Safety status: local uncommitted repair from exact F4
+`827efd959f46824bbf50be7ae49dda84ff0c8b26`. The scope is limited to the
+invalid second-owner pgTAP fixture, preservation of an exact allowlisted primary
+Golden diagnostic across cleanup failures, their focused tests, the handoff
+manifest, Lessons, and this task record. No migration, seed, schema, Runtime SQL,
+Gate, workflow, network, timeout, Golden, package, lock, Hosted/Production,
+commit, push, rerun, dispatch, import, merge, review-state, deployment, provider,
+broker, or trading action is authorized.
+
+- [x] Confirm the clean exact F4 commit, matching remote branch and PR head,
+      canonical LF checkout, manifest closure, and the two natural F4 blockers.
+- [x] Freeze the exact six-file F5 allowlist before implementation:
+      `activation_readiness_follow_up_test.sql`, `bootstrap-schema-goldens.mjs`,
+      `bootstrap-schema-goldens.test.ts`, `activation-readiness-checksums.sha256`,
+      `lessons.md`, and `todo.md`.
+- [x] Remove the structurally impossible second `app_users` owner and second
+      Activation campaign fixture while retaining explicit singleton and
+      one-campaign lifecycle assertions.
+- [x] Preserve the already validated primary Golden startup diagnostic when
+      later stack or incomplete-artifact cleanup also fails; cleanup must remain
+      fail-closed and raw child streams must remain suppressed.
+- [x] Pass focused fault-injection tests, syntax checks, full `pnpm verify`,
+      prospective checksum closure, and exact diff/credential/protected-file
+      audits; record the exact results.
+- [x] Hand off the scoped local diff without commit, push, CI/Golden rerun,
+      Candidate import, merge, or deployment.
+
+The pgTAP fixture now proves SQLSTATE `23505` for both the prohibited second
+`app_users` owner and the prohibited second `(owner_id, run_type)` campaign,
+keeps exactly one prepared campaign, and leaves the singleton index, seed,
+migrations, schema, and Runtime SQL unchanged. An independent SQL review found
+no invalid error code, residual two-campaign assumption, or rollback side
+effect. A real pgTAP lane was not run locally because the Docker daemon is
+unavailable and the Supabase CLI is absent; dynamic Database acceptance is
+therefore deliberately not claimed.
+
+The Golden bootstrap now distinguishes an exact child failure from a clean
+child envelope followed by an outer exit, timeout, or signal. It emits only an
+exact revalidated failure diagnostic before the tested stack and
+incomplete-artifact cleanup paths can throw, while success, contradictory,
+malformed, absent, and private values remain suppressed. Cleanup remains
+fail-closed, the outer catch remains fixed-text-only, and the Gate, workflows,
+network, and timeouts are unchanged. The final independent diff review found no
+P0, P1, or P2 issue.
+
+Local verification on Node `v24.14.0` and pnpm `10.33.2` is green:
+`bootstrap-schema-goldens.mjs` passed `node --check`; the focused
+`bootstrap-schema-goldens.test.ts`, `run-ci-gate.test.ts`, and
+`run-redacted-subprocess.test.ts` run passed 3 files / 135 tests; and the final
+process-local `VITEST_MAX_WORKERS=4 pnpm verify` passed full-tree Prettier,
+zero-warning ESLint, strict TypeScript, 108 Vitest files / 1,184 tests,
+PAPER-only safety, the Working Tree plus 100-ancestor credential scan with zero
+findings, and the Next.js 16.3.0 production build.
+
+The scoped audits are green: `git diff --check` passed; all six paths are
+canonical LF; the exact six-file allowlist is closed; workflows, packages,
+locks, all 36 migrations, seed, backups, and committed Goldens are unchanged;
+and the prospective manifest contains exactly 175 sorted, case-distinct entries
+and 20,057 bytes. Exact-commit checksum verification remains mandatory before
+any separately authorized publication. No commit, push, CI/Golden rerun,
+Candidate import, merge, deployment, provider, broker, or trading action was
+performed.
+
 ## EXACT-F4 pgTAP API and Golden diagnostic closure (2026-08-21)
 
 Safety status: one minimal F4 commit from exact F3

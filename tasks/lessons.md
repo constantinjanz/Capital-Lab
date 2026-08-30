@@ -31,3 +31,5 @@
 - When a local CLI stack starts on an explicit Docker network, audit every later CLI subcommand that launches sibling containers and pass the same verified network identity explicitly.
 - Before using a pgTAP pattern assertion, verify the exact framework API: use alike() for SQL LIKE patterns and matches() for regular expressions; do not infer aliases such as like().
 - For a fully buffered failure gate, keep raw child output suppressed and pass the original failed child's stdout only to an exact allowlisted structured-diagnostic parser; never derive diagnostics from a gate-adjusted failure or let identity rejection lose priority.
+- A fault-injection fixture must respect permanent singleton and uniqueness invariants; when the prohibited state is the condition under test, assert its rejection instead of weakening schema constraints or seeding an impossible second owner.
+- Emit an exact revalidated structured primary diagnostic before entering cleanup that can throw; a `finally` failure must remain fail-closed without erasing the already safe root-cause evidence.

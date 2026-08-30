@@ -7,11 +7,14 @@ import {
   assertReproducibleGolden,
   buildBootstrapProvenance,
   parseSchemaGoldenBootstrapOptions,
+  propagateBootstrapFailureDiagnostic,
   propagateLocalMigrationReplayDiagnostic,
   propagateLocalMigrationReplayOutcome,
   referenceConfig,
   referencePortPlan,
+  referenceStartFailureDiagnostic,
   referenceStartArguments,
+  runBootstrapClosure,
 } from './bootstrap-schema-goldens.mjs'
 import {
   LOCAL_CI_IMAGE,
@@ -68,6 +71,203 @@ function replayFailure(overrides: Record<string, unknown> = {}) {
 }
 
 describe('seed-free schema-Golden bootstrap closure', () => {
+  it.each([
+    'Owned Reference stack cleanup failed closed',
+    'Incomplete Golden artifact cleanup failed closed',
+  ])(
+    'emits the primary diagnostic before cleanup replaces it with %s',
+    async (cleanupMessage) => {
+      const privateValue =
+        'https://fixture-user:fixture-private-value@127.0.0.1/internal'
+      const diagnostic = {
+        failure_category: 'container_unhealthy',
+        container_or_service: 'db',
+        migration_basename: null,
+        sqlstate: null,
+        timeout: false,
+        signal: null,
+        exit_code: 1,
+      }
+      const primary = Object.assign(
+        new Error(`private primary ${privateValue}`),
+        {
+          diagnostic,
+          rawOutput: privateValue,
+        },
+      )
+      const events: string[] = []
+      let observed: Error | undefined
+
+      try {
+        await runBootstrapClosure(
+          async () => {
+            events.push('execute')
+            throw primary
+          },
+          async () => {
+            events.push(`cleanup:${cleanupMessage}`)
+            throw new Error(cleanupMessage)
+          },
+          {
+            write: (value: string) => {
+              events.push(`write:${value}`)
+              return true
+            },
+          },
+        )
+      } catch (error) {
+        observed = error as Error
+      }
+
+      expect(observed).not.toBe(primary)
+      expect(observed?.message).toBe(cleanupMessage)
+      expect(events).toEqual([
+        'execute',
+        `write:${JSON.stringify(diagnostic)}\n`,
+        `cleanup:${cleanupMessage}`,
+      ])
+      expect(events.join('')).not.toContain(privateValue)
+    },
+  )
+
+  it('rejects success, contradictory, malformed, and absent diagnostics', () => {
+    const privateValue =
+      'https://fixture-user:fixture-private-value@127.0.0.1/internal'
+    const diagnostic = {
+      failure_category: 'container_unhealthy',
+      container_or_service: 'db',
+      migration_basename: null,
+      sqlstate: null,
+      timeout: false,
+      signal: null,
+      exit_code: 1,
+    }
+    const writes: string[] = []
+    const write = (value: string) => {
+      writes.push(value)
+      return true
+    }
+    const success = {
+      failure_category: null,
+      container_or_service: null,
+      migration_basename: null,
+      sqlstate: null,
+      timeout: false,
+      signal: null,
+      exit_code: 0,
+    }
+
+    for (const rejectedDiagnostic of [
+      success,
+      { ...diagnostic, exit_code: 0 },
+      { ...diagnostic, raw: privateValue },
+      undefined,
+    ]) {
+      expect(
+        propagateBootstrapFailureDiagnostic(
+          Object.assign(new Error(privateValue), {
+            diagnostic: rejectedDiagnostic,
+          }),
+          { write },
+        ),
+      ).toBeNull()
+    }
+    expect(writes).toEqual([])
+  })
+
+  it('uses the outer failure after a child success envelope', () => {
+    const success = {
+      failure_category: null,
+      container_or_service: null,
+      migration_basename: null,
+      sqlstate: null,
+      timeout: false,
+      signal: null,
+      exit_code: 0,
+    }
+
+    expect(
+      referenceStartFailureDiagnostic(
+        { code: 0, signal: null, timedOut: false },
+        success,
+      ),
+    ).toBeNull()
+
+    for (const { outcome, expected } of [
+      {
+        outcome: { code: 2, signal: null, timedOut: false },
+        expected: { exit_code: 2, signal: null, timeout: false },
+      },
+      {
+        outcome: { code: 0, signal: null, timedOut: true },
+        expected: { exit_code: 0, signal: null, timeout: true },
+      },
+      {
+        outcome: { code: null, signal: 'SIGTERM', timedOut: false },
+        expected: { exit_code: null, signal: 'SIGTERM', timeout: false },
+      },
+    ]) {
+      expect(referenceStartFailureDiagnostic(outcome, success)).toEqual({
+        failure_category: 'unknown_redacted_failure',
+        container_or_service: null,
+        migration_basename: null,
+        sqlstate: null,
+        ...expected,
+      })
+    }
+  })
+
+  it('preserves a child failure and rejects a contradictory clean child', () => {
+    const failure = {
+      failure_category: 'container_unhealthy',
+      container_or_service: 'db',
+      migration_basename: null,
+      sqlstate: null,
+      timeout: false,
+      signal: null,
+      exit_code: 1,
+    }
+    const cleanOutcome = { code: 0, signal: null, timedOut: false }
+
+    expect(referenceStartFailureDiagnostic(cleanOutcome, failure)).toBe(failure)
+    expect(
+      referenceStartFailureDiagnostic(cleanOutcome, {
+        ...failure,
+        exit_code: 0,
+      }),
+    ).toEqual({
+      failure_category: 'unknown_redacted_failure',
+      container_or_service: null,
+      migration_basename: null,
+      sqlstate: null,
+      timeout: false,
+      signal: null,
+      exit_code: 0,
+    })
+  })
+
+  it('routes the production execution and cleanup through the tested closure', () => {
+    const source = readFileSync(
+      new URL('./bootstrap-schema-goldens.mjs', import.meta.url),
+      'utf8',
+    )
+    const mainStart = source.indexOf('async function main()')
+    const entrypoint = source.indexOf('\nif (\n', mainStart)
+    const mainSource = source.slice(mainStart, entrypoint)
+    const execute = mainSource.indexOf('const execute = async () => {')
+    const cleanup = mainSource.indexOf('const cleanup = async () => {')
+    const closure = mainSource.indexOf(
+      'await runBootstrapClosure(execute, cleanup)',
+    )
+
+    expect(
+      mainSource.match(/await runBootstrapClosure\(execute, cleanup\)/gu),
+    ).toHaveLength(1)
+    expect(execute).toBeGreaterThan(-1)
+    expect(cleanup).toBeGreaterThan(execute)
+    expect(closure).toBeGreaterThan(cleanup)
+  })
+
   it('accepts exactly the reviewed CLI arguments', () => {
     expect(parseSchemaGoldenBootstrapOptions(valid)).toMatchObject({
       'expected-commit-sha': sha,

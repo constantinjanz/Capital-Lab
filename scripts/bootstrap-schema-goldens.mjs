@@ -34,7 +34,10 @@ import {
   canonicalReferenceRunId,
   localCiImageIdentityEvidence,
 } from './lib/owned-local-ci-stack.mjs'
-import { diagnosticFromStructuredOutput } from './lib/redacted-supabase-diagnostic.mjs'
+import {
+  diagnosticFromStructuredOutput,
+  validateRedactedSupabaseDiagnostic,
+} from './lib/redacted-supabase-diagnostic.mjs'
 import { loadSchemaGoldenBootstrapContract } from './lib/schema-golden-bootstrap-contract.mjs'
 import {
   newExternalPath,
@@ -141,6 +144,92 @@ function requireSuccess(outcome, label) {
     throw new Error(`${label} failed closed`)
   }
   return outcome
+}
+
+export function bootstrapFailureDiagnostic(value) {
+  let diagnostic
+  try {
+    diagnostic = validateRedactedSupabaseDiagnostic(value)
+  } catch {
+    return null
+  }
+  if (
+    diagnostic.failure_category === null ||
+    (diagnostic.exit_code === 0 &&
+      diagnostic.timeout === false &&
+      diagnostic.signal === null)
+  ) {
+    return null
+  }
+  return diagnostic
+}
+
+function bootstrapSuccessDiagnostic(value) {
+  let diagnostic
+  try {
+    diagnostic = validateRedactedSupabaseDiagnostic(value)
+  } catch {
+    return null
+  }
+  return diagnostic.failure_category === null &&
+    diagnostic.container_or_service === null &&
+    diagnostic.migration_basename === null &&
+    diagnostic.sqlstate === null &&
+    diagnostic.timeout === false &&
+    diagnostic.signal === null &&
+    diagnostic.exit_code === 0
+    ? diagnostic
+    : null
+}
+
+export function referenceStartFailureDiagnostic(outcome, diagnostic) {
+  const outerFailed =
+    outcome?.code !== 0 ||
+    Boolean(outcome?.signal) ||
+    outcome?.timedOut === true
+  const childSuccess = bootstrapSuccessDiagnostic(diagnostic)
+  if (!outerFailed && childSuccess) return null
+
+  return (
+    bootstrapFailureDiagnostic(diagnostic) ?? {
+      failure_category: 'unknown_redacted_failure',
+      container_or_service: null,
+      migration_basename: null,
+      sqlstate: null,
+      timeout: outcome?.timedOut === true,
+      signal:
+        typeof outcome?.signal === 'string' &&
+        /^[A-Z][A-Z0-9]{0,15}$/u.test(outcome.signal)
+          ? outcome.signal
+          : null,
+      exit_code: Number.isInteger(outcome?.code) ? outcome.code : null,
+    }
+  )
+}
+
+export function propagateBootstrapFailureDiagnostic(
+  error,
+  { write = (value) => process.stdout.write(value) } = {},
+) {
+  const diagnostic = bootstrapFailureDiagnostic(error?.diagnostic)
+  if (!diagnostic) return null
+  write(`${JSON.stringify(diagnostic)}\n`)
+  return diagnostic
+}
+
+export async function runBootstrapClosure(
+  execute,
+  cleanup,
+  { write = (value) => process.stdout.write(value) } = {},
+) {
+  try {
+    return await execute()
+  } catch (error) {
+    propagateBootstrapFailureDiagnostic(error, { write })
+    throw error
+  } finally {
+    await cleanup()
+  }
 }
 
 export function referencePortPlan(runId) {
@@ -320,24 +409,12 @@ async function startReference(build, workspace) {
   const diagnostic = diagnosticFromStructuredOutput(
     outcome.stdout.toString('utf8'),
   )
-  if (
-    outcome.code !== 0 ||
-    outcome.signal ||
-    outcome.timedOut ||
-    diagnostic?.exit_code !== 0
-  ) {
+  const failureDiagnostic = referenceStartFailureDiagnostic(outcome, diagnostic)
+  if (failureDiagnostic) {
     const error = new Error(
       'Reference Supabase start failed with redacted evidence',
     )
-    error.diagnostic = diagnostic ?? {
-      failure_category: 'unknown_redacted_failure',
-      container_or_service: null,
-      migration_basename: null,
-      sqlstate: null,
-      timeout: outcome.timedOut,
-      signal: outcome.signal,
-      exit_code: outcome.code,
-    }
+    error.diagnostic = failureDiagnostic
     throw error
   }
   return diagnostic
@@ -691,7 +768,7 @@ async function main() {
   })
   const running = []
   let completed = false
-  try {
+  const execute = async () => {
     const contractInputs = {}
     for (const [short, kind] of [
       ['pre', 'pre_activation'],
@@ -820,7 +897,8 @@ async function main() {
     process.stdout.write(
       `${JSON.stringify({ status: 'schema_goldens_reproducible', buildCount: 4, outputContainsRowData: false, preGoldenSha256: contractProvenance[0].goldenSha256, postGoldenSha256: contractProvenance[1].goldenSha256 })}\n`,
     )
-  } finally {
+  }
+  const cleanup = async () => {
     let cleanupFailed = false
     for (const build of [...running].reverse()) {
       try {
@@ -858,16 +936,14 @@ async function main() {
       }
     }
   }
+  await runBootstrapClosure(execute, cleanup)
 }
 
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 ) {
-  await main().catch((error) => {
-    if (error?.diagnostic) {
-      process.stdout.write(`${JSON.stringify(error.diagnostic)}\n`)
-    }
+  await main().catch(() => {
     process.stderr.write('Schema-golden bootstrap failed closed.\n')
     process.exit(1)
   })

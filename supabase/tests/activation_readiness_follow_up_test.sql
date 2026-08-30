@@ -374,11 +374,14 @@ select is((
 -- exists. Once endpoint verification begins these relations are intentionally
 -- forbidden, so fixture setup after that gate would correctly trigger the
 -- DB-first emergency stop.
-insert into public.app_users (user_id, email, is_active)
-select auth_user.id, auth_user.email, false
-from auth.users as auth_user
-where auth_user.id = '00000000-0000-0000-0000-000000000002'
-on conflict (user_id) do update set is_active = false;
+select throws_ok(
+  $$insert into public.app_users (user_id, email, is_active)
+    select auth_user.id, auth_user.email, false
+    from auth.users as auth_user
+    where auth_user.id = '00000000-0000-0000-0000-000000000002'$$,
+  '23505', null,
+  'the Activation fixture preserves the permanent single-owner invariant'
+);
 insert into public.market_calendar_manifests (
   id, owner_id, manifest_id, calendar_year, timezone, definition,
   content_hash, reviewed_at
@@ -440,13 +443,7 @@ select lives_ok(
   )$$,
   'prepare derives and persists the server database identity'
 );
-update public.app_users
-set is_active = user_id = '00000000-0000-0000-0000-000000000002'
-where user_id in (
-  '00000000-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000002'
-);
-select lives_ok(
+select throws_ok(
   $$select private.prepare_no_ai_shadow_dry_run_v2(
     '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d299', repeat('a', 40),
     'activation-readiness-v2', repeat('b', 64), repeat('c', 64),
@@ -458,13 +455,8 @@ select lives_ok(
     '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d297',
     '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d298'
   )$$,
-  'a second state-drift Campaign is created only through the reviewed prepare function'
-);
-update public.app_users
-set is_active = user_id = '00000000-0000-0000-0000-000000000001'
-where user_id in (
-  '00000000-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000002'
+  '23505', null,
+  'the permanent owner and run-type invariant rejects a second Activation campaign'
 );
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'prepared', 'campaign begins prepared');
 select is((select database_fingerprint from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), private.activation_database_fingerprint(), 'prepared target fingerprint is server-derived');
@@ -1333,8 +1325,8 @@ select throws_ok(
 );
 
 select is((select count(*) from private.no_ai_shadow_dry_runs
-  where state not in ('passed', 'failed', 'inconclusive', 'aborted')), 2::bigint,
-  'two lifecycle-created nonterminal campaigns exist before break-glass');
+  where state not in ('passed', 'failed', 'inconclusive', 'aborted')), 1::bigint,
+  'one permanent-owner Activation campaign exists before break-glass');
 select lives_ok($$select private.emergency_kill_activation_controls(pg_temp.campaign_id())$$, 'phase one emergency kill commits only database gates');
 select lives_ok($$select private.emergency_kill_activation_controls(pg_temp.campaign_id())$$, 'repeated emergency kill is idempotent');
 select is((select state from private.no_ai_shadow_dry_runs where id = pg_temp.campaign_id()), 'auto_stopped', 'emergency kill reaches server-side stopped state');
@@ -1343,12 +1335,6 @@ select is((select count(*) from private.application_settings where owner_id = (s
   'paid_model_calls_enabled', 'openai_canary_enabled', 'openai_web_search_enabled',
   'sol_challenger_enabled', 'sol_live_execution_enabled', 'real_broker_enabled'
 ) and value = 'false'::jsonb), 9::bigint, 'all nine dangerous controls are false after phase one');
-select lives_ok($$select private.transition_no_ai_shadow_dry_run(
-  '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d299', 'prepared', 'aborted', 'owner',
-  repeat('a', 40), 'activation-readiness-v2',
-  '6f4d4ac2-bbcb-4f2a-9a5e-5b05ead8d296',
-  '{"fault_fixture_cleanup":true}'::jsonb
-)$$, 'the state-drift Campaign closes through the reviewed transition');
 select throws_ok(
   $$select private.finalize_activation_campaign(
     pg_temp.campaign_id(), repeat('a', 40), 'activation-readiness-v2',
